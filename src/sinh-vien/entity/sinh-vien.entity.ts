@@ -1,0 +1,42 @@
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique } from 'typeorm';
+import { Lop } from 'src/danh-muc/entity/lop.entity';
+
+@Entity('sinh_vien')
+@Unique(['email'])
+export class SinhVien {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @Column({ name: 'ho_ten', length: 100 })
+  hoTen: string;
+
+  @Column({ name: 'ngay_sinh', type: 'date', nullable: true })
+  ngaySinh: Date;
+
+  @Column({ name: 'gioi_tinh', length: 10, nullable: true })
+  gioiTinh: string;
+
+  @Column({ name: 'dia_chi', length: 255, nullable: true })
+  diaChi: string;
+
+  @Column({ length: 100 })
+  email: string;
+
+  @Column({ length: 15, nullable: true })
+  sdt: string;
+
+  @Column({ name: 'ngay_nhap_hoc', type: 'date', nullable: true })
+  ngayNhapHoc: Date;
+
+  @Column({
+    name: 'tinh_trang',
+    type: 'enum',
+    enum: ['Đang học', 'Bảo lưu', 'Thôi học', 'Đã tốt nghiệp'],
+    default: 'Đang học',
+  })
+  tinhTrang: string;
+
+  @ManyToOne(() => Lop, { nullable: false })
+  @JoinColumn({ name: 'lop_id' })
+  lop: Lop;
+}
