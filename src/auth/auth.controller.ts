@@ -20,6 +20,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { Roles } from './decorators/roles.decorator';
 import { GetUser } from './decorators/get-user.decorator';
+import { ResetPasswordDto } from './dtos/reset-password.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -84,4 +85,10 @@ export class AuthController {
     return this.authService.changePassword(id, dto);
   }
 
+  @Post('reset-password')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Admin')
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
+  }
 }

@@ -1,5 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique } from 'typeorm';
 import { Lop } from 'src/danh-muc/entity/lop.entity';
+import { GioiTinh } from 'src/danh-muc/enums/gioi-tinh.enum';
 
 @Entity('sinh_vien')
 @Unique(['email'])
@@ -13,8 +14,13 @@ export class SinhVien {
   @Column({ name: 'ngay_sinh', type: 'date', nullable: true })
   ngaySinh: Date;
 
-  @Column({ name: 'gioi_tinh', length: 10, nullable: true })
-  gioiTinh: string;
+  @Column({
+    name: 'gioi_tinh',
+    type: 'enum',
+    enum: GioiTinh,
+    default: GioiTinh.KHONG_XAC_DINH,
+  })
+  gioiTinh: GioiTinh;
 
   @Column({ name: 'dia_chi', length: 255, nullable: true })
   diaChi: string;
