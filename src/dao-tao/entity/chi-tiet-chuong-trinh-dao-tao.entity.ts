@@ -17,9 +17,6 @@ export class ChiTietChuongTrinhDaoTao {
   })
   loaiMon: string;
 
-  @Column({ name: 'so_tin_chi' })
-  soTinChi: number;
-
   @Column({ type: 'text', nullable: true })
   ghiChu: string;
 
