@@ -1,6 +1,11 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { SinhVien } from './sinh-vien.entity';
 
+export enum LoaiKhenThuongKyLuatEnum {
+    KHEN_THUONG = 'KHEN_THUONG',
+    KY_LUAT = 'KY_LUAT',
+}
+
 @Entity('khen_thuong_ky_luat')
 export class KhenThuongKyLuat {
   @PrimaryGeneratedColumn()
@@ -8,9 +13,9 @@ export class KhenThuongKyLuat {
 
   @Column({
     type: 'enum',
-    enum: ['Khen thưởng', 'Kỷ luật'],
+    enum: LoaiKhenThuongKyLuatEnum,
   })
-  loai: string;
+  loai: LoaiKhenThuongKyLuatEnum;
 
   @Column({ type: 'text' })
   noiDung: string;

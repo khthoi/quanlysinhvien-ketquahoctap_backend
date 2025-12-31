@@ -1,5 +1,5 @@
 export enum GioiTinh {
-  NAM = 'Nam',
-  NU = 'Nữ',
-  KHONG_XAC_DINH = 'Không xác định',
+  NAM = 'NAM',
+  NU = 'NU',
+  KHONG_XAC_DINH = 'KHONG_XAC_DINH',
 }

@@ -1,6 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique } from 'typeorm';
 import { SinhVien } from 'src/sinh-vien/entity/sinh-vien.entity';
 import { LopHocPhan } from 'src/giang-day/entity/lop-hoc-phan.entity';
+import { DanhgiaKetQuaHocTapEnum } from '../enums/danh-gia-ket-qua-hoc-tap.enum';
 @Entity('ket_qua_hoc_tap')
 @Unique(['sinhVien', 'lopHocPhan'])
 export class KetQuaHocTap {
@@ -19,8 +20,8 @@ export class KetQuaHocTap {
   @Column({ name: 'diem_tong', type: 'decimal', precision: 4, scale: 2, nullable: true })
   diemTong: number;
 
-  @Column({ name: 'trang_thai', type: 'enum', enum: ['ChuaHoanThanh', 'KhongDat', 'Dat'], nullable: true })
-  trangThai: string;
+  @Column({ name: 'trang_thai', type: 'enum', enum: DanhgiaKetQuaHocTapEnum, nullable: true })
+  trangThai: DanhgiaKetQuaHocTapEnum;
 
   @ManyToOne(() => SinhVien, { nullable: false })
   @JoinColumn({ name: 'sinh_vien_id' })

@@ -1,6 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique } from 'typeorm';
 import { SinhVien } from 'src/sinh-vien/entity/sinh-vien.entity';
 import { LopHocPhan } from './lop-hoc-phan.entity';
+import { LoaiHinhThamGiaLopHocPhanEnum } from '../enums/loai-hinh-tham-gia-lop-hoc-phan.enum';
 
 @Entity('sinh_vien_lop_hoc_phan')
 @Unique(['sinhVien', 'lopHocPhan'])
@@ -19,10 +20,10 @@ export class SinhVienLopHocPhan {
   @Column({
     name: 'loai_tham_gia',
     type: 'enum',
-    enum: ['ChinhQuy', 'HocLai', 'CaiThien'],
-    default: 'ChinhQuy',
+    enum: LoaiHinhThamGiaLopHocPhanEnum,
+    default: LoaiHinhThamGiaLopHocPhanEnum.CHINH_QUY,
   })
-  loaiThamGia: string;
+  loaiThamGia: LoaiHinhThamGiaLopHocPhanEnum;
 
   @Column({ name: 'ngay_dang_ky', type: 'date', nullable: true })
   ngayDangKy: Date;

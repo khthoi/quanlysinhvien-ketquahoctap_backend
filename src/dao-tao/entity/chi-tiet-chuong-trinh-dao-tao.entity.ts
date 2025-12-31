@@ -10,13 +10,6 @@ export class ChiTietChuongTrinhDaoTao {
   @Column({ name: 'thu_tu_hoc_ky' })
   thuTuHocKy: number;
 
-  @Column({
-    name: 'loai_mon',
-    type: 'enum',
-    enum: ['Môn chính', 'Môn phụ'],
-  })
-  loaiMon: string;
-
   @Column({ type: 'text', nullable: true })
   ghiChu: string;
 

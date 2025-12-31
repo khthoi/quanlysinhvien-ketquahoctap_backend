@@ -9,9 +9,10 @@ import { NienKhoa } from './entity/nien-khoa.entity';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { DanhMucController } from './danh-muc.controller';
 import { GiangVienMonHoc } from './entity/giangvien-monhoc.entity';
+import { NguoiDung } from 'src/auth/entity/nguoi-dung.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([GiangVien, Khoa, Lop, MonHoc, Nganh, NienKhoa, GiangVienMonHoc])],
+  imports: [TypeOrmModule.forFeature([GiangVien, Khoa, Lop, MonHoc, Nganh, NienKhoa, GiangVienMonHoc, NguoiDung])],
   controllers: [DanhMucController],
   providers: [DanhMucService],
 })

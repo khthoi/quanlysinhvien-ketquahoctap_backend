@@ -1,9 +1,10 @@
 import { IsEnum, IsOptional } from 'class-validator';
+import { VaiTroNguoiDungEnum } from '../enums/vai-tro-nguoi-dung.enum';
 
 export class UpdateUserDto {
   @IsOptional()
-  @IsEnum(['Admin', 'GiangVien', 'SinhVien', 'CanBo'])
-  vaiTro?: 'Admin' | 'GiangVien' | 'SinhVien' | 'CanBo';
+  @IsEnum(VaiTroNguoiDungEnum)
+  vaiTro?: VaiTroNguoiDungEnum;
 
   @IsOptional()
   password?: string;

@@ -1,4 +1,5 @@
 import { IsEnum, IsOptional, IsEmail, IsString, MinLength } from 'class-validator';
+import { VaiTroNguoiDungEnum } from '../enums/vai-tro-nguoi-dung.enum';
 
 export class CreateUserDto {
   @IsString()
@@ -8,8 +9,8 @@ export class CreateUserDto {
   @MinLength(6)
   password: string;
 
-  @IsEnum(['Admin', 'GiangVien', 'SinhVien', 'CanBo'])
-  vaiTro: 'Admin' | 'GiangVien' | 'SinhVien' | 'CanBo';
+  @IsEnum(VaiTroNguoiDungEnum)
+  vaiTro: VaiTroNguoiDungEnum;
 
   @IsOptional()
   sinhVienId?: number;

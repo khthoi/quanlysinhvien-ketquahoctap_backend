@@ -1,6 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique } from 'typeorm';
 import { SinhVien } from 'src/sinh-vien/entity/sinh-vien.entity';
 import { GiangVien } from 'src/danh-muc/entity/giang-vien.entity';
+import { VaiTroNguoiDungEnum } from '../enums/vai-tro-nguoi-dung.enum';
 
 @Entity('nguoi_dung')
 @Unique(['tenDangNhap'])
@@ -17,9 +18,9 @@ export class NguoiDung {
   @Column({
     name: 'vai_tro',
     type: 'enum',
-    enum: ['Admin', 'GiangVien', 'SinhVien', 'CanBo'],
+    enum: VaiTroNguoiDungEnum,
   })
-  vaiTro: string;
+  vaiTro: VaiTroNguoiDungEnum;
 
   @Column({ name: 'ngay_tao', type: 'date', nullable: true })
   ngayTao: Date;

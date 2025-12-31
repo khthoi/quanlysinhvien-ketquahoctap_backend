@@ -1,6 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique } from 'typeorm';
 import { Lop } from 'src/danh-muc/entity/lop.entity';
 import { GioiTinh } from 'src/danh-muc/enums/gioi-tinh.enum';
+import { TinhTrangHocTapEnum } from '../enums/tinh-trang-hoc-tap.enum';
 
 @Entity('sinh_vien')
 export class SinhVien {
@@ -39,10 +40,10 @@ export class SinhVien {
   @Column({
     name: 'tinh_trang',
     type: 'enum',
-    enum: ['Đang học', 'Bảo lưu', 'Thôi học', 'Đã tốt nghiệp'],
-    default: 'Đang học',
+    enum: TinhTrangHocTapEnum,
+    default: TinhTrangHocTapEnum.DANG_HOC,
   })
-  tinhTrang: string;
+  tinhTrang: TinhTrangHocTapEnum;
 
   @ManyToOne(() => Lop, { nullable: false })
   @JoinColumn({ name: 'lop_id' })
