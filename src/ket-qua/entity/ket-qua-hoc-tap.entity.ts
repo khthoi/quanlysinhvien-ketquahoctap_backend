@@ -1,9 +1,8 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique } from 'typeorm';
 import { SinhVien } from 'src/sinh-vien/entity/sinh-vien.entity';
-import { PhanCongGiangDay } from 'src/giang-day/entity/phan-cong-giang-day.entity';
-
+import { LopHocPhan } from 'src/giang-day/entity/lop-hoc-phan.entity';
 @Entity('ket_qua_hoc_tap')
-@Unique(['sinhVien', 'phanCong'])
+@Unique(['sinhVien', 'lopHocPhan'])
 export class KetQuaHocTap {
   @PrimaryGeneratedColumn()
   id: number;
@@ -20,17 +19,16 @@ export class KetQuaHocTap {
   @Column({ name: 'diem_tong', type: 'decimal', precision: 4, scale: 2, nullable: true })
   diemTong: number;
 
-  @Column({ name: 'diem_chu', length: 5, nullable: true })
-  diemChu: string;
-
-  @Column({ name: 'xep_loai', length: 20, nullable: true })
-  xepLoai: string;
+  @Column({ name: 'trang_thai', type: 'enum', enum: ['ChuaHoanThanh', 'KhongDat', 'Dat'], nullable: true })
+  trangThai: string;
 
   @ManyToOne(() => SinhVien, { nullable: false })
   @JoinColumn({ name: 'sinh_vien_id' })
   sinhVien: SinhVien;
 
-  @ManyToOne(() => PhanCongGiangDay, { nullable: false })
-  @JoinColumn({ name: 'phan_cong_id' })
-  phanCong: PhanCongGiangDay;
+  // Trong KetQuaHocTap.entity.ts
+  @ManyToOne(() => LopHocPhan, { nullable: false })
+  @JoinColumn({ name: 'lop_hoc_phan_id' })
+  lopHocPhan: LopHocPhan;
+
 }

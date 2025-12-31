@@ -1,6 +1,5 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { Nganh } from 'src/danh-muc/entity/nganh.entity';
-import { NienKhoa } from 'src/danh-muc/entity/nien-khoa.entity';
 
 @Entity('chuong_trinh_dao_tao')
 export class ChuongTrinhDaoTao {
@@ -11,7 +10,7 @@ export class ChuongTrinhDaoTao {
   tenChuongTrinh: string;
 
   @Column({ name: 'thoi_gian_dao_tao' })
-  thoiGianDaoTao: number;
+  thoiGianDaoTao: number; // số năm
 
   @Column({ name: 'tong_tin_chi' })
   tongTinChi: number;
@@ -20,7 +19,4 @@ export class ChuongTrinhDaoTao {
   @JoinColumn({ name: 'nganh_id' })
   nganh: Nganh;
 
-  @ManyToOne(() => NienKhoa, { nullable: false })
-  @JoinColumn({ name: 'nien_khoa_id' })
-  nienKhoa: NienKhoa;
 }

@@ -3,10 +3,12 @@ import { Lop } from 'src/danh-muc/entity/lop.entity';
 import { GioiTinh } from 'src/danh-muc/enums/gioi-tinh.enum';
 
 @Entity('sinh_vien')
-@Unique(['email'])
 export class SinhVien {
   @PrimaryGeneratedColumn()
   id: number;
+
+  @Column({ name: 'ma_sinh_vien', length: 40, unique: true })
+  maSinhVien: string;
 
   @Column({ name: 'ho_ten', length: 100 })
   hoTen: string;
@@ -25,7 +27,7 @@ export class SinhVien {
   @Column({ name: 'dia_chi', length: 255, nullable: true })
   diaChi: string;
 
-  @Column({ length: 100 })
+  @Column({ length: 100, unique: true }) // Nếu muốn unique email ở đây
   email: string;
 
   @Column({ length: 15, nullable: true })

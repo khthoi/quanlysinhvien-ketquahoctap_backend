@@ -7,7 +7,6 @@ import { LoginDto } from './dtos/login.dto';
 import { UpdateUserDto } from './dtos/update-user.dto';
 import { ChangePasswordDto } from './dtos/change-password.dto';
 import * as bcrypt from 'bcrypt';
-import * as nodemailer from 'nodemailer';
 import { MailerService } from '@nestjs-modules/mailer';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -124,7 +123,7 @@ export class AuthService {
         await this.nguoiDungRepo.save(user);
         return { message: 'Đổi mật khẩu thành công' };
     }
-    
+
     /**
    * API Reset mật khẩu dành cho Admin
    * Điều kiện:

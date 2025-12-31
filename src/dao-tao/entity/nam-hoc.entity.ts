@@ -11,10 +11,4 @@ export class NamHoc {
 
   @Column({ name: 'nam_ket_thuc' })
   namKetThuc: number;
-
-  @Column({ name: 'ngay_bat_dau', type: 'date', nullable: true })
-  ngayBatDau: Date;
-
-  @Column({ name: 'ngay_ket_thuc', type: 'date', nullable: true })
-  ngayKetThuc: Date;
 }

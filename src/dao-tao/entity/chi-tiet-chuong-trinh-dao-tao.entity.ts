@@ -1,7 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { ChuongTrinhDaoTao } from './chuong-trinh-dao-tao.entity';
 import { MonHoc } from 'src/danh-muc/entity/mon-hoc.entity';
-import { HocKy } from './hoc-ky.entity';
 
 @Entity('chi_tiet_chuong_trinh_dao_tao')
 export class ChiTietChuongTrinhDaoTao {
@@ -31,8 +30,4 @@ export class ChiTietChuongTrinhDaoTao {
   @ManyToOne(() => MonHoc, { nullable: false })
   @JoinColumn({ name: 'mon_hoc_id' })
   monHoc: MonHoc;
-
-  @ManyToOne(() => HocKy, { nullable: false })
-  @JoinColumn({ name: 'hoc_ky_id' })
-  hocKy: HocKy;
 }
