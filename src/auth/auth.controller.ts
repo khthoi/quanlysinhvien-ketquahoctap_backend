@@ -7,20 +7,21 @@ import {
   ParseIntPipe,
   Put,
   Delete,
-  Patch,
   UseGuards,
-  ForbiddenException,
+  Query,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { CreateUserDto } from './dtos/create-user.dto';
 import { LoginDto } from './dtos/login.dto';
 import { UpdateUserDto } from './dtos/update-user.dto';
-import { ChangePasswordDto } from './dtos/change-password.dto';
+import { RequestChangePasswordDto } from './dtos/request-change-password.dto';
+import { VerifyChangePasswordOtpDto } from './dtos/verify-change-password-otp.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { Roles } from './decorators/roles.decorator';
 import { GetUser } from './decorators/get-user.decorator';
 import { ResetPasswordDto } from './dtos/reset-password.dto';
+import { GetUsersQueryDto } from './dtos/get-user-query.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -33,28 +34,28 @@ export class AuthController {
 
   @Post('new-users')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Admin')
+  @Roles('ADMIN')
   async createUser(@Body() createUserDto: CreateUserDto) {
     return this.authService.createUser(createUserDto);
   }
 
   @Get('users')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Admin')
-  async getAllUsers() {
-    return this.authService.findAll();
+  @Roles('ADMIN')
+  async getAllUsers(@Query() query: GetUsersQueryDto) {
+    return this.authService.findAll(query);
   }
 
   @Get('users/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Admin')
+  @Roles('ADMIN')
   async getUser(@Param('id', ParseIntPipe) id: number) {
     return this.authService.findOne(id);
   }
 
   @Put('users/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Admin')
+  @Roles('ADMIN')
   async updateUser(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateUserDto: UpdateUserDto,
@@ -64,30 +65,38 @@ export class AuthController {
 
   @Delete('users/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Admin')
+  @Roles('ADMIN')
   async deleteUser(@Param('id', ParseIntPipe) id: number) {
     return this.authService.remove(id);
   }
 
-  @Patch('change-password/:id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  async changePassword(
-    @Param('id', ParseIntPipe) id: number,
+  /**
+   * Bước 1: Yêu cầu đổi mật khẩu - Gửi OTP qua email
+   */
+  @Post('change-password/me')
+  @UseGuards(JwtAuthGuard)
+  async requestChangePassword(
     @GetUser('sub') userId: number,
-    @GetUser('role') role: string,
-    @Body() dto: ChangePasswordDto,
+    @Body() dto: RequestChangePasswordDto,
   ) {
-    // Nếu không phải chính mình và cũng không phải Admin → cấm
-    if (userId !== id && role !== 'Admin') {
-      throw new ForbiddenException('Bạn không có quyền đổi mật khẩu người khác');
-    }
+    return this.authService.requestChangePassword(userId, dto);
+  }
 
-    return this.authService.changePassword(id, dto);
+  /**
+   * Bước 2: Xác thực OTP và đổi mật khẩu
+   */
+  @Post('change-password/verify-otp')
+  @UseGuards(JwtAuthGuard)
+  async verifyChangePasswordOtp(
+    @GetUser('sub') userId: number,
+    @Body() dto: VerifyChangePasswordOtpDto,
+  ) {
+    return this.authService.verifyChangePasswordOtp(userId, dto);
   }
 
   @Post('reset-password')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Admin')
+  @Roles('ADMIN')
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
   }

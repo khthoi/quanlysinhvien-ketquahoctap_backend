@@ -28,10 +28,10 @@ export class SinhVien {
   @Column({ name: 'dia_chi', length: 255, nullable: true })
   diaChi: string;
 
-  @Column({ length: 100, unique: true }) // Nếu muốn unique email ở đây
+  @Column({ length: 100, unique: true }) 
   email: string;
 
-  @Column({ length: 15, nullable: true })
+  @Column({ length: 15, nullable: true, unique: true }) 
   sdt: string;
 
   @Column({ name: 'ngay_nhap_hoc', type: 'date', nullable: true })

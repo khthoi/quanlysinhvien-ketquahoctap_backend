@@ -8,7 +8,7 @@ export class UpdateKhoaDto {
     @IsOptional()
     @IsString()
     moTa?: string;
-    
+
     @IsOptional()
     @IsDate()
     ngayThanhLap?: Date;

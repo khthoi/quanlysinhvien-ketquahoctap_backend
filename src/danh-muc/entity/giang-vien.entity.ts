@@ -1,8 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, Unique } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, Unique, OneToMany } from 'typeorm';
 import { GioiTinh } from '../enums/gioi-tinh.enum';
+import { GiangVienMonHoc } from './giangvien-monhoc.entity';
 
 @Entity('giang_vien')
 @Unique(['email'])
+@Unique(['sdt'])
 export class GiangVien {
   @PrimaryGeneratedColumn()
   id: number;
@@ -29,4 +31,7 @@ export class GiangVien {
 
   @Column({ name: 'dia_chi', length: 255, nullable: true })
   diaChi: string;
+
+  @OneToMany(() => GiangVienMonHoc, gvmh => gvmh.giangVien)
+  monHocGiangViens: GiangVienMonHoc[];
 }

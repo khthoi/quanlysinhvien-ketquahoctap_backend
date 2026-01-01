@@ -22,6 +22,11 @@ import { GiangVien } from './entity/giang-vien.entity';
 import { PhanCongMonHocDto } from './dtos/phan-cong-mon-hoc.dto';
 import { XoaPhanCongMonHocDto } from './dtos/xoa-phan-cong-mon-hoc.dto';
 import { GiangVienMonHoc } from './entity/giangvien-monhoc.entity';
+import { CreateNienKhoaDto } from './dtos/them-nien-khoa.dto';
+import { UpdateNienKhoaDto } from './dtos/cap-nhat-nien-khoa.dto';
+import { PaginationQueryDto, GetNganhQueryDto, GetGiangVienQueryDto, GetLopQueryDto } from './dtos/pagination.dto';
+import { GioiTinh } from './enums/gioi-tinh.enum';
+import { PhanCongMonHocResponseDto } from './dtos/phan-cong-mon-hoc-response.dto';
 
 @Injectable()
 export class DanhMucService {
@@ -45,11 +50,34 @@ export class DanhMucService {
         private readonly giangVienMonHocRepository: Repository<GiangVienMonHoc>,
     ) { }
 
-    // Lấy danh sách tất cả các khoa
-    async getAllKhoa(): Promise<Khoa[]> {
-        return await this.khoaRepository.find({
-            order: { tenKhoa: 'ASC' },
-        });
+    // getAllKhoa() - load cả ngành + phân trang + search
+    async getAllKhoa(query: PaginationQueryDto) {
+        const { page = 1, limit = 10, search } = query;
+
+        const qb = this.khoaRepository.createQueryBuilder('khoa')
+            .leftJoinAndSelect('khoa.nganhs', 'nganh'); // load ngành thuộc khoa
+
+        if (search) {
+            qb.andWhere('LOWER(khoa.tenKhoa) LIKE LOWER(:search)', { search: `%${search}%` });
+        }
+
+        qb.orderBy('khoa.tenKhoa', 'ASC');
+
+        const total = await qb.getCount();
+        const skip = (page - 1) * limit;
+        qb.skip(skip).take(limit);
+
+        const items = await qb.getMany();
+
+        return {
+            data: items,
+            pagination: {
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
+            },
+        };
     }
 
     // Lấy chi tiết một khoa theo id
@@ -80,16 +108,51 @@ export class DanhMucService {
         return await this.khoaRepository.save(khoa);
     }
 
-    // Lấy danh sách ngành, có thể lọc theo khoaId (query param ?khoaId=...)
-    async getAllNganh(khoaId?: number): Promise<Nganh[]> {
-        const query = this.nganhRepository.createQueryBuilder('nganh')
+    async deleteKhoa(id: number): Promise<void> {
+        const khoa = await this.getKhoaById(id);
+        await this.khoaRepository.remove(khoa);
+    }
+
+    //getAllNganh() - load khoa + phân trang + lọc khoa + search
+    // Lưu ý: danh sách khoa để làm filter sẽ được load riêng (xem controller)
+    async getAllNganh(query: PaginationQueryDto & GetNganhQueryDto) {
+        const { page = 1, limit = 10, search, khoaId } = query;
+
+        // Lấy tất cả khoa (không phân trang - dùng làm filter)
+        const allKhoa = await this.khoaRepository.find({
+            select: ['id', 'tenKhoa'],
+            order: { tenKhoa: 'ASC' },
+        });
+
+        const qb = this.nganhRepository.createQueryBuilder('nganh')
             .leftJoinAndSelect('nganh.khoa', 'khoa');
 
         if (khoaId) {
-            query.where('nganh.khoa_id = :khoaId', { khoaId });
+            qb.andWhere('nganh.khoa_id = :khoaId', { khoaId });
         }
 
-        return await query.orderBy('nganh.tenNganh', 'ASC').getMany();
+        if (search) {
+            qb.andWhere('LOWER(nganh.tenNganh) LIKE LOWER(:search)', { search: `%${search}%` });
+        }
+
+        qb.orderBy('nganh.tenNganh', 'ASC');
+
+        const total = await qb.getCount();
+        const skip = (page - 1) * limit;
+        qb.skip(skip).take(limit);
+
+        const items = await qb.getMany();
+
+        return {
+            data: items,
+            filters: { khoa: allKhoa },
+            pagination: {
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
+            },
+        };
     }
 
     // Lấy chi tiết một ngành (có load quan hệ khoa)
@@ -153,21 +216,132 @@ export class DanhMucService {
         await this.nganhRepository.remove(nganh);
     }
 
-    // Lấy danh sách lớp, hỗ trợ lọc theo nganhId và/hoặc nienKhoaId
-    async getAllLop(nganhId?: number, nienKhoaId?: number): Promise<Lop[]> {
-        const query = this.lopRepository.createQueryBuilder('lop')
+    // getAllNienKhoa() - phân trang + search theo tên
+    async getAllNienKhoa(query: PaginationQueryDto) {
+        const { page = 1, limit = 10, search } = query;
+
+        const qb = this.nienKhoaRepository.createQueryBuilder('nienKhoa');
+
+        if (search) {
+            qb.andWhere('LOWER(nienKhoa.tenNienKhoa) LIKE LOWER(:search)', { search: `%${search}%` });
+        }
+
+        qb.orderBy('nienKhoa.namBatDau', 'DESC');
+
+        const total = await qb.getCount();
+        const skip = (page - 1) * limit;
+        qb.skip(skip).take(limit);
+
+        const items = await qb.getMany();
+
+        return {
+            data: items,
+            pagination: {
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
+            },
+        };
+    }
+
+    // Lấy chi tiết một niên khóa
+    async getNienKhoaById(id: number): Promise<NienKhoa> {
+        const nienKhoa = await this.nienKhoaRepository.findOneBy({ id });
+
+        if (!nienKhoa) {
+            throw new NotFoundException(`Niên khóa với id ${id} không tồn tại`);
+        }
+
+        return nienKhoa;
+    }
+
+    // Thêm niên khóa mới (chỉ cán bộ ĐT)
+    async createNienKhoa(createNienKhoaDto: CreateNienKhoaDto): Promise<NienKhoa> {
+        // Kiểm tra trùng tên niên khóa (do có @Unique(['tenNienKhoa']))
+        const existing = await this.nienKhoaRepository.findOneBy({ tenNienKhoa: createNienKhoaDto.tenNienKhoa });
+        if (existing) {
+            throw new BadRequestException('Tên niên khóa đã tồn tại');
+        }
+
+        const nienKhoa = this.nienKhoaRepository.create(createNienKhoaDto);
+        return await this.nienKhoaRepository.save(nienKhoa);
+    }
+
+    // Cập nhật niên khóa (chỉ cán bộ ĐT)
+    async updateNienKhoa(id: number, updateNienKhoaDto: UpdateNienKhoaDto): Promise<NienKhoa> {
+        const nienKhoa = await this.getNienKhoaById(id);
+
+        // Nếu sửa tên, kiểm tra trùng
+        if (updateNienKhoaDto.tenNienKhoa && updateNienKhoaDto.tenNienKhoa !== nienKhoa.tenNienKhoa) {
+            const existing = await this.nienKhoaRepository.findOneBy({ tenNienKhoa: updateNienKhoaDto.tenNienKhoa });
+            if (existing) {
+                throw new BadRequestException('Tên niên khóa đã tồn tại');
+            }
+        }
+
+        Object.assign(nienKhoa, updateNienKhoaDto);
+        return await this.nienKhoaRepository.save(nienKhoa);
+    }
+
+    // Xóa niên khóa (chỉ cán bộ ĐT)
+    async deleteNienKhoa(id: number): Promise<void> {
+        const nienKhoa = await this.getNienKhoaById(id);
+        await this.nienKhoaRepository.remove(nienKhoa);
+    }
+
+    // getAllLop() - load khoa/ngành/niên khóa + phân trang + filter
+    async getAllLop(query: PaginationQueryDto & GetLopQueryDto) {
+        const { page = 1, limit = 10, search, nganhId, nienKhoaId } = query;
+
+        // Lấy các danh sách filter (không phân trang)
+        const [allKhoa, allNganh, allNienKhoa] = await Promise.all([
+            this.khoaRepository.find({ select: ['id', 'tenKhoa'], order: { tenKhoa: 'ASC' } }),
+            this.nganhRepository.find({
+                select: ['id', 'tenNganh', 'khoa'],
+                relations: ['khoa'],
+                order: { tenNganh: 'ASC' },
+            }),
+            this.nienKhoaRepository.find({ order: { namBatDau: 'DESC' } }),
+        ]);
+
+        const qb = this.lopRepository.createQueryBuilder('lop')
             .leftJoinAndSelect('lop.nganh', 'nganh')
-            .leftJoinAndSelect('nganh.khoa', 'khoa') // optional: load thêm khoa
+            .leftJoinAndSelect('nganh.khoa', 'khoa')
             .leftJoinAndSelect('lop.nienKhoa', 'nienKhoa');
 
         if (nganhId) {
-            query.andWhere('lop.nganh_id = :nganhId', { nganhId });
+            qb.andWhere('lop.nganh_id = :nganhId', { nganhId });
         }
         if (nienKhoaId) {
-            query.andWhere('lop.nien_khoa_id = :nienKhoaId', { nienKhoaId });
+            qb.andWhere('lop.nien_khoa_id = :nienKhoaId', { nienKhoaId });
+        }
+        if (search) {
+            qb.andWhere('LOWER(lop.tenLop) LIKE LOWER(:search)', { search: `%${search}%` });
         }
 
-        return await query.orderBy('lop.tenLop', 'ASC').getMany();
+        qb.orderBy('lop.tenLop', 'ASC');
+
+        const total = await qb.getCount();
+        const skip = (page - 1) * limit;
+        qb.skip(skip).take(limit);
+
+        const items = await qb.getMany();
+
+        return {
+            data: items,
+            filters: {
+                khoa: allKhoa,
+                nganh: allNganh,
+                nienKhoa: allNienKhoa,
+            },
+            pagination: {
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
+            },
+        };
     }
 
     // Lấy chi tiết một lớp
@@ -255,6 +429,35 @@ export class DanhMucService {
         });
     }
 
+    // Thêm mới: version getAllMonHoc() có phân trang + search
+    async getAllMonHocWithPagination(query: PaginationQueryDto) {
+        const { page = 1, limit = 10, search } = query;
+
+        const qb = this.monHocRepository.createQueryBuilder('monHoc');
+
+        if (search) {
+            qb.andWhere('LOWER(monHoc.tenMonHoc) LIKE LOWER(:search)', { search: `%${search}%` });
+        }
+
+        qb.orderBy('monHoc.tenMonHoc', 'ASC');
+
+        const total = await qb.getCount();
+        const skip = (page - 1) * limit;
+        qb.skip(skip).take(limit);
+
+        const items = await qb.getMany();
+
+        return {
+            data: items,
+            pagination: {
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
+            },
+        };
+    }
+
     // Lấy chi tiết một môn học
     async getMonHocById(id: number): Promise<MonHoc> {
         const monHoc = await this.monHocRepository.findOneBy({ id });
@@ -287,23 +490,45 @@ export class DanhMucService {
         await this.monHocRepository.remove(monHoc);
     }
 
-    // Lấy danh sách tất cả giảng viên
-    async getAllGiangVien(): Promise<GiangVien[]> {
-        return await this.giangVienRepository.find({
-            order: { hoTen: 'ASC' },
-        });
-    }
+    // getAllGiangVien() - phân trang + search tên + lọc theo môn học
+    async getAllGiangVien(query: PaginationQueryDto & GetGiangVienQueryDto) {
+        const { page = 1, limit = 10, search, monHocId } = query;
 
-    // Lấy chi tiết một giảng viên
-    async getGiangVienById(id: number): Promise<GiangVien> {
-        const giangVien = await this.giangVienRepository.findOneBy({ id });
+        const qb = this.giangVienRepository
+            .createQueryBuilder('giangVien')
+            .leftJoinAndSelect('giangVien.monHocGiangViens', 'giangVienMonHoc')
+            .leftJoinAndSelect('giangVienMonHoc.monHoc', 'monHoc');
 
-        if (!giangVien) {
-            throw new NotFoundException(`Giảng viên với id ${id} không tồn tại`);
+        if (monHocId) {
+            qb.andWhere('monHoc.id = :monHocId', { monHocId });
         }
 
-        return giangVien;
+        if (search) {
+            qb.andWhere(
+                'LOWER(giangVien.hoTen) LIKE LOWER(:search)',
+                { search: `%${search}%` },
+            );
+        }
+
+        qb.orderBy('giangVien.hoTen', 'ASC');
+
+        const total = await qb.getCount();
+
+        qb.skip((page - 1) * limit).take(limit);
+
+        const items = await qb.getMany();
+
+        return {
+            data: items,
+            pagination: {
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
+            },
+        };
     }
+
 
     // Lấy giảng viên hiện tại từ user đang đăng nhập (dùng cho /me)
     async getCurrentGiangVien(userId: number): Promise<GiangVien> {
@@ -318,6 +543,17 @@ export class DanhMucService {
         }
 
         return nguoiDung.giangVien;
+    }
+
+    // Lấy chi tiết một giảng viên
+    async getGiangVienById(id: number): Promise<GiangVien> {
+        const giangVien = await this.giangVienRepository.findOneBy({ id });
+
+        if (!giangVien) {
+            throw new NotFoundException(`Giảng viên với id ${id} không tồn tại`);
+        }
+
+        return giangVien;
     }
 
     // Thêm giảng viên mới (admin)
@@ -415,9 +651,12 @@ export class DanhMucService {
     }
 
     // Xóa phân công môn học
-    async xoaPhanCongMonHoc(dto: XoaPhanCongMonHocDto): Promise<void> {
+    async xoaPhanCongMonHoc(params: { giangVienId: number; monHocId: number }): Promise<void> {
         const phanCong = await this.giangVienMonHocRepository.findOne({
-            where: { giangVien: { id: dto.giangVienId }, monHoc: { id: dto.monHocId } },
+            where: {
+                giangVien: { id: params.giangVienId },
+                monHoc: { id: params.monHocId },
+            },
             relations: ['giangVien', 'monHoc'],
         });
 
@@ -428,14 +667,46 @@ export class DanhMucService {
         await this.giangVienMonHocRepository.remove(phanCong);
     }
 
-    // Lấy danh sách môn học mà giảng viên có thể dạy (đã được phân công)
-    async getMonHocByGiangVien(giangVienId: number): Promise<MonHoc[]> {
-        const phanCongs = await this.giangVienMonHocRepository.find({
-            where: { giangVien: { id: giangVienId } },
-            relations: ['monHoc'],
-            order: { monHoc: { tenMonHoc: 'ASC' } },
+    // Lấy danh sách môn học mà giảng viên được phân công (giữ nguyên)
+    // Lấy thông tin giảng viên và danh sách môn học được phân công
+    // Lấy thông tin giảng viên kèm danh sách môn học được phân công
+    async getMonHocByGiangVien(giangVienId: number): Promise<PhanCongMonHocResponseDto> {
+        // Tìm giảng viên kèm theo các phân công môn học
+        const giangVien = await this.giangVienRepository.findOne({
+            where: { id: giangVienId },
+            relations: ['monHocGiangViens', 'monHocGiangViens.monHoc'],
+            select: {
+                id: true,
+                hoTen: true,
+                email: true,
+                sdt: true,
+                ngaySinh: true,
+                gioiTinh: true,
+                diaChi: true,
+            },
         });
 
-        return phanCongs.map(pc => pc.monHoc);
+        if (!giangVien) {
+            throw new NotFoundException(`Giảng viên với id ${giangVienId} không tồn tại`);
+        }
+
+        // Lấy danh sách môn học từ các phân công, sắp xếp theo tên môn học
+        const monHocs = (giangVien.monHocGiangViens || [])
+            .map(gvmh => gvmh.monHoc)
+            .sort((a, b) => a.tenMonHoc.localeCompare(b.tenMonHoc));
+
+        // Trả về object sạch: thông tin giảng viên + danh sách môn học
+        return {
+            giangVien: {
+                id: giangVien.id,
+                hoTen: giangVien.hoTen,
+                email: giangVien.email,
+                sdt: giangVien.sdt,
+                ngaySinh: giangVien.ngaySinh,
+                gioiTinh: giangVien.gioiTinh,
+                diaChi: giangVien.diaChi,
+            },
+            monHocs,
+        };
     }
 }

@@ -5,7 +5,7 @@ import { NguoiDung } from './entity/nguoi-dung.entity';
 import { CreateUserDto } from './dtos/create-user.dto';
 import { LoginDto } from './dtos/login.dto';
 import { UpdateUserDto } from './dtos/update-user.dto';
-import { ChangePasswordDto } from './dtos/change-password.dto';
+import { RequestChangePasswordDto } from './dtos/request-change-password.dto';
 import * as bcrypt from 'bcrypt';
 import { MailerService } from '@nestjs-modules/mailer';
 import { JwtService } from '@nestjs/jwt';
@@ -13,6 +13,9 @@ import { ConfigService } from '@nestjs/config';
 import { SinhVien } from 'src/sinh-vien/entity/sinh-vien.entity';
 import { GiangVien } from 'src/danh-muc/entity/giang-vien.entity';
 import { ResetPasswordDto } from './dtos/reset-password.dto';
+import { VerifyChangePasswordOtpDto } from './dtos/verify-change-password-otp.dto';
+import { GetUsersQueryDto } from './dtos/get-user-query.dto';
+import { VaiTroNguoiDungEnum } from './enums/vai-tro-nguoi-dung.enum';
 
 @Injectable()
 export class AuthService {
@@ -32,20 +35,13 @@ export class AuthService {
         if (!user || !(await bcrypt.compare(password, user.matKhau))) {
             throw new UnauthorizedException('Tên đăng nhập hoặc mật khẩu không đúng');
         }
-
         const payload = {
             sub: user.id,
             tenDangNhap: user.tenDangNhap,
             vaiTro: user.vaiTro,
         };
-
         return {
             access_token: this.jwtService.sign(payload),
-            user: {
-                id: user.id,
-                tenDangNhap: user.tenDangNhap,
-                vaiTro: user.vaiTro,
-            },
         };
     }
 
@@ -74,12 +70,121 @@ export class AuthService {
         return result;
     }
 
-    async findAll() {
-        return this.nguoiDungRepo.find({
-            select: ['id', 'tenDangNhap', 'vaiTro', 'ngayTao'],
-        });
-    }
+    async findAll(query: GetUsersQueryDto) {
+        const { page = 1, limit = 10, search, vaiTro } = query;
 
+        const qb = this.nguoiDungRepo.createQueryBuilder('nguoiDung')
+            .leftJoinAndSelect('nguoiDung.sinhVien', 'sinhVien')
+            .leftJoinAndSelect('nguoiDung.giangVien', 'giangVien')
+            .select([
+                'nguoiDung.id',
+                'nguoiDung.tenDangNhap',
+                'nguoiDung.vaiTro',
+                'nguoiDung.ngayTao',
+
+                'sinhVien.id',
+                'sinhVien.maSinhVien',
+                'sinhVien.hoTen',
+                'sinhVien.email',
+                'sinhVien.sdt',
+                'sinhVien.ngaySinh',
+                'sinhVien.gioiTinh',
+                'sinhVien.diaChi',
+
+                'giangVien.id',
+                'giangVien.hoTen',
+                'giangVien.email',
+                'giangVien.sdt',
+                'giangVien.ngaySinh',
+                'giangVien.gioiTinh',
+                'giangVien.diaChi',
+            ]);
+
+        // Lọc theo vaiTro (giữ nguyên như cũ, hỗ trợ nhiều định dạng)
+        if (vaiTro) {
+            let dbVaiTro: VaiTroNguoiDungEnum;
+            const normalized = vaiTro.toLowerCase().replace(/-/g, '').replace(/\s+/g, '');
+
+            if (['sinhvien', 'sinhvien'].includes(normalized)) {
+                dbVaiTro = VaiTroNguoiDungEnum.SINH_VIEN;
+            } else if (['giangvien', 'giangvien'].includes(normalized)) {
+                dbVaiTro = VaiTroNguoiDungEnum.GIANG_VIEN;
+            } else if (normalized === 'admin') {
+                dbVaiTro = VaiTroNguoiDungEnum.ADMIN;
+            } else if (normalized.includes('canbo') || normalized.includes('phongdaotao')) {
+                dbVaiTro = VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO;
+            } else {
+                throw new BadRequestException('Vai trò không hợp lệ');
+            }
+
+            qb.andWhere('nguoiDung.vaiTro = :vaiTro', { vaiTro: dbVaiTro });
+        }
+
+        // Tìm kiếm (giữ nguyên)
+        if (search) {
+            const searchLower = search.toLowerCase();
+            qb.andWhere(
+                '(LOWER(nguoiDung.tenDangNhap) LIKE :search ' +
+                'OR LOWER(sinhVien.hoTen) LIKE :search ' +
+                'OR LOWER(sinhVien.maSinhVien) LIKE :search ' +
+                'OR LOWER(sinhVien.email) LIKE :search ' +
+                'OR LOWER(sinhVien.sdt) LIKE :search ' +
+                'OR LOWER(giangVien.hoTen) LIKE :search ' +
+                'OR LOWER(giangVien.email) LIKE :search ' +
+                'OR LOWER(giangVien.sdt) LIKE :search)',
+                { search: `%${searchLower}%` }
+            );
+        }
+
+        const total = await qb.getCount();
+
+        qb.skip((page - 1) * limit).take(limit);
+
+        const entities = await qb.getMany();
+
+        // Phần quan trọng: Format profile dựa trên sự tồn tại liên kết
+        const formattedItems = entities.map(user => ({
+            id: user.id,
+            tenDangNhap: user.tenDangNhap,
+            vaiTro: user.vaiTro,
+            ngayTao: user.ngayTao,
+
+            profile: user.sinhVien
+                ? {
+                    type: 'sinhvien',
+                    id: user.sinhVien.id,
+                    maSinhVien: user.sinhVien.maSinhVien,
+                    hoTen: user.sinhVien.hoTen,
+                    email: user.sinhVien.email,
+                    sdt: user.sinhVien.sdt,
+                    ngaySinh: user.sinhVien.ngaySinh,
+                    gioiTinh: user.sinhVien.gioiTinh,
+                    diaChi: user.sinhVien.diaChi,
+                }
+                : user.giangVien
+                    ? {
+                        type: 'giangvien',
+                        id: user.giangVien.id,
+                        hoTen: user.giangVien.hoTen,
+                        email: user.giangVien.email,
+                        sdt: user.giangVien.sdt,
+                        ngaySinh: user.giangVien.ngaySinh,
+                        gioiTinh: user.giangVien.gioiTinh,
+                        diaChi: user.giangVien.diaChi,
+                    }
+                    : null,
+        }));
+
+        return {
+            data: formattedItems,
+            pagination: {
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
+            },
+        };
+    }
     async findOne(id: number) {
         const user = await this.nguoiDungRepo.findOne({
             where: { id },
@@ -93,9 +198,14 @@ export class AuthService {
         const user = await this.nguoiDungRepo.findOne({ where: { id } });
         if (!user) throw new NotFoundException('Người dùng không tồn tại');
 
-        if (updateUserDto.password) {
-            user.matKhau = await bcrypt.hash(updateUserDto.password, 10);
+        if (updateUserDto.tenDangNhap) {
+            const exist = await this.nguoiDungRepo.findOne({ where: { tenDangNhap: updateUserDto.tenDangNhap } });
+            if (exist && exist.id !== id) {
+                throw new BadRequestException('Tên đăng nhập đã tồn tại');
+            }
+            user.tenDangNhap = updateUserDto.tenDangNhap;
         }
+
         if (updateUserDto.vaiTro) {
             user.vaiTro = updateUserDto.vaiTro;
         }
@@ -105,23 +215,164 @@ export class AuthService {
         return result;
     }
 
-    async remove(id: number) {
+    async remove(id: number): Promise<void> {
         const user = await this.nguoiDungRepo.findOne({ where: { id } });
         if (!user) throw new NotFoundException('Người dùng không tồn tại');
         await this.nguoiDungRepo.remove(user);
-        return { message: 'Xóa thành công' };
     }
 
-    async changePassword(userId: number, dto: ChangePasswordDto) {
-        const user = await this.nguoiDungRepo.findOne({ where: { id: userId } });
-        if (!user) throw new NotFoundException('Người dùng không tồn tại');
+    /**
+     * Bước 1: Yêu cầu đổi mật khẩu
+     * - Kiểm tra user có liên kết với SinhVien hoặc GiangVien
+     * - Xác thực mật khẩu cũ
+     * - Lưu tạm mật khẩu mới (đã hash)
+     * - Tạo OTP và gửi qua email
+     */
+    async requestChangePassword(userId: number, dto: RequestChangePasswordDto) {
+        // 1. Tìm user và load relations
+        const user = await this.nguoiDungRepo.findOne({
+            where: { id: userId },
+            relations: ['sinhVien', 'giangVien'],
+        });
 
-        const isValid = await bcrypt.compare(dto.oldPassword, user.matKhau);
-        if (!isValid) throw new BadRequestException('Mật khẩu cũ không đúng');
+        if (!user) {
+            throw new NotFoundException('Người dùng không tồn tại');
+        }
 
-        user.matKhau = await bcrypt.hash(dto.newPassword, 10);
+        // 2. Kiểm tra user phải liên kết với SinhVien hoặc GiangVien
+        if (!user.sinhVien && !user.giangVien) {
+            throw new BadRequestException(
+                'Bạn không có quyền đổi mật khẩu. Tài khoản phải được liên kết với sinh viên hoặc giảng viên.',
+            );
+        }
+
+        // 3. Xác thực mật khẩu cũ
+        const isValidOldPassword = await bcrypt.compare(dto.oldPassword, user.matKhau);
+        if (!isValidOldPassword) {
+            throw new BadRequestException('Mật khẩu cũ không đúng');
+        }
+
+        // 4. Kiểm tra mật khẩu mới không được trùng với mật khẩu cũ
+        const isSamePassword = await bcrypt.compare(dto.newPassword, user.matKhau);
+        if (isSamePassword) {
+            throw new BadRequestException('Mật khẩu mới không được trùng với mật khẩu cũ');
+        }
+
+        // 5. Lấy email từ bản ghi SinhVien hoặc GiangVien
+        let email: string;
+        let hoTen: string;
+
+        if (user.sinhVien) {
+            const sinhVien = await this.sinhVienRepo.findOne({
+                where: { id: user.sinhVien.id },
+            });
+            if (!sinhVien || !sinhVien.email) {
+                throw new BadRequestException('Không tìm thấy email của sinh viên');
+            }
+            email = sinhVien.email;
+            hoTen = sinhVien.hoTen;
+        } else if (user.giangVien) {
+            const giangVien = await this.giangVienRepo.findOne({
+                where: { id: user.giangVien.id },
+            });
+            if (!giangVien || !giangVien.email) {
+                throw new BadRequestException('Không tìm thấy email của giảng viên');
+            }
+            email = giangVien.email;
+            hoTen = giangVien.hoTen;
+        } else {
+            throw new BadRequestException('Không tìm thấy thông tin liên kết');
+        }
+
+        // 6. Hash mật khẩu mới và lưu tạm
+        const hashedNewPassword = await bcrypt.hash(dto.newPassword, 10);
+
+        // 7. Tạo OTP 6 số ngẫu nhiên
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+        // 8. Lưu OTP, thời gian hết hạn và mật khẩu mới tạm thời
+        user.changePasswordOtp = otp;
+        user.changePasswordOtpExpires = new Date(Date.now() + 5 * 60 * 1000); // 5 phút
+        user.pendingNewPassword = hashedNewPassword; // Lưu mật khẩu mới đã hash
         await this.nguoiDungRepo.save(user);
-        return { message: 'Đổi mật khẩu thành công' };
+
+        // 9. Gửi email chứa OTP
+        try {
+            await this.mailerService.sendMail({
+                to: email,
+                subject: '[Hệ thống QL Sinh viên] Mã OTP xác thực đổi mật khẩu',
+                html: `
+        <h3>Xin chào ${hoTen},</h3>
+        <p>Bạn vừa yêu cầu đổi mật khẩu tài khoản.</p>
+        <p>Mã OTP xác thực của bạn là: <strong style="font-size: 24px; color: #1976d2;">${otp}</strong></p>
+        <p>Mã OTP này có hiệu lực trong <strong>5 phút</strong>.</p>
+        <p>Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email này và liên hệ quản trị viên ngay lập tức.</p>
+        <hr>
+        <p style="font-size: 12px; color: #666;">Email này được gửi tự động, vui lòng không trả lời.</p>
+      `,
+            });
+        } catch (error) {
+            console.error('Lỗi gửi email OTP:', error);
+            throw new BadRequestException('Không thể gửi email. Vui lòng thử lại sau.');
+        }
+
+        return {
+            message: 'Mã OTP đã được gửi đến email của bạn. Vui lòng kiểm tra email và nhập mã OTP để hoàn tất đổi mật khẩu.',
+            email: email.replace(/(.{2})(.*)(@.*)/, '$1***$3'), // Ẩn bớt email
+        };
+    }
+
+    /**
+     * Bước 2: Xác thực OTP và đổi mật khẩu
+     * - Chỉ cần nhập OTP
+     * - Nếu OTP đúng, cập nhật mật khẩu từ pendingNewPassword
+     */
+    async verifyChangePasswordOtp(userId: number, dto: VerifyChangePasswordOtpDto) {
+        // 1. Tìm user
+        const user = await this.nguoiDungRepo.findOne({
+            where: { id: userId },
+        });
+
+        if (!user) {
+            throw new NotFoundException('Người dùng không tồn tại');
+        }
+
+        // 2. Kiểm tra có yêu cầu đổi mật khẩu không
+        if (!user.changePasswordOtp || !user.changePasswordOtpExpires || !user.pendingNewPassword) {
+            throw new BadRequestException(
+                'Không tìm thấy yêu cầu đổi mật khẩu. Vui lòng thực hiện lại bước 1.',
+            );
+        }
+
+        // 3. Kiểm tra OTP đã hết hạn chưa
+        if (new Date() > user.changePasswordOtpExpires) {
+            // Xóa dữ liệu tạm
+            user.changePasswordOtp = null;
+            user.changePasswordOtpExpires = null;
+            user.pendingNewPassword = null;
+            await this.nguoiDungRepo.save(user);
+
+            throw new BadRequestException('Mã OTP đã hết hạn. Vui lòng yêu cầu mã OTP mới.');
+        }
+
+        // 4. Xác thực OTP
+        if (user.changePasswordOtp !== dto.otp) {
+            throw new BadRequestException('Mã OTP không đúng');
+        }
+
+        // 5. Cập nhật mật khẩu chính thức từ pendingNewPassword
+        user.matKhau = user.pendingNewPassword;
+
+        // 6. Xóa tất cả dữ liệu tạm sau khi đổi mật khẩu thành công
+        user.changePasswordOtp = null;
+        user.changePasswordOtpExpires = null;
+        user.pendingNewPassword = null;
+
+        await this.nguoiDungRepo.save(user);
+
+        return {
+            message: 'Đổi mật khẩu thành công. Vui lòng đăng nhập lại bằng mật khẩu mới.',
+        };
     }
 
     /**

@@ -1,5 +1,6 @@
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
 import { LoaiMonEnum } from '../enums/loai-mon.enum';
+import { GiangVienMonHoc } from './giangvien-monhoc.entity';
 
 @Entity('mon_hoc')
 export class MonHoc {
@@ -22,4 +23,7 @@ export class MonHoc {
 
   @Column({ type: 'text', nullable: true })
   moTa: string;
+
+  @OneToMany(() => GiangVienMonHoc, gvmh => gvmh.monHoc)
+  giangVienMonHocs: GiangVienMonHoc[];
 }
