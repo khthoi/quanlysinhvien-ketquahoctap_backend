@@ -8,19 +8,16 @@ export class KetQuaHocTap {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ name: 'diem_qua_trinh', type: 'decimal', precision: 4, scale: 2, nullable: true })
+  @Column({ name: 'diem_qua_trinh', type: 'decimal', precision: 4, scale: 2, nullable: false })
   diemQuaTrinh: number;
 
-  @Column({ name: 'diem_thanh_phan', type: 'decimal', precision: 4, scale: 2, nullable: true })
+  @Column({ name: 'diem_thanh_phan', type: 'decimal', precision: 4, scale: 2, nullable: false })
   diemThanhPhan: number;
 
-  @Column({ name: 'diem_thi', type: 'decimal', precision: 4, scale: 2, nullable: true })
+  @Column({ name: 'diem_thi', type: 'decimal', precision: 4, scale: 2, nullable: false })
   diemThi: number;
 
-  @Column({ name: 'diem_tong', type: 'decimal', precision: 4, scale: 2, nullable: true })
-  diemTong: number;
-
-  @Column({ name: 'trang_thai', type: 'enum', enum: DanhgiaKetQuaHocTapEnum, nullable: true })
+  @Column({ name: 'trang_thai', type: 'enum', enum: DanhgiaKetQuaHocTapEnum, nullable: false })
   trangThai: DanhgiaKetQuaHocTapEnum;
 
   @ManyToOne(() => SinhVien, { nullable: false })

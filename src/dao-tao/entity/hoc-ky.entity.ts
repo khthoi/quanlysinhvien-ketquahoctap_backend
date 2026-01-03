@@ -9,10 +9,10 @@ export class HocKy {
   @Column({ name: 'ten_hoc_ky', length: 10 })
   tenHocKy: string;
 
-  @Column({ name: 'ngay_bat_dau', type: 'date', nullable: true })
+  @Column({ name: 'ngay_bat_dau', type: 'date', nullable: false })
   ngayBatDau: Date;
 
-  @Column({ name: 'ngay_ket_thuc', type: 'date', nullable: true })
+  @Column({ name: 'ngay_ket_thuc', type: 'date', nullable: false })
   ngayKetThuc: Date;
 
   @ManyToOne(() => NamHoc, { nullable: false })

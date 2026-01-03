@@ -1,13 +1,13 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique, OneToMany } from 'typeorm';
 import { MonHoc } from 'src/danh-muc/entity/mon-hoc.entity';
 import { HocKy } from 'src/dao-tao/entity/hoc-ky.entity';
 import { GiangVien } from 'src/danh-muc/entity/giang-vien.entity';
 import { NienKhoa } from 'src/danh-muc/entity/nien-khoa.entity';
 import { Nganh } from 'src/danh-muc/entity/nganh.entity';
+import { SinhVienLopHocPhan } from './sinhvien-lophocphan.entity';
 
 
 @Entity('lop_hoc_phan')
-@Unique('UQ_PHAN_CONG_GV', ['giangVien', 'monHoc', 'hocKy']) // Tránh trùng phân công GV
 export class LopHocPhan {
   @PrimaryGeneratedColumn()
   id: number;
@@ -15,18 +15,15 @@ export class LopHocPhan {
   @Column({ name: 'ma_lop_hoc_phan', length: 50, unique: true })
   maLopHocPhan: string; // XSTK2024A, XSTK2024B
 
-  @Column({ name: 'si_so', default: 0 })
-  siSo: number;
-
   @Column({ type: 'text', nullable: true })
   ghiChu: string;
 
   @Column({ name: 'ngay_tao', type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   ngayTao: Date;
 
-  @ManyToOne(() => GiangVien, { nullable: false })
+  @ManyToOne(() => GiangVien, { nullable: true })
   @JoinColumn({ name: 'giang_vien_id' })
-  giangVien: GiangVien;
+  giangVien: GiangVien | null;
 
   @ManyToOne(() => NienKhoa, { nullable: false })
   @JoinColumn({ name: 'nien_khoa_id' })
@@ -43,4 +40,7 @@ export class LopHocPhan {
   @ManyToOne(() => HocKy, { nullable: false })
   @JoinColumn({ name: 'hoc_ky_id' })
   hocKy: HocKy;
+
+  @OneToMany(() => SinhVienLopHocPhan, svlhp => svlhp.lopHocPhan)
+  sinhVienLopHocPhans: SinhVienLopHocPhan[];
 }

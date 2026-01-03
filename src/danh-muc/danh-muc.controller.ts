@@ -56,7 +56,7 @@ export class DanhMucController {
   // GET /danh-muc/khoa
   @Get('khoa')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async getAllKhoa(@Query() query: PaginationQueryDto) {
     return this.danhMucService.getAllKhoa(query);
   }
@@ -64,7 +64,7 @@ export class DanhMucController {
   // GET /danh-muc/khoa/:id
   @Get('khoa/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async getKhoaById(@Param('id', ParseIntPipe) id: number): Promise<Khoa> {
     return this.danhMucService.getKhoaById(id);
   }
@@ -72,7 +72,7 @@ export class DanhMucController {
   // POST /danh-muc/khoa
   @Post('khoa')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   @HttpCode(HttpStatus.CREATED)
   async createKhoa(@Body() createKhoaDto: CreateKhoaDto): Promise<Khoa> {
     return this.danhMucService.createKhoa(createKhoaDto);
@@ -81,7 +81,7 @@ export class DanhMucController {
   // PUT /danh-muc/khoa/:id
   @Put('khoa/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async updateKhoa(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateKhoaDto: UpdateKhoaDto,
@@ -92,7 +92,7 @@ export class DanhMucController {
   // DELETE /danh-muc/khoa/:id
   @Delete('khoa/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteKhoa(@Param('id', ParseIntPipe) id: number): Promise<void> {
     return this.danhMucService.deleteKhoa(id);
@@ -101,7 +101,7 @@ export class DanhMucController {
   // GET /danh-muc/nganh?khoaId=...
   @Get('nganh')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async getAllNganh(@Query() query: PaginationQueryDto & GetNganhQueryDto) {
     return this.danhMucService.getAllNganh(query);
   }
@@ -109,7 +109,7 @@ export class DanhMucController {
   // GET /danh-muc/nganh/:id
   @Get('nganh/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async getNganhById(@Param('id', ParseIntPipe) id: number): Promise<Nganh> {
     return this.danhMucService.getNganhById(id);
   }
@@ -117,7 +117,7 @@ export class DanhMucController {
   // POST /danh-muc/nganh
   @Post('nganh')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   @HttpCode(HttpStatus.CREATED)
   async createNganh(@Body() createNganhDto: CreateNganhDto): Promise<Nganh> {
     return this.danhMucService.createNganh(createNganhDto);
@@ -126,7 +126,7 @@ export class DanhMucController {
   // PUT /danh-muc/nganh/:id
   @Put('nganh/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async updateNganh(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateNganhDto: UpdateNganhDto,
@@ -137,7 +137,7 @@ export class DanhMucController {
   // DELETE /danh-muc/nganh/:id
   @Delete('nganh/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteNganh(@Param('id', ParseIntPipe) id: number): Promise<void> {
     return this.danhMucService.deleteNganh(id);
@@ -145,7 +145,7 @@ export class DanhMucController {
 
   // GET /danh-muc/nien-khoa
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   @Get('nien-khoa')
   async getAllNienKhoa(@Query() query: PaginationQueryDto) {
     return this.danhMucService.getAllNienKhoa(query);
@@ -153,7 +153,7 @@ export class DanhMucController {
 
   // GET /danh-muc/nien-khoa/:id 
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   @Get('nien-khoa/:id')
   async getNienKhoaById(@Param('id', ParseIntPipe) id: number): Promise<NienKhoa> {
     return this.danhMucService.getNienKhoaById(id);
@@ -191,7 +191,7 @@ export class DanhMucController {
   // GET /danh-muc/lop?nganhId=...&nienKhoaId=...
   @Get('lop')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async getAllLop(@Query() query: PaginationQueryDto & GetLopQueryDto) {
     return this.danhMucService.getAllLop(query);
   }
@@ -199,7 +199,7 @@ export class DanhMucController {
   // GET /danh-muc/lop/:id
   @Get('lop/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async getLopById(@Param('id', ParseIntPipe) id: number): Promise<Lop> {
     return this.danhMucService.getLopById(id);
   }
@@ -207,7 +207,7 @@ export class DanhMucController {
   // POST /danh-muc/lop
   @Post('lop')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   @HttpCode(HttpStatus.CREATED)
   async createLop(@Body() createLopDto: CreateLopDto): Promise<Lop> {
     return this.danhMucService.createLop(createLopDto);
@@ -216,7 +216,7 @@ export class DanhMucController {
   // PUT /danh-muc/lop/:id
   @Put('lop/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async updateLop(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateLopDto: UpdateLopDto,
@@ -227,7 +227,7 @@ export class DanhMucController {
   // DELETE /danh-muc/lop/:id
   @Delete('lop/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteLop(@Param('id', ParseIntPipe) id: number): Promise<void> {
     return this.danhMucService.deleteLop(id);
@@ -236,13 +236,15 @@ export class DanhMucController {
   // GET /danh-muc/mon-hoc
   @Get('mon-hoc')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async getAllMonHoc() {
     return this.danhMucService.getAllMonHoc();
   }
 
   // version /danh-muc/mon-hoc có phân trang
   @Get('mon-hoc/paginated')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async getAllMonHocWithPagination(@Query() query: PaginationQueryDto) {
     return this.danhMucService.getAllMonHocWithPagination(query);
   }
@@ -250,7 +252,7 @@ export class DanhMucController {
   // GET /danh-muc/mon-hoc/:id
   @Get('mon-hoc/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async getMonHocById(@Param('id', ParseIntPipe) id: number): Promise<MonHoc> {
     return this.danhMucService.getMonHocById(id);
   }
@@ -258,7 +260,7 @@ export class DanhMucController {
   // POST /danh-muc/mon-hoc
   @Post('mon-hoc')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   @HttpCode(HttpStatus.CREATED)
   async createMonHoc(@Body() createMonHocDto: CreateMonHocDto): Promise<MonHoc> {
     return this.danhMucService.createMonHoc(createMonHocDto);
@@ -267,7 +269,7 @@ export class DanhMucController {
   // PUT /danh-muc/mon-hoc/:id
   @Put('mon-hoc/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async updateMonHoc(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateMonHocDto: UpdateMonHocDto,
@@ -278,7 +280,7 @@ export class DanhMucController {
   // DELETE /danh-muc/mon-hoc/:id
   @Delete('mon-hoc/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteMonHoc(@Param('id', ParseIntPipe) id: number): Promise<void> {
     return this.danhMucService.deleteMonHoc(id);
@@ -287,7 +289,7 @@ export class DanhMucController {
   // GET /danh-muc/giang-vien
   @Get('giang-vien')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async getAllGiangVien(@Query() query: PaginationQueryDto & GetGiangVienQueryDto) {
     return this.danhMucService.getAllGiangVien(query);
   }
@@ -295,7 +297,7 @@ export class DanhMucController {
   // GET /danh-muc/giang-vien/:id
   @Get('giang-vien/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async getGiangVienById(@Param('id', ParseIntPipe) id: number): Promise<GiangVien> {
     return this.danhMucService.getGiangVienById(id);
   }
@@ -303,7 +305,7 @@ export class DanhMucController {
   // POST /danh-muc/giang-vien
   @Post('giang-vien')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   @HttpCode(HttpStatus.CREATED)
   async createGiangVien(@Body() createGiangVienDto: CreateGiangVienDto): Promise<GiangVien> {
     return this.danhMucService.createGiangVien(createGiangVienDto);
@@ -312,7 +314,7 @@ export class DanhMucController {
   // PUT /danh-muc/giang-vien/:id
   @Put('giang-vien/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async updateGiangVien(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateGiangVienDto: UpdateGiangVienDto,
@@ -323,7 +325,7 @@ export class DanhMucController {
   // DELETE /danh-muc/giang-vien/:id
   @Delete('giang-vien/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteGiangVien(@Param('id', ParseIntPipe) id: number): Promise<void> {
     return this.danhMucService.deleteGiangVien(id);
@@ -335,7 +337,7 @@ export class DanhMucController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.GIANG_VIEN)
   async updateMyProfile(
-    @GetUser('sub') userId: number,
+    @GetUser('userId') userId: number,
     @GetUser('role') vaiTro: string,
     @Body() updateGiangVienDto: UpdateGiangVienDto,
   ): Promise<GiangVien> {
@@ -346,7 +348,7 @@ export class DanhMucController {
   // Body: { "giangVienId": 5, "monHocId": 10 }
   @Post('giang-vien/phancongmonhoc')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   @HttpCode(HttpStatus.CREATED)
   async phanCongMonHoc(@Body() dto: PhanCongMonHocDto): Promise<GiangVienMonHoc> {
     return this.danhMucService.phanCongMonHoc(dto);
@@ -356,7 +358,7 @@ export class DanhMucController {
   // URL: DELETE /danh-muc/giang-vien/:giangVienId/phan-cong-mon-hoc/:monHocId
   @Delete('giang-vien/:giangVienId/phan-cong-mon-hoc/:monHocId')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   @HttpCode(HttpStatus.NO_CONTENT)
   async xoaPhanCongMonHoc(
     @Param('giangVienId', ParseIntPipe) giangVienId: number,
@@ -369,7 +371,7 @@ export class DanhMucController {
   // URL: GET /danh-muc/giang-vien/:giangVienId/phan-cong-mon-hoc
   @Get('giang-vien/:giangVienId/phan-cong-mon-hoc')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('CAN_BO_PHONG_DAO_TAO')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async getMonHocGiangVien(
     @Param('giangVienId', ParseIntPipe) giangVienId: number,
   ): Promise<PhanCongMonHocResponseDto> {

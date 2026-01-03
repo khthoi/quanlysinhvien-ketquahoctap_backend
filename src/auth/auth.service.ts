@@ -46,29 +46,76 @@ export class AuthService {
     }
 
     async createUser(createUserDto: CreateUserDto) {
-        const exist = await this.nguoiDungRepo.findOne({ where: { tenDangNhap: createUserDto.tenDangNhap } });
+        const { sinhVienId, giangVienId, vaiTro } = createUserDto;
+
+        // ❌ Không cho tạo ADMIN bằng API này
+        if (vaiTro === VaiTroNguoiDungEnum.ADMIN) {
+            throw new BadRequestException(
+                'API này không hỗ trợ tạo tài khoản Quản trị viên',
+            );
+        }
+
+        // ===== VALIDATE THEO VAI TRÒ =====
+
+        switch (vaiTro) {
+            case VaiTroNguoiDungEnum.SINH_VIEN:
+                if (!sinhVienId) {
+                    throw new BadRequestException(
+                        'Tài khoản SINH_VIEN bắt buộc phải có sinhVienId',
+                    );
+                }
+                if (giangVienId) {
+                    throw new BadRequestException(
+                        'Tài khoản SINH_VIEN không được liên kết với giangVienId',
+                    );
+                }
+                break;
+
+            case VaiTroNguoiDungEnum.GIANG_VIEN:
+            case VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO:
+                if (!giangVienId) {
+                    throw new BadRequestException(
+                        `Tài khoản ${vaiTro} bắt buộc phải có giangVienId`,
+                    );
+                }
+                if (sinhVienId) {
+                    throw new BadRequestException(
+                        `Tài khoản ${vaiTro} không được liên kết với sinhVienId`,
+                    );
+                }
+                break;
+
+            default:
+                throw new BadRequestException('Vai trò không hợp lệ');
+        }
+
+        // ===== CHECK USERNAME =====
+        const exist = await this.nguoiDungRepo.findOne({
+            where: { tenDangNhap: createUserDto.tenDangNhap },
+        });
+
         if (exist) {
             throw new BadRequestException('Tên đăng nhập đã tồn tại');
         }
 
+        // ===== CREATE USER =====
         const hashed = await bcrypt.hash(createUserDto.password, 10);
 
         const newUser = this.nguoiDungRepo.create({
             tenDangNhap: createUserDto.tenDangNhap,
             matKhau: hashed,
-            vaiTro: createUserDto.vaiTro,
-            sinhVien: createUserDto.sinhVienId
-                ? ({ id: createUserDto.sinhVienId } as any)
-                : null,
-            giangVien: createUserDto.giangVienId
-                ? ({ id: createUserDto.giangVienId } as any)
-                : null,
+            vaiTro,
+            sinhVien: sinhVienId ? ({ id: sinhVienId } as any) : null,
+            giangVien: giangVienId ? ({ id: giangVienId } as any) : null,
             ngayTao: new Date(),
         });
+
         await this.nguoiDungRepo.save(newUser);
+
         const { matKhau, ...result } = newUser;
         return result;
     }
+
 
     async findAll(query: GetUsersQueryDto) {
         const { page = 1, limit = 10, search, vaiTro } = query;

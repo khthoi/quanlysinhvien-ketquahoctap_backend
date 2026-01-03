@@ -7,6 +7,10 @@ export class UpdateMonHocDto {
   tenMonHoc?: string;
 
   @IsOptional()
+  @IsString()
+  maMonHoc?: string;
+
+  @IsOptional()
   @IsEnum(LoaiMonEnum)
   loaiMon?: LoaiMonEnum;
 

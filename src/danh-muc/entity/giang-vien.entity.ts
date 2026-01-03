@@ -1,6 +1,8 @@
-import { Entity, PrimaryGeneratedColumn, Column, Unique, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, Unique, OneToMany, OneToOne } from 'typeorm';
 import { GioiTinh } from '../enums/gioi-tinh.enum';
 import { GiangVienMonHoc } from './giangvien-monhoc.entity';
+import { LopHocPhan } from 'src/giang-day/entity/lop-hoc-phan.entity';
+import { NguoiDung } from 'src/auth/entity/nguoi-dung.entity';
 
 @Entity('giang_vien')
 @Unique(['email'])
@@ -34,4 +36,10 @@ export class GiangVien {
 
   @OneToMany(() => GiangVienMonHoc, gvmh => gvmh.giangVien)
   monHocGiangViens: GiangVienMonHoc[];
+
+  @OneToMany(() => LopHocPhan, lhp => lhp.giangVien)
+  lopHocPhans: LopHocPhan[];
+
+  @OneToOne(() => NguoiDung, nguoiDung => nguoiDung.giangVien)
+  nguoiDung: NguoiDung;
 }

@@ -6,6 +6,10 @@ export class CreateMonHocDto {
   @IsString()
   tenMonHoc: string;
 
+  @IsNotEmpty({ message: 'Mã môn học không được để trống' })
+  @IsString()
+  maMonHoc: string;
+
   @IsNotEmpty({ message: 'Loại môn phải được chọn' })
   @IsEnum(LoaiMonEnum, { message: 'Loại môn không hợp lệ' })
   loaiMon: LoaiMonEnum;

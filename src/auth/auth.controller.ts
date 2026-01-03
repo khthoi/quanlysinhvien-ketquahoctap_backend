@@ -9,6 +9,8 @@ import {
   Delete,
   UseGuards,
   Query,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { CreateUserDto } from './dtos/create-user.dto';
@@ -22,6 +24,7 @@ import { Roles } from './decorators/roles.decorator';
 import { GetUser } from './decorators/get-user.decorator';
 import { ResetPasswordDto } from './dtos/reset-password.dto';
 import { GetUsersQueryDto } from './dtos/get-user-query.dto';
+import { VaiTroNguoiDungEnum } from './enums/vai-tro-nguoi-dung.enum';
 
 @Controller('auth')
 export class AuthController {
@@ -34,28 +37,28 @@ export class AuthController {
 
   @Post('new-users')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
+  @Roles(VaiTroNguoiDungEnum.ADMIN)
   async createUser(@Body() createUserDto: CreateUserDto) {
     return this.authService.createUser(createUserDto);
   }
 
   @Get('users')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
+  @Roles(VaiTroNguoiDungEnum.ADMIN)
   async getAllUsers(@Query() query: GetUsersQueryDto) {
     return this.authService.findAll(query);
   }
 
   @Get('users/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
+  @Roles(VaiTroNguoiDungEnum.ADMIN)
   async getUser(@Param('id', ParseIntPipe) id: number) {
     return this.authService.findOne(id);
   }
 
   @Put('users/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
+  @Roles(VaiTroNguoiDungEnum.ADMIN)
   async updateUser(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateUserDto: UpdateUserDto,
@@ -65,9 +68,10 @@ export class AuthController {
 
   @Delete('users/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
-  async deleteUser(@Param('id', ParseIntPipe) id: number) {
-    return this.authService.remove(id);
+  @Roles(VaiTroNguoiDungEnum.ADMIN)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteUser(@Param('id', ParseIntPipe) id: number): Promise<void> {
+    await this.authService.remove(id);
   }
 
   /**
@@ -76,7 +80,7 @@ export class AuthController {
   @Post('change-password/me')
   @UseGuards(JwtAuthGuard)
   async requestChangePassword(
-    @GetUser('sub') userId: number,
+    @GetUser('userId') userId: number,
     @Body() dto: RequestChangePasswordDto,
   ) {
     return this.authService.requestChangePassword(userId, dto);
@@ -96,7 +100,7 @@ export class AuthController {
 
   @Post('reset-password')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
+  @Roles(VaiTroNguoiDungEnum.ADMIN)
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
   }

@@ -1,7 +1,8 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique, OneToOne } from 'typeorm';
 import { Lop } from 'src/danh-muc/entity/lop.entity';
 import { GioiTinh } from 'src/danh-muc/enums/gioi-tinh.enum';
 import { TinhTrangHocTapEnum } from '../enums/tinh-trang-hoc-tap.enum';
+import { NguoiDung } from 'src/auth/entity/nguoi-dung.entity';
 
 @Entity('sinh_vien')
 export class SinhVien {
@@ -34,7 +35,7 @@ export class SinhVien {
   @Column({ length: 15, nullable: true, unique: true }) 
   sdt: string;
 
-  @Column({ name: 'ngay_nhap_hoc', type: 'date', nullable: true })
+  @Column({ name: 'ngay_nhap_hoc', type: 'date', nullable: false })
   ngayNhapHoc: Date;
 
   @Column({
@@ -48,4 +49,7 @@ export class SinhVien {
   @ManyToOne(() => Lop, { nullable: false })
   @JoinColumn({ name: 'lop_id' })
   lop: Lop;
+
+  @OneToOne(() => NguoiDung, nguoiDung => nguoiDung.sinhVien)
+  nguoiDung: NguoiDung;
 }
