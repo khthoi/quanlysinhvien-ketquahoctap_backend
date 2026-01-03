@@ -27,4 +27,7 @@ export class CreateLopHocPhanDto {
 
   @IsString()
   ghiChu?: string;
+
+  @IsOptional()
+  khoaDiem?: boolean;
 }

@@ -1,8 +1,9 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique, OneToOne } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique, OneToOne, OneToMany } from 'typeorm';
 import { Lop } from 'src/danh-muc/entity/lop.entity';
 import { GioiTinh } from 'src/danh-muc/enums/gioi-tinh.enum';
 import { TinhTrangHocTapEnum } from '../enums/tinh-trang-hoc-tap.enum';
 import { NguoiDung } from 'src/auth/entity/nguoi-dung.entity';
+import { KetQuaHocTap } from 'src/ket-qua/entity/ket-qua-hoc-tap.entity';
 
 @Entity('sinh_vien')
 export class SinhVien {
@@ -52,4 +53,7 @@ export class SinhVien {
 
   @OneToOne(() => NguoiDung, nguoiDung => nguoiDung.sinhVien)
   nguoiDung: NguoiDung;
+
+  @OneToMany(() => KetQuaHocTap, kq => kq.sinhVien)
+  ketQuaHocTaps: KetQuaHocTap[];
 }

@@ -21,7 +21,7 @@ export class ApDungChuongTrinhDT {
   @JoinColumn({ name: 'nien_khoa_id' })
   nienKhoa: NienKhoa;
 
-  @Column({ name: 'ngay_ap_dung', type: 'date', nullable: true })
+  @Column({ name: 'ngay_ap_dung', type: 'date', nullable: false })
   ngayApDung: Date;
 
   @Column({ type: 'text', nullable: true })

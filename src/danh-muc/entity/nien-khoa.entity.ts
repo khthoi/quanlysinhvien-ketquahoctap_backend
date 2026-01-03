@@ -1,4 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column, Unique } from 'typeorm';
+import { ApDungChuongTrinhDT } from 'src/dao-tao/entity/ap-dung-chuong-trinh-dt.entity';
+import { Entity, PrimaryGeneratedColumn, Column, Unique, OneToMany } from 'typeorm';
 
 @Entity('nien_khoa')
 @Unique(['tenNienKhoa'])
@@ -17,4 +18,8 @@ export class NienKhoa {
 
   @Column({ type: 'text', nullable: true })
   moTa: string;
+
+  // Trong class NienKhoa
+  @OneToMany(() => ApDungChuongTrinhDT, ap => ap.nienKhoa)
+  apDungChuongTrinhs: ApDungChuongTrinhDT[];
 }

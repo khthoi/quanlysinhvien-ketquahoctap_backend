@@ -1,5 +1,6 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
 import { Khoa } from './khoa.entity';
+import { ApDungChuongTrinhDT } from 'src/dao-tao/entity/ap-dung-chuong-trinh-dt.entity';
 
 @Entity('nganh')
 export class Nganh {
@@ -15,4 +16,8 @@ export class Nganh {
   @ManyToOne(() => Khoa, { nullable: false })
   @JoinColumn({ name: 'khoa_id' })
   khoa: Khoa;
+
+  // Trong class Nganh
+  @OneToMany(() => ApDungChuongTrinhDT, ap => ap.nganh)
+  apDungChuongTrinhs: ApDungChuongTrinhDT[];
 }

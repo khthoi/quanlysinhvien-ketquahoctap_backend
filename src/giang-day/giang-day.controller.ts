@@ -148,4 +148,16 @@ export class GiangDayController {
   ) {
     return this.giangDayService.getLopHocPhanCuaGiangVien(giangVienId, query);
   }
+
+  // Khoá điểm lớp học phần
+  @Patch('lop-hoc-phan/khoa-diem/:lop_hoc_phan_id')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  async khoaDiemLopHocPhan(
+    @Param('lop_hoc_phan_id', ParseIntPipe) lopHocPhanId: number,
+  ) {
+    await this.giangDayService.khoaDiemLopHocPhan(lopHocPhanId);
+    return {
+      message: 'Khóa điểm lớp học phần thành công',
+    };
+  }
 }

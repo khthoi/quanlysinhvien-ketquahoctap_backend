@@ -17,8 +17,8 @@ export class KetQuaHocTap {
   @Column({ name: 'diem_thi', type: 'decimal', precision: 4, scale: 2, nullable: false })
   diemThi: number;
 
-  @Column({ name: 'trang_thai', type: 'enum', enum: DanhgiaKetQuaHocTapEnum, nullable: false })
-  trangThai: DanhgiaKetQuaHocTapEnum;
+  //@Column({ name: 'trang_thai', type: 'enum', enum: DanhgiaKetQuaHocTapEnum, nullable: false })
+  //trangThai: DanhgiaKetQuaHocTapEnum;
 
   @ManyToOne(() => SinhVien, { nullable: false })
   @JoinColumn({ name: 'sinh_vien_id' })

@@ -1,5 +1,7 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
 import { Nganh } from 'src/danh-muc/entity/nganh.entity';
+import { ApDungChuongTrinhDT } from './ap-dung-chuong-trinh-dt.entity';
+import { ChiTietChuongTrinhDaoTao } from './chi-tiet-chuong-trinh-dao-tao.entity';
 
 @Entity('chuong_trinh_dao_tao')
 export class ChuongTrinhDaoTao {
@@ -16,4 +18,10 @@ export class ChuongTrinhDaoTao {
   @JoinColumn({ name: 'nganh_id' })
   nganh: Nganh;
 
+  @OneToMany(() => ApDungChuongTrinhDT, ap => ap.chuongTrinh)
+  apDungChuongTrinhs: ApDungChuongTrinhDT[];
+
+  // ← THÊM QUAN HỆ NGƯỢC ĐẾN CHI TIẾT MÔN HỌC
+  @OneToMany(() => ChiTietChuongTrinhDaoTao, ct => ct.chuongTrinh)
+  chiTietMonHocs: ChiTietChuongTrinhDaoTao[];
 }

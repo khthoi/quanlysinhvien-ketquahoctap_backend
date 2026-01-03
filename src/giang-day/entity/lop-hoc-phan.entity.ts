@@ -5,6 +5,7 @@ import { GiangVien } from 'src/danh-muc/entity/giang-vien.entity';
 import { NienKhoa } from 'src/danh-muc/entity/nien-khoa.entity';
 import { Nganh } from 'src/danh-muc/entity/nganh.entity';
 import { SinhVienLopHocPhan } from './sinhvien-lophocphan.entity';
+import { KetQuaHocTap } from 'src/ket-qua/entity/ket-qua-hoc-tap.entity';
 
 
 @Entity('lop_hoc_phan')
@@ -20,6 +21,9 @@ export class LopHocPhan {
 
   @Column({ name: 'ngay_tao', type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   ngayTao: Date;
+
+  @Column({ name: 'khoa_diem', type: 'boolean', default: false })
+  khoaDiem: boolean;
 
   @ManyToOne(() => GiangVien, { nullable: true })
   @JoinColumn({ name: 'giang_vien_id' })
@@ -43,4 +47,7 @@ export class LopHocPhan {
 
   @OneToMany(() => SinhVienLopHocPhan, svlhp => svlhp.lopHocPhan)
   sinhVienLopHocPhans: SinhVienLopHocPhan[];
+
+  @OneToMany(() => KetQuaHocTap, kq => kq.lopHocPhan)
+  ketQuaHocTaps: KetQuaHocTap[];
 }

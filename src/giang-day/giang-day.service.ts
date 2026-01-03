@@ -611,4 +611,12 @@ export class GiangDayService {
             },
         };
     }
+
+    // Khoá điểm lớp học phần
+    async khoaDiemLopHocPhan(lopHocPhanId: number): Promise<void> {
+        const lhp = await this.lopHocPhanRepo.findOneBy({ id: lopHocPhanId });
+        if (!lhp) throw new NotFoundException('Lớp học phần không tồn tại');
+        lhp.khoaDiem = true;
+        await this.lopHocPhanRepo.save(lhp);
+    }
 }
