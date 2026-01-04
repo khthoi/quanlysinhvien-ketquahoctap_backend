@@ -124,7 +124,17 @@ export class GiangDayService {
 
 
     async findAll(query: GetLopHocPhanQueryDto) {
-        const { page = 1, limit = 10, search, monHocId, giangVienId, hocKyId, nienKhoaId, nganhId } = query;
+        const {
+            page = 1,
+            limit = 10,
+            search,
+            monHocId,
+            giangVienId,
+            hocKyId,
+            nienKhoaId,
+            nganhId,
+            trangThai, // ← Lấy từ query
+        } = query;
 
         const qb = this.lopHocPhanRepo
             .createQueryBuilder('lhp')
@@ -145,19 +155,58 @@ export class GiangDayService {
             qb.andWhere('LOWER(lhp.maLopHocPhan) LIKE LOWER(:search)', { search: `%${search}%` });
         }
 
-        qb.orderBy('lhp.maLopHocPhan', 'ASC');
+        qb.orderBy('namHoc.namBatDau', 'DESC')
+            .addOrderBy('hocKy.tenHocKy', 'ASC')
+            .addOrderBy('lhp.maLopHocPhan', 'ASC');
 
-        const total = await qb.getCount();
-        const items = await qb.skip((page - 1) * limit).take(limit).getMany();
-        // Tính sĩ số cho từng lớp
-        const dataWithSiSo = await Promise.all(
-            items.map(async (lhp) => {
+        // Lấy tổng trước khi phân trang (để tính total chính xác)
+        const totalItems = await qb.getMany();
+
+        // Ngày hiện tại (chuẩn hóa giờ về 00:00:00 để so sánh ngày chính xác)
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+
+        // Tính trạng thái + sĩ số cho từng lớp
+        const itemsWithInfo = await Promise.all(
+            totalItems.map(async (lhp) => {
                 const siSo = await this.tinhSiSo(lhp.id);
-                return { ...lhp, siSo };
+
+                let trangThaiLop: 'CHUA_BAT_DAU' | 'DANG_HOC' | 'DA_KET_THUC' = 'CHUA_BAT_DAU';
+
+                if (lhp.hocKy) {
+                    const batDau = new Date(lhp.hocKy.ngayBatDau);
+                    const ketThuc = new Date(lhp.hocKy.ngayKetThuc);
+                    batDau.setHours(0, 0, 0, 0);
+                    ketThuc.setHours(0, 0, 0, 0);
+
+                    if (now >= batDau && now <= ketThuc) {
+                        trangThaiLop = 'DANG_HOC';
+                    } else if (now > ketThuc) {
+                        trangThaiLop = 'DA_KET_THUC';
+                    }
+                }
+
+                return {
+                    ...lhp,
+                    siSo,
+                    trangThai: trangThaiLop,
+                };
             }),
         );
+
+        // Lọc theo trạng thái (nếu có truyền query trangThai)
+        const filteredItems = trangThai
+            ? itemsWithInfo.filter(item => item.trangThai === trangThai)
+            : itemsWithInfo;
+
+        // Tính tổng sau khi lọc
+        const total = filteredItems.length;
+
+        // Áp dụng phân trang lên dữ liệu đã lọc
+        const paginatedItems = filteredItems.slice((page - 1) * limit, page * limit);
+
         return {
-            data: dataWithSiSo,
+            data: paginatedItems,
             pagination: {
                 total,
                 page,
@@ -180,9 +229,38 @@ export class GiangDayService {
                 'nganh.khoa',
             ],
         });
+
         if (!lhp) throw new NotFoundException('Lớp học phần không tồn tại');
+
+        // Tính sĩ số
         const siSo = await this.tinhSiSo(id);
-        return { ...lhp, siSo };
+
+        // Tính trạng thái lớp học phần dựa trên ngày hiện tại
+        let trangThai: 'CHUA_BAT_DAU' | 'DANG_HOC' | 'DA_KET_THUC' = 'CHUA_BAT_DAU';
+
+        if (lhp.hocKy) {
+            const now = new Date();
+            const batDau = new Date(lhp.hocKy.ngayBatDau);
+            const ketThuc = new Date(lhp.hocKy.ngayKetThuc);
+
+            // Đặt giờ về 00:00:00 để so sánh chính xác theo ngày (tránh lệch múi giờ)
+            now.setHours(0, 0, 0, 0);
+            batDau.setHours(0, 0, 0, 0);
+            ketThuc.setHours(0, 0, 0, 0);
+
+            if (now >= batDau && now <= ketThuc) {
+                trangThai = 'DANG_HOC';
+            } else if (now > ketThuc) {
+                trangThai = 'DA_KET_THUC';
+            }
+            // else: giữ nguyên 'CHUA_BAT_DAU'
+        }
+
+        return {
+            ...lhp,
+            siSo,
+            trangThai, // ← Thêm trạng thái lớp học phần
+        };
     }
 
     async update(id: number, dto: UpdateLopHocPhanDto) {
@@ -458,10 +536,7 @@ export class GiangDayService {
         };
     }
 
-    async getLopHocPhanCuaGiangVien(
-        userId: number,
-        query: GetMyLopHocPhanQueryDto,
-    ) {
+    async getLopHocPhanCuaGiangVien(userId: number, query: GetMyLopHocPhanQueryDto) {
         const {
             page = 1,
             limit = 10,
@@ -469,6 +544,7 @@ export class GiangDayService {
             monHocId,
             nganhId,
             nienKhoaId,
+            trangThai,
         } = query;
 
         // Tìm giảng viên từ userId
@@ -483,7 +559,7 @@ export class GiangDayService {
 
         const giangVienId = nguoiDung.giangVien.id;
 
-        // Query builder với lọc và phân trang
+        // Query builder
         const qb = this.lopHocPhanRepo
             .createQueryBuilder('lhp')
             .leftJoinAndSelect('lhp.monHoc', 'monHoc')
@@ -504,19 +580,49 @@ export class GiangDayService {
             .addOrderBy('monHoc.tenMonHoc', 'ASC');
 
         const total = await qb.getCount();
+        const items = await qb.skip((page - 1) * limit).take(limit).getMany();
 
-        const items = await qb
-            .skip((page - 1) * limit)
-            .take(limit)
-            .getMany();
+        // Ngày hiện tại
+        const now = new Date();
+        now.setHours(0, 0, 0, 0); // chuẩn hóa về 00:00:00 để so sánh ngày chính xác
+
+        const dataWithTrangThai = items.map(lhp => {
+            let trangThaiLop: 'CHUA_BAT_DAU' | 'DANG_HOC' | 'DA_KET_THUC' = 'CHUA_BAT_DAU';
+
+            if (lhp.hocKy) {
+                const batDau = new Date(lhp.hocKy.ngayBatDau);
+                const ketThuc = new Date(lhp.hocKy.ngayKetThuc);
+                batDau.setHours(0, 0, 0, 0);
+                ketThuc.setHours(0, 0, 0, 0);
+
+                if (now >= batDau && now <= ketThuc) {
+                    trangThaiLop = 'DANG_HOC';
+                } else if (now > ketThuc) {
+                    trangThaiLop = 'DA_KET_THUC';
+                }
+            }
+
+            return {
+                ...lhp,
+                trangThai: trangThaiLop,
+            };
+        });
+
+        // Nếu có lọc theo trạng thái → lọc lại data
+        const filteredData = trangThai
+            ? dataWithTrangThai.filter(item => item.trangThai === trangThai)
+            : dataWithTrangThai;
+
+        const filteredTotal = filteredData.length;
+        const finalData = filteredData.slice((page - 1) * limit, page * limit);
 
         return {
-            data: items,
+            data: finalData,
             pagination: {
-                total,
+                total: filteredTotal,
                 page,
                 limit,
-                totalPages: Math.ceil(total / limit),
+                totalPages: Math.ceil(filteredTotal / limit),
             },
         };
     }
@@ -571,9 +677,17 @@ export class GiangDayService {
         await this.lopHocPhanRepo.save(lhp);
     }
 
-    // getDanhSachPhanCong – thêm phân trang
     async getDanhSachPhanCong(query: GetPhanCongQueryDto) {
-        const { giangVienId, hocKyId, nienKhoaId, nganhId, monHocId, page = 1, limit = 10 } = query;
+        const {
+            giangVienId,
+            hocKyId,
+            nienKhoaId,
+            nganhId,
+            monHocId,
+            page = 1,
+            limit = 10,
+            trangThai, // ← Lấy từ query
+        } = query;
 
         const qb = this.lopHocPhanRepo
             .createQueryBuilder('lhp')
@@ -594,15 +708,48 @@ export class GiangDayService {
             .addOrderBy('hocKy.tenHocKy', 'ASC')
             .addOrderBy('monHoc.tenMonHoc', 'ASC');
 
-        const total = await qb.getCount();
+        // Lấy toàn bộ dữ liệu trước để tính trạng thái (vì không thể filter trạng thái ở SQL)
+        const allItems = await qb.getMany();
 
-        const items = await qb
-            .skip((page - 1) * limit)
-            .take(limit)
-            .getMany();
+        // Ngày hiện tại (chuẩn hóa về 00:00:00 để so sánh chính xác)
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+
+        // Tính trạng thái cho từng lớp
+        const itemsWithTrangThai = allItems.map(lhp => {
+            let trangThaiLop: 'CHUA_BAT_DAU' | 'DANG_HOC' | 'DA_KET_THUC' = 'CHUA_BAT_DAU';
+
+            if (lhp.hocKy) {
+                const batDau = new Date(lhp.hocKy.ngayBatDau);
+                const ketThuc = new Date(lhp.hocKy.ngayKetThuc);
+                batDau.setHours(0, 0, 0, 0);
+                ketThuc.setHours(0, 0, 0, 0);
+
+                if (now >= batDau && now <= ketThuc) {
+                    trangThaiLop = 'DANG_HOC';
+                } else if (now > ketThuc) {
+                    trangThaiLop = 'DA_KET_THUC';
+                }
+            }
+
+            return {
+                ...lhp,
+                trangThai: trangThaiLop,
+            };
+        });
+
+        // Lọc theo trạng thái nếu có query
+        const filteredItems = trangThai
+            ? itemsWithTrangThai.filter(item => item.trangThai === trangThai)
+            : itemsWithTrangThai;
+
+        const total = filteredItems.length;
+
+        // Áp dụng phân trang lên dữ liệu đã lọc
+        const paginatedItems = filteredItems.slice((page - 1) * limit, page * limit);
 
         return {
-            data: items,
+            data: paginatedItems,
             pagination: {
                 total,
                 page,

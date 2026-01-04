@@ -1,4 +1,4 @@
-import { IsOptional, IsInt, IsString } from 'class-validator';
+import { IsOptional, IsInt, IsString, IsIn } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class GetLopHocPhanQueryDto {
@@ -40,4 +40,9 @@ export class GetLopHocPhanQueryDto {
   @Transform(({ value }) => parseInt(value, 10))
   @IsInt()
   limit?: number = 10;
+
+  // ← THÊM LỌC THEO TRẠNG THÁI
+  @IsOptional()
+  @IsIn(['DANG_HOC', 'DA_KET_THUC', 'CHUA_BAT_DAU'])
+  trangThai?: 'DANG_HOC' | 'DA_KET_THUC' | 'CHUA_BAT_DAU';
 }
