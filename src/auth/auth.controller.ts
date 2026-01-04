@@ -104,4 +104,22 @@ export class AuthController {
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
   }
+
+  @Post('users/sinh-vien/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(VaiTroNguoiDungEnum.ADMIN, VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  async createAccountForSinhVien(
+    @Param('id', ParseIntPipe) sinhVienId: number,
+  ) {
+    return this.authService.createAccountForSinhVienBasic(sinhVienId);
+  }
+
+  @Post('users/giang-vien/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(VaiTroNguoiDungEnum.ADMIN, VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  async createAccountForGiangVien(
+    @Param('id', ParseIntPipe) giangVienId: number,
+  ) {
+    return this.authService.createAccountForGiangVienBasic(giangVienId);
+  }
 }

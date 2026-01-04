@@ -1,9 +1,31 @@
-export class FilterHocLaiDto {
-  hocKyId?: number;
-  nganhId?: number;
-  nienKhoaId?: number;
-  loaiHocLai?: 'HOC_LAI' | 'HOC_CAI_THIEN' | 'TAT_CA';
+import { Type } from "class-transformer";
+import { IsOptional, IsNumber, IsEnum } from "class-validator";
+
+export enum LoaiHocLaiEnum {
+  HOC_LAI = 'HOC_LAI',
+  HOC_CAI_THIEN = 'HOC_CAI_THIEN',
+  TAT_CA = 'TAT_CA',
 }
+
+export class FilterHocLaiDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  hocKyId?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  nganhId?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  nienKhoaId?: number;
+
+  @IsOptional()
+  @IsEnum(LoaiHocLaiEnum)
+  loaiHocLai?: LoaiHocLaiEnum;}
 
 export class FilterThongKeNganhDto {
   nganhId: number;

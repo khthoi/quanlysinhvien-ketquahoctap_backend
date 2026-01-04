@@ -13,9 +13,9 @@ export class CreateApDungDto {
   @IsInt()
   nienKhoaId: number;
 
-  @IsNotEmpty()
+  @IsOptional()
   @IsDateString()
-  ngayApDung: string;
+  ngayApDung?: string;
 
   @IsOptional()
   ghiChu?: string;

@@ -25,6 +25,8 @@ import { NguoiDung } from 'src/auth/entity/nguoi-dung.entity';
 import { GetPhanCongQueryDto } from './dtos/get-phan-cong-query.dto';
 import { PaginationQueryDto } from './dtos/pagination-query.dto';
 import { GetMyLopHocPhanQueryDto } from './dtos/get-my-lop-hoc-phan-query.dto';
+import { ApDungChuongTrinhDT } from 'src/dao-tao/entity/ap-dung-chuong-trinh-dt.entity';
+import { ChiTietChuongTrinhDaoTao } from 'src/dao-tao/entity/chi-tiet-chuong-trinh-dao-tao.entity';
 
 @Injectable()
 export class GiangDayService {
@@ -51,6 +53,10 @@ export class GiangDayService {
         private nguoiDungRepo: Repository<NguoiDung>,
         @InjectRepository(GiangVien)
         private giangVienRepo: Repository<GiangVien>,
+        @InjectRepository(ApDungChuongTrinhDT)
+        private apDungRepo: Repository<ApDungChuongTrinhDT>,
+        @InjectRepository(ChiTietChuongTrinhDaoTao)
+        private chiTietCTDTRepo: Repository<ChiTietChuongTrinhDaoTao>,
     ) { }
 
     // Tính sĩ số của lớp học phần bằng cách đếm số sinh viên đăng ký
@@ -107,6 +113,32 @@ export class GiangDayService {
                 `Thêm lớp học phần này (${tinChiMoi} tín chỉ) sẽ vượt quá giới hạn 12 tín chỉ trong một học kỳ.`,
             );
         }
+
+        // === VALIDATION MỚI: Môn học phải có trong CTĐT áp dụng cho ngành + niên khóa ===
+        const apDung = await this.apDungRepo.findOne({
+            where: {
+                nganh: { id: dto.nganhId },
+                nienKhoa: { id: dto.nienKhoaId },
+            },
+            relations: ['chuongTrinh', 'chuongTrinh.chiTietMonHocs', 'chuongTrinh.chiTietMonHocs.monHoc'],
+        });
+
+        if (!apDung) {
+            throw new BadRequestException(
+                'Không có chương trình đào tạo nào được áp dụng cho ngành và niên khóa này',
+            );
+        }
+
+        const monHocTrongCT = apDung.chuongTrinh.chiTietMonHocs.some(
+            ct => ct.monHoc.id === dto.monHocId,
+        );
+
+        if (!monHocTrongCT) {
+            throw new BadRequestException(
+                'Môn học này không thuộc chương trình đào tạo được áp dụng cho ngành và niên khóa này',
+            );
+        }
+        // === Kết thúc validation mới ===
 
         // 6. Tạo và lưu lớp học phần
         const lhp = this.lopHocPhanRepo.create({
@@ -348,6 +380,38 @@ export class GiangDayService {
             if (!nganh) throw new BadRequestException('Ngành không tồn tại');
             lhp.nganh = nganh;
         }
+
+        // === VALIDATION MỚI: Nếu thay đổi monHocId, nganhId hoặc nienKhoaId → kiểm tra lại CTĐT ===
+        const finalNganhId = dto.nganhId ?? lhp.nganh.id;
+        const finalNienKhoaId = dto.nienKhoaId ?? lhp.nienKhoa.id;
+        const finalMonHocId = dto.monHocId ?? lhp.monHoc.id;
+
+        if (dto.monHocId || dto.nganhId || dto.nienKhoaId) {
+            const apDung = await this.apDungRepo.findOne({
+                where: {
+                    nganh: { id: finalNganhId },
+                    nienKhoa: { id: finalNienKhoaId },
+                },
+                relations: ['chuongTrinh', 'chuongTrinh.chiTietMonHocs', 'chuongTrinh.chiTietMonHocs.monHoc'],
+            });
+
+            if (!apDung) {
+                throw new BadRequestException(
+                    'Không có chương trình đào tạo nào được áp dụng cho ngành và niên khóa mới này',
+                );
+            }
+
+            const monHocTrongCT = apDung.chuongTrinh.chiTietMonHocs.some(
+                ct => ct.monHoc.id === finalMonHocId,
+            );
+
+            if (!monHocTrongCT) {
+                throw new BadRequestException(
+                    'Môn học này không thuộc chương trình đào tạo được áp dụng cho ngành và niên khóa mới',
+                );
+            }
+        }
+        // === Kết thúc validation mới ===
 
         // 3. Lưu thay đổi
         return await this.lopHocPhanRepo.save(lhp);

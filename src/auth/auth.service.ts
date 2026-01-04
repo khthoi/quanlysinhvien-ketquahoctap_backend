@@ -504,4 +504,374 @@ export class AuthService {
             message: 'Reset mật khẩu thành công. Mật khẩu mới đã được gửi qua email.',
         };
     }
+
+    /**
+ * Tạo tài khoản cho sinh viên
+ */
+    async createAccountForSinhVien(sinhVienId: number) {
+        // Kiểm tra sinh viên có tồn tại không
+        const sinhVien = await this.sinhVienRepo.findOne({
+            where: { id: sinhVienId },
+        });
+
+        if (!sinhVien) {
+            throw new NotFoundException(`Không tìm thấy sinh viên với ID ${sinhVienId}`);
+        }
+
+        // Kiểm tra sinh viên có email không
+        if (!sinhVien.email) {
+            throw new BadRequestException(
+                'Sinh viên này chưa có email. Vui lòng cập nhật email trước khi tạo tài khoản.',
+            );
+        }
+
+        // Kiểm tra sinh viên đã có tài khoản chưa
+        const existingAccount = await this.nguoiDungRepo.findOne({
+            where: { sinhVien: { id: sinhVienId } },
+        });
+
+        if (existingAccount) {
+            throw new BadRequestException('Sinh viên này đã có tài khoản');
+        }
+
+        // Kiểm tra email đã được dùng làm tên đăng nhập chưa
+        const existingUsername = await this.nguoiDungRepo.findOne({
+            where: { tenDangNhap: sinhVien.email },
+        });
+
+        if (existingUsername) {
+            throw new BadRequestException('Email này đã được sử dụng làm tên đăng nhập');
+        }
+
+        // Tạo mật khẩu ngẫu nhiên
+        const randomPassword = this.generateRandomPassword(10);
+        const hashedPassword = await bcrypt.hash(randomPassword, 10);
+
+        // Tạo tài khoản mới
+        const nguoiDung = this.nguoiDungRepo.create({
+            tenDangNhap: sinhVien.email,
+            matKhau: hashedPassword,
+            vaiTro: VaiTroNguoiDungEnum.SINH_VIEN,
+            sinhVien: sinhVien,
+            ngayTao: new Date(),
+        });
+
+        await this.nguoiDungRepo.save(nguoiDung);
+
+        // Gửi email chứa thông tin đăng nhập
+        try {
+            await this.mailerService.sendMail({
+                to: sinhVien.email,
+                subject: '[Hệ thống QL Sinh viên] Tài khoản sinh viên đã được tạo',
+                html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <h2 style="color: #1976d2;">Xin chào ${sinhVien.hoTen},</h2>
+                    <p>Tài khoản sinh viên của bạn đã được tạo thành công trong hệ thống quản lý sinh viên.</p>
+                    
+                    <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #1976d2;">
+                        <h3 style="margin-top: 0; color: #333;">Thông tin đăng nhập:</h3>
+                        <p style="margin: 10px 0;">
+                            <strong>Tên đăng nhập:</strong> 
+                            <span style="color: #1976d2; font-size: 16px;">${sinhVien.email}</span>
+                        </p>
+                        <p style="margin: 10px 0;">
+                            <strong>Mật khẩu:</strong> 
+                            <span style="color: #1976d2; font-size: 16px; font-family: monospace; background: #fff; padding: 5px 10px; border-radius: 4px;">${randomPassword}</span>
+                        </p>
+                    </div>
+                    
+                    <div style="background-color: #fff3cd; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #ffc107;">
+                        <p style="margin: 0; color: #856404;">
+                            <strong>⚠️ Lưu ý quan trọng:</strong><br/>
+                            Vui lòng đổi mật khẩu ngay sau khi đăng nhập lần đầu để đảm bảo an toàn cho tài khoản của bạn.
+                        </p>
+                    </div>
+                    
+                    <p style="color: #666; margin-top: 30px;">Trân trọng,<br/>Hệ thống quản lý sinh viên</p>
+                    <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+                    <p style="font-size: 12px; color: #999;">Email này được gửi tự động, vui lòng không trả lời.</p>
+                </div>
+            `,
+            });
+        } catch (error) {
+            console.error('Lỗi khi gửi email:', error);
+            throw new BadRequestException('Không thể gửi email. Vui lòng thử lại sau.');
+        }
+
+        return {
+            message: 'Tạo tài khoản thành công. Thông tin đăng nhập đã được gửi qua email.',
+            data: {
+                id: nguoiDung.id,
+                tenDangNhap: nguoiDung.tenDangNhap,
+                vaiTro: nguoiDung.vaiTro,
+                sinhVienId: sinhVien.id,
+                email: sinhVien.email,
+            },
+        };
+    }
+
+    /**
+     * Tạo tài khoản cho giảng viên
+     */
+    async createAccountForGiangVien(giangVienId: number) {
+        // Kiểm tra giảng viên có tồn tại không
+        const giangVien = await this.giangVienRepo.findOne({
+            where: { id: giangVienId },
+        });
+
+        if (!giangVien) {
+            throw new NotFoundException(`Không tìm thấy giảng viên với ID ${giangVienId}`);
+        }
+
+        // Kiểm tra giảng viên có email không
+        if (!giangVien.email) {
+            throw new BadRequestException(
+                'Giảng viên này chưa có email. Vui lòng cập nhật email trước khi tạo tài khoản.',
+            );
+        }
+
+        // Kiểm tra giảng viên đã có tài khoản chưa
+        const existingAccount = await this.nguoiDungRepo.findOne({
+            where: { giangVien: { id: giangVienId } },
+        });
+
+        if (existingAccount) {
+            throw new BadRequestException('Giảng viên này đã có tài khoản');
+        }
+
+        // Kiểm tra email đã được dùng làm tên đăng nhập chưa
+        const existingUsername = await this.nguoiDungRepo.findOne({
+            where: { tenDangNhap: giangVien.email },
+        });
+
+        if (existingUsername) {
+            throw new BadRequestException('Email này đã được sử dụng làm tên đăng nhập');
+        }
+
+        // Tạo mật khẩu ngẫu nhiên
+        const randomPassword = this.generateRandomPassword(10);
+        const hashedPassword = await bcrypt.hash(randomPassword, 10);
+
+        // Tạo tài khoản mới
+        const nguoiDung = this.nguoiDungRepo.create({
+            tenDangNhap: giangVien.email,
+            matKhau: hashedPassword,
+            vaiTro: VaiTroNguoiDungEnum.GIANG_VIEN,
+            giangVien: giangVien,
+            ngayTao: new Date(),
+        });
+
+        await this.nguoiDungRepo.save(nguoiDung);
+
+        // Gửi email chứa thông tin đăng nhập
+        try {
+            await this.mailerService.sendMail({
+                to: giangVien.email,
+                subject: '[Hệ thống QL Sinh viên] Tài khoản giảng viên đã được tạo',
+                html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <h2 style="color: #1976d2;">Xin chào ${giangVien.hoTen},</h2>
+                    <p>Tài khoản giảng viên của bạn đã được tạo thành công trong hệ thống quản lý sinh viên.</p>
+                    
+                    <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #1976d2;">
+                        <h3 style="margin-top: 0; color: #333;">Thông tin đăng nhập:</h3>
+                        <p style="margin: 10px 0;">
+                            <strong>Tên đăng nhập:</strong> 
+                            <span style="color: #1976d2; font-size: 16px;">${giangVien.email}</span>
+                        </p>
+                        <p style="margin: 10px 0;">
+                            <strong>Mật khẩu:</strong> 
+                            <span style="color: #1976d2; font-size: 16px; font-family: monospace; background: #fff; padding: 5px 10px; border-radius: 4px;">${randomPassword}</span>
+                        </p>
+                    </div>
+                    
+                    <div style="background-color: #fff3cd; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #ffc107;">
+                        <p style="margin: 0; color: #856404;">
+                            <strong>⚠️ Lưu ý quan trọng:</strong><br/>
+                            Vui lòng đổi mật khẩu ngay sau khi đăng nhập lần đầu để đảm bảo an toàn cho tài khoản của bạn.
+                        </p>
+                    </div>
+                    
+                    <p style="color: #666; margin-top: 30px;">Trân trọng,<br/>Hệ thống quản lý sinh viên</p>
+                    <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+                    <p style="font-size: 12px; color: #999;">Email này được gửi tự động, vui lòng không trả lời.</p>
+                </div>
+            `,
+            });
+        } catch (error) {
+            console.error('Lỗi khi gửi email:', error);
+            throw new BadRequestException('Không thể gửi email. Vui lòng thử lại sau.');
+        }
+
+        return {
+            message: 'Tạo tài khoản thành công. Thông tin đăng nhập đã được gửi qua email.',
+            data: {
+                id: nguoiDung.id,
+                tenDangNhap: nguoiDung.tenDangNhap,
+                vaiTro: nguoiDung.vaiTro,
+                giangVienId: giangVien.id,
+                email: giangVien.email,
+            },
+        };
+    }
+
+    /**
+ * Tạo tài khoản cho sinh viên (phiên bản đơn giản)
+ */
+    async createAccountForSinhVienBasic(sinhVienId: number) {
+        // Kiểm tra sinh viên có tồn tại không
+        const sinhVien = await this.sinhVienRepo.findOne({
+            where: { id: sinhVienId },
+        });
+
+        if (!sinhVien) {
+            throw new NotFoundException(`Không tìm thấy sinh viên với ID ${sinhVienId}`);
+        }
+
+        // Kiểm tra sinh viên có email không
+        if (!sinhVien.email) {
+            throw new BadRequestException(
+                'Sinh viên này chưa có email. Vui lòng cập nhật email trước khi tạo tài khoản.',
+            );
+        }
+
+        // Kiểm tra sinh viên đã có tài khoản chưa
+        const existingAccount = await this.nguoiDungRepo.findOne({
+            where: { sinhVien: { id: sinhVienId } },
+        });
+
+        if (existingAccount) {
+            throw new BadRequestException('Sinh viên này đã có tài khoản');
+        }
+
+        // Kiểm tra email đã được dùng làm tên đăng nhập chưa
+        const existingUsername = await this.nguoiDungRepo.findOne({
+            where: { tenDangNhap: sinhVien.email },
+        });
+
+        if (existingUsername) {
+            throw new BadRequestException('Email này đã được sử dụng làm tên đăng nhập');
+        }
+
+        // Lấy mật khẩu mặc định từ env
+        const defaultPassword = this.configService.get<string>('DEFAULT_PASSWORD') || '123456';
+        const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+
+        // Tạo tài khoản mới
+        const nguoiDung = this.nguoiDungRepo.create({
+            tenDangNhap: sinhVien.email,
+            matKhau: hashedPassword,
+            vaiTro: VaiTroNguoiDungEnum.SINH_VIEN,
+            sinhVien: sinhVien,
+            ngayTao: new Date(),
+        });
+
+        await this.nguoiDungRepo.save(nguoiDung);
+
+        return {
+            message: 'Tạo tài khoản thành công với mật khẩu mặc định.',
+            data: {
+                id: nguoiDung.id,
+                tenDangNhap: nguoiDung.tenDangNhap,
+                vaiTro: nguoiDung.vaiTro,
+                sinhVienId: sinhVien.id,
+                email: sinhVien.email,
+            },
+        };
+    }
+
+    /**
+     * Tạo tài khoản cho giảng viên (phiên bản đơn giản)
+     */
+    async createAccountForGiangVienBasic(giangVienId: number) {
+        // Kiểm tra giảng viên có tồn tại không
+        const giangVien = await this.giangVienRepo.findOne({
+            where: { id: giangVienId },
+        });
+
+        if (!giangVien) {
+            throw new NotFoundException(`Không tìm thấy giảng viên với ID ${giangVienId}`);
+        }
+
+        // Kiểm tra giảng viên có email không
+        if (!giangVien.email) {
+            throw new BadRequestException(
+                'Giảng viên này chưa có email. Vui lòng cập nhật email trước khi tạo tài khoản.',
+            );
+        }
+
+        // Kiểm tra giảng viên đã có tài khoản chưa
+        const existingAccount = await this.nguoiDungRepo.findOne({
+            where: { giangVien: { id: giangVienId } },
+        });
+
+        if (existingAccount) {
+            throw new BadRequestException('Giảng viên này đã có tài khoản');
+        }
+
+        // Kiểm tra email đã được dùng làm tên đăng nhập chưa
+        const existingUsername = await this.nguoiDungRepo.findOne({
+            where: { tenDangNhap: giangVien.email },
+        });
+
+        if (existingUsername) {
+            throw new BadRequestException('Email này đã được sử dụng làm tên đăng nhập');
+        }
+
+        // Lấy mật khẩu mặc định từ env
+        const defaultPassword = this.configService.get<string>('DEFAULT_PASSWORD') || '123456';
+        const hashedPassword = await bcrypt.hash(defaultPassword, 10);
+
+        // Tạo tài khoản mới
+        const nguoiDung = this.nguoiDungRepo.create({
+            tenDangNhap: giangVien.email,
+            matKhau: hashedPassword,
+            vaiTro: VaiTroNguoiDungEnum.GIANG_VIEN,
+            giangVien: giangVien,
+            ngayTao: new Date(),
+        });
+
+        await this.nguoiDungRepo.save(nguoiDung);
+
+        return {
+            message: 'Tạo tài khoản thành công với mật khẩu mặc định.',
+            data: {
+                id: nguoiDung.id,
+                tenDangNhap: nguoiDung.tenDangNhap,
+                vaiTro: nguoiDung.vaiTro,
+                giangVienId: giangVien.id,
+                email: giangVien.email,
+            },
+        };
+    }
+
+    /**
+     * Tạo mật khẩu ngẫu nhiên
+     */
+    private generateRandomPassword(length: number = 10): string {
+        const uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+        const lowercase = 'abcdefghijklmnopqrstuvwxyz';
+        const numbers = '0123456789';
+        const special = '!@#$%^&*';
+        const allChars = uppercase + lowercase + numbers + special;
+
+        let password = '';
+
+        // Đảm bảo có ít nhất 1 ký tự từ mỗi loại
+        password += uppercase[Math.floor(Math.random() * uppercase.length)];
+        password += lowercase[Math.floor(Math.random() * lowercase.length)];
+        password += numbers[Math.floor(Math.random() * numbers.length)];
+        password += special[Math.floor(Math.random() * special.length)];
+
+        // Thêm các ký tự ngẫu nhiên còn lại
+        for (let i = password.length; i < length; i++) {
+            password += allChars[Math.floor(Math.random() * allChars.length)];
+        }
+
+        // Trộn ngẫu nhiên các ký tự
+        return password
+            .split('')
+            .sort(() => Math.random() - 0.5)
+            .join('');
+    }
 }

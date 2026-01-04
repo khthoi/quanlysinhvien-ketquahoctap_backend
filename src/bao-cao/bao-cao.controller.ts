@@ -1,16 +1,19 @@
-import { Controller, Get, Post, Param, Body, Res, ParseIntPipe, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, Res, ParseIntPipe, HttpStatus, Query, BadRequestException } from '@nestjs/common';
 import type { Response } from 'express';
 import { BaoCaoService } from './bao-cao.service';
-import { 
-  FilterHocLaiDto, 
-  FilterThongKeNganhDto, 
-  FilterThongKeLopHocPhanDto, 
-  FilterDanhSachSinhVienDto 
+import {
+  FilterHocLaiDto,
+  FilterThongKeNganhDto,
+  FilterThongKeLopHocPhanDto,
+  FilterDanhSachSinhVienDto
 } from './dtos/query-bao-cao.dto';
+import { VaiTroNguoiDungEnum } from 'src/auth/enums/vai-tro-nguoi-dung.enum';
+import { Roles } from 'src/auth/decorators/roles.decorator';
+import { DanhSachSinhVienReportDto } from './dtos/danh-sach-sinh-vien.dto';
 
 @Controller('bao-cao')
 export class BaoCaoController {
-  constructor(private readonly baoCaoService: BaoCaoService) {}
+  constructor(private readonly baoCaoService: BaoCaoService) { }
 
   /**
    * GET /bao-cao/bang-diem-lop-hoc-phan/:id
@@ -46,7 +49,7 @@ export class BaoCaoController {
   ) {
     try {
       const { buffer, filename } = await this.baoCaoService.xuatPhieuDiemCaNhan(sinhVienId);
-      
+
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       const encodedFilename = encodeURIComponent(filename);
       res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFilename}`);
@@ -70,7 +73,7 @@ export class BaoCaoController {
   ) {
     try {
       const { buffer, filename } = await this.baoCaoService.xuatBaoCaoGiangVien(giangVienId);
-      
+
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       const encodedFilename = encodeURIComponent(filename);
       res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFilename}`);
@@ -84,20 +87,30 @@ export class BaoCaoController {
   }
 
   /**
-   * POST /bao-cao/sinh-vien/hoc-lai
-   * Danh sách sinh viên học lại/cải thiện
-   * Body: { hocKyId?, nganhId?, nienKhoaId?, loaiHocLai?: 'HOC_LAI' | 'HOC_CAI_THIEN' | 'TAT_CA' }
+   * GET /bao-cao/sinh-vien/hoc-lai
+   * Query:
+   *  - hocKyId?
+   *  - nganhId?
+   *  - nienKhoaId?
+   *  - loaiHocLai? = HOC_LAI | HOC_CAI_THIEN | TAT_CA
    */
-  @Post('sinh-vien/hoc-lai')
+  @Get('sinh-vien/hoc-lai')
   async xuatDanhSachHocLai(
-    @Body() filterDto: FilterHocLaiDto,
+    @Query() filterDto: FilterHocLaiDto,
     @Res() res: Response,
   ) {
     try {
       const buffer = await this.baoCaoService.xuatDanhSachHocLai(filterDto);
-      
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', 'attachment; filename=danh-sach-hoc-lai.xlsx');
+
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader(
+        'Content-Disposition',
+        'attachment; filename=danh-sach-hoc-lai.xlsx',
+      );
+
       res.status(HttpStatus.OK).send(buffer);
     } catch (error) {
       res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
@@ -106,6 +119,7 @@ export class BaoCaoController {
       });
     }
   }
+
 
   /**
    * POST /bao-cao/thong-ke/nganh-hoc-ky
@@ -119,7 +133,7 @@ export class BaoCaoController {
   ) {
     try {
       const buffer = await this.baoCaoService.xuatThongKeNganh(filterDto);
-      
+
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', 'attachment; filename=thong-ke-nganh-hoc-ky.xlsx');
       res.status(HttpStatus.OK).send(buffer);
@@ -143,7 +157,7 @@ export class BaoCaoController {
   ) {
     try {
       const buffer = await this.baoCaoService.xuatThongKeLopHocPhan(filterDto);
-      
+
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', 'attachment; filename=thong-ke-lop-hoc-phan.xlsx');
       res.status(HttpStatus.OK).send(buffer);
@@ -163,22 +177,28 @@ export class BaoCaoController {
    *   lopId?, nganhId?, nienKhoaId?, lopHocPhanId?, hocKyId?, nguongGPA?, xepLoai?
    * }
    */
-  @Post('danh-sach-sinh-vien')
+  @Post('danh-sach-sinh-vien/:query')
+  //@Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async xuatDanhSachSinhVien(
-    @Body() filterDto: FilterDanhSachSinhVienDto,
+    @Param('query') queryType: string,
+    @Body() filter: DanhSachSinhVienReportDto,
     @Res() res: Response,
   ) {
-    try {
-      const buffer = await this.baoCaoService.xuatDanhSachSinhVien(filterDto);
-      
-      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', 'attachment; filename=danh-sach-sinh-vien.xlsx');
-      res.status(HttpStatus.OK).send(buffer);
-    } catch (error) {
-      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
-        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
-        message: error.message || 'Lỗi khi xuất danh sách sinh viên',
-      });
+    const validQueries = [
+      'lop-hanh-chinh',
+      'nganh-nien-khoa',
+      'lop-hoc-phan',
+      'tinh-trang',
+      'ket-qua',
+      'rot-mon',
+      'canh-bao-gpa',
+      'khen-thuong-ky-luat',
+    ];
+
+    if (!validQueries.includes(queryType)) {
+      throw new BadRequestException('Loại báo cáo không hợp lệ');
     }
+
+    await this.baoCaoService.xuatDanhSachSinhVien(queryType, filter, res);
   }
 }

@@ -1,13 +1,16 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, IsNull, Not, Repository } from 'typeorm';
 import * as ExcelJS from 'exceljs';
+import { Response } from 'express';
 import { LopHocPhan } from 'src/giang-day/entity/lop-hoc-phan.entity';
 import { SinhVien } from 'src/sinh-vien/entity/sinh-vien.entity';
 import { KetQuaHocTap } from 'src/ket-qua/entity/ket-qua-hoc-tap.entity';
 import { GiangVien } from 'src/danh-muc/entity/giang-vien.entity';
 import { FilterHocLaiDto, FilterThongKeNganhDto, FilterThongKeLopHocPhanDto, FilterDanhSachSinhVienDto, LoaiDanhSachEnum } from './dtos/query-bao-cao.dto';
 import { LoaiHinhThamGiaLopHocPhanEnum } from 'src/giang-day/enums/loai-hinh-tham-gia-lop-hoc-phan.enum';
+import { SinhVienLopHocPhan } from 'src/giang-day/entity/sinhvien-lophocphan.entity';
+import { DanhSachSinhVienReportDto } from './dtos/danh-sach-sinh-vien.dto';
 
 @Injectable()
 export class BaoCaoService {
@@ -20,6 +23,8 @@ export class BaoCaoService {
         private ketQuaRepo: Repository<KetQuaHocTap>,
         @InjectRepository(GiangVien)
         private giangVienRepo: Repository<GiangVien>,
+        @InjectRepository(SinhVienLopHocPhan)
+        private svLhpRepo: Repository<SinhVienLopHocPhan>
     ) { }
 
     // Hàm tính điểm
@@ -420,64 +425,178 @@ export class BaoCaoService {
         return await workbook.xlsx.writeBuffer() as unknown as Buffer;
     }
 
-    private async taoSheetHocLai(worksheet: ExcelJS.Worksheet, filter: FilterHocLaiDto, loai: LoaiHinhThamGiaLopHocPhanEnum) {
+    private async taoSheetHocLai(
+        worksheet: ExcelJS.Worksheet,
+        filter: FilterHocLaiDto,
+        loai: LoaiHinhThamGiaLopHocPhanEnum,
+    ) {
         worksheet.mergeCells('A1:J1');
-        worksheet.getCell('A1').value = loai === LoaiHinhThamGiaLopHocPhanEnum.HOC_LAI ? 'DANH SÁCH SINH VIÊN HỌC LẠI' : 'DANH SÁCH SINH VIÊN HỌC CẢI THIỆN';
+        worksheet.getCell('A1').value =
+            loai === LoaiHinhThamGiaLopHocPhanEnum.HOC_LAI
+                ? 'DANH SÁCH SINH VIÊN HỌC LẠI'
+                : 'DANH SÁCH SINH VIÊN HỌC CẢI THIỆN';
         worksheet.getCell('A1').font = { size: 14, bold: true };
         worksheet.getCell('A1').alignment = { horizontal: 'center' };
 
         const headerRow = worksheet.getRow(3);
-        headerRow.values = ['STT', 'MSSV', 'Họ tên', 'Ngành', 'Niên khóa', 'Môn học', 'Lớp HP cũ', 'Điểm cũ', 'Học kỳ rớt', 'Số lần học lại'];
+        headerRow.values = [
+            'STT',
+            'MSSV',
+            'Họ tên',
+            'Ngành',
+            'Niên khóa',
+            'Môn học',
+            'Lớp HP gần nhất',
+            'Điểm TBCHP cũ',
+            'Học kỳ gần nhất',
+            'Số lần ' + (loai === LoaiHinhThamGiaLopHocPhanEnum.HOC_LAI ? 'học lại' : 'học cải thiện'),
+        ];
         headerRow.font = { bold: true };
+        headerRow.eachCell(cell => {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9E1F2' } };
+            cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+        });
 
-        // Query data
-        const query = this.ketQuaRepo.createQueryBuilder('kq')
-            .leftJoinAndSelect('kq.sinhVien', 'sv')
+        // Lấy danh sách đăng ký có loai_tham_gia phù hợp
+        const dangKyQuery = this.svLhpRepo.createQueryBuilder('svlhp')
+            .leftJoinAndSelect('svlhp.sinhVien', 'sv')
             .leftJoinAndSelect('sv.lop', 'lop')
             .leftJoinAndSelect('lop.nganh', 'nganh')
-            .leftJoinAndSelect('lop.nienKhoa', 'nk')
-            .leftJoinAndSelect('kq.lopHocPhan', 'lhp')
-            .leftJoinAndSelect('lhp.monHoc', 'mh')
-            .leftJoinAndSelect('lhp.hocKy', 'hk')
-            .leftJoinAndSelect('hk.namHoc', 'nh')
-            .where('1=1');
+            .leftJoinAndSelect('lop.nienKhoa', 'nienKhoa')
+            .leftJoinAndSelect('svlhp.lopHocPhan', 'lhp')
+            .leftJoinAndSelect('lhp.monHoc', 'monHoc')
+            .leftJoinAndSelect('lhp.hocKy', 'hocKy')
+            .leftJoinAndSelect('hocKy.namHoc', 'namHoc')
+            .where('svlhp.loai_tham_gia = :loai', { loai });
 
-        if (loai === LoaiHinhThamGiaLopHocPhanEnum.HOC_LAI) {
-            query.andWhere(`(kq.diemQuaTrinh * 0.1 + kq.diemThanhPhan * 0.3 + kq.diemThi * 0.6) < 4.0`);
-        } else {
-            query.andWhere(`(kq.diemQuaTrinh * 0.1 + kq.diemThanhPhan * 0.3 + kq.diemThi * 0.6) >= 5.0`);
-            query.andWhere(`(kq.diemQuaTrinh * 0.1 + kq.diemThanhPhan * 0.3 + kq.diemThi * 0.6) < 8.0`);
+        if (filter.hocKyId) {
+            dangKyQuery.andWhere('lhp.hoc_ky_id = :hocKyId', { hocKyId: filter.hocKyId });
+        }
+        if (filter.nganhId) {
+            dangKyQuery.andWhere('nganh.id = :nganhId', { nganhId: filter.nganhId });
+        }
+        if (filter.nienKhoaId) {
+            dangKyQuery.andWhere('nienKhoa.id = :nienKhoaId', { nienKhoaId: filter.nienKhoaId });
         }
 
-        if (filter.hocKyId) query.andWhere('lhp.hocKyId = :hocKyId', { hocKyId: filter.hocKyId });
-        if (filter.nganhId) query.andWhere('nganh.id = :nganhId', { nganhId: filter.nganhId });
+        const dangKyList = await dangKyQuery.getMany();
 
-        const results = await query.getMany();
+        if (dangKyList.length === 0) {
+            worksheet.getCell('A5').value = 'Không có dữ liệu';
+            return;
+        }
 
+        // Group theo sinh viên + môn học
+        const groupMap = new Map<string, SinhVienLopHocPhan[]>();
+        for (const dk of dangKyList) {
+            const key = `${dk.sinhVien.id}-${dk.lopHocPhan.monHoc.id}`;
+            if (!groupMap.has(key)) groupMap.set(key, []);
+            groupMap.get(key)!.push(dk);
+        }
+
+        const rows: any[] = [];
+
+        for (const [key, dks] of groupMap) {
+            // Sắp xếp theo ngày kết thúc học kỳ giảm dần (gần nhất trước)
+            dks.sort((a, b) => {
+                const dateA = new Date(a.lopHocPhan.hocKy.ngayKetThuc).getTime();
+                const dateB = new Date(b.lopHocPhan.hocKy.ngayKetThuc).getTime();
+                return dateB - dateA;
+            });
+
+            const latestDk = dks[0]; // lớp gần nhất
+            const sv = latestDk.sinhVien;
+            const monHoc = latestDk.lopHocPhan.monHoc;
+
+            // === Tính ngày bắt đầu - kết thúc của lớp GẦN NHẤT (luôn hiển thị) ===
+            const ngayBD = latestDk.lopHocPhan.hocKy.ngayBatDau
+                ? new Date(latestDk.lopHocPhan.hocKy.ngayBatDau).toLocaleDateString('vi-VN')
+                : 'N/A';
+            const ngayKT = latestDk.lopHocPhan.hocKy.ngayKetThuc
+                ? new Date(latestDk.lopHocPhan.hocKy.ngayKetThuc).toLocaleDateString('vi-VN')
+                : 'N/A';
+
+            const hocKyGanNhat = `${latestDk.lopHocPhan.hocKy.tenHocKy} (${ngayBD} - ${ngayKT}) - Năm học: ${latestDk.lopHocPhan.hocKy.namHoc.tenNamHoc}`;
+
+            // Tìm điểm cũ: ưu tiên lớp gần nhất có điểm → nếu không có thì tìm ngược về trước
+            let oldDiem: number | null = null;
+            let oldLHP: LopHocPhan | null = null;
+
+            // Ưu tiên lớp gần nhất có điểm
+            for (const dk of dks) {
+                const kq = await this.ketQuaRepo.findOne({
+                    where: {
+                        sinhVien: { id: sv.id },
+                        lopHocPhan: { id: dk.lopHocPhan.id },
+                    },
+                });
+                if (kq && kq.diemQuaTrinh !== null && kq.diemThanhPhan !== null && kq.diemThi !== null) {
+                    oldDiem = this.tinhDiemTBCHP(kq.diemQuaTrinh, kq.diemThanhPhan, kq.diemThi);
+                    oldLHP = dk.lopHocPhan;
+                    break;
+                }
+            }
+
+            // Nếu không có điểm ở các lớp học lại/cải thiện → tìm lớp trước đó (không cần loai_tham_gia)
+            if (oldDiem === null) {
+                const previousKq = await this.ketQuaRepo.findOne({
+                    where: {
+                        sinhVien: { id: sv.id },
+                        lopHocPhan: { monHoc: { id: monHoc.id } },
+                    },
+                    relations: ['lopHocPhan', 'lopHocPhan.hocKy', 'lopHocPhan.hocKy.namHoc'],
+                    order: { lopHocPhan: { hocKy: { ngayKetThuc: 'DESC' } } },
+                });
+
+                if (previousKq && previousKq.diemQuaTrinh !== null && previousKq.diemThanhPhan !== null && previousKq.diemThi !== null) {
+                    oldDiem = this.tinhDiemTBCHP(previousKq.diemQuaTrinh, previousKq.diemThanhPhan, previousKq.diemThi);
+                    oldLHP = previousKq.lopHocPhan;
+                }
+            }
+
+            rows.push({
+                mssv: sv.maSinhVien,
+                hoTen: sv.hoTen,
+                nganh: sv.lop.nganh.tenNganh,
+                nienKhoa: sv.lop.nienKhoa.tenNienKhoa,
+                monHoc: monHoc.tenMonHoc,
+                lopHPCu: oldLHP ? oldLHP.maLopHocPhan : latestDk.lopHocPhan.maLopHocPhan,
+                diemCu: oldDiem !== null ? oldDiem.toFixed(1) : 'Chưa có',
+                hocKyCu: hocKyGanNhat,
+                soLan: dks.length,
+            });
+        }
+
+        let filteredRows = rows;
+        // Ghi dữ liệu vào sheet
         let rowIndex = 4;
-        results.forEach((kq, idx) => {
-            const tbchp = this.tinhDiemTBCHP(kq.diemQuaTrinh, kq.diemThanhPhan, kq.diemThi);
-            const diemSo = Math.round(tbchp * 10) / 10;
-
-            const row = worksheet.getRow(rowIndex++);
-            row.values = [
+        filteredRows.forEach((row, idx) => {
+            const excelRow = worksheet.getRow(rowIndex++);
+            excelRow.values = [
                 idx + 1,
-                kq.sinhVien.maSinhVien,
-                kq.sinhVien.hoTen,
-                kq.sinhVien.lop.nganh.tenNganh,
-                kq.sinhVien.lop.nienKhoa.tenNienKhoa,
-                kq.lopHocPhan.monHoc.tenMonHoc,
-                kq.lopHocPhan.maLopHocPhan,
-                diemSo.toFixed(1),
-                `${kq.lopHocPhan.hocKy.tenHocKy} - ${kq.lopHocPhan.hocKy.namHoc.tenNamHoc}`,
-                1, // Cần tính từ history
+                row.mssv,
+                row.hoTen,
+                row.nganh,
+                row.nienKhoa,
+                row.monHoc,
+                row.lopHPCu,
+                row.diemCu,
+                row.hocKyCu,
+                row.soLan,
             ];
         });
 
         worksheet.columns = [
-            { width: 5 }, { width: 12 }, { width: 25 }, { width: 20 },
-            { width: 12 }, { width: 30 }, { width: 15 }, { width: 10 },
-            { width: 15 }, { width: 12 },
+            { width: 6 },
+            { width: 15 },
+            { width: 25 },
+            { width: 25 },
+            { width: 15 },
+            { width: 35 },
+            { width: 30 },
+            { width: 19 },
+            { width: 43 },
+            { width: 23 },
         ];
     }
 
@@ -590,233 +709,146 @@ export class BaoCaoService {
         return await workbook.xlsx.writeBuffer() as unknown as Buffer;
     }
 
-    // 7. Danh sách sinh viên tổng hợp
-    async xuatDanhSachSinhVien(filter: FilterDanhSachSinhVienDto): Promise<Buffer> {
+    async xuatDanhSachSinhVien(
+        queryType: string,
+        filter: DanhSachSinhVienReportDto,
+        res: Response<any>,
+    ): Promise<void> {
+        const safeFilter = filter || {};
+
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Danh sách sinh viên');
 
-        let title = 'DANH SÁCH SINH VIÊN';
-        let additionalColumns: string[] = [];
+        // Tiêu đề theo loại báo cáo
+        const titles: { [key: string]: string } = {
+            'lop-hanh-chinh': 'DANH SÁCH SINH VIÊN THEO LỚP HÀNH CHÍNH',
+            'nganh-nien-khoa': 'DANH SÁCH SINH VIÊN THEO NGÀNH - NIÊN KHÓA',
+            'lop-hoc-phan': 'DANH SÁCH SINH VIÊN THEO LỚP HỌC PHẦN',
+            'tinh-trang': 'DANH SÁCH SINH VIÊN THEO TÌNH TRẠNG HỌC TẬP',
+            'ket-qua': 'DANH SÁCH SINH VIÊN THEO KẾT QUẢ HỌC TẬP (GPA/XẾP LOẠI)',
+            'rot-mon': 'DANH SÁCH SINH VIÊN RỚT ≥ 2 HỌC PHẦN',
+            'canh-bao-gpa': 'DANH SÁCH SINH VIÊN CẢNH BÁO GPA < 2.0',
+            'khen-thuong-ky-luat': 'DANH SÁCH SINH VIÊN KHEN THƯỞNG / KỶ LUẬT',
+        };
 
-        switch (filter.loaiDanhSach) {
-            case LoaiDanhSachEnum.LOP_HANH_CHINH:
-                title += ' THEO LỚP HÀNH CHÍNH';
-                break;
-            case LoaiDanhSachEnum.NGANH_NIEN_KHOA:
-                title += ' THEO NGÀNH - NIÊN KHÓA';
-                break;
-            case LoaiDanhSachEnum.LOP_HOC_PHAN:
-                title += ' THEO LỚP HỌC PHẦN';
-                break;
-            case LoaiDanhSachEnum.ROT_2_MON_TRO_LEN:
-                title += ' RỚT ≥ 2 HỌC PHẦN';
-                additionalColumns = ['Số môn rớt', 'Danh sách môn rớt'];
-                break;
-            case LoaiDanhSachEnum.CANH_BAO_GPA:
-                title += ` CẢNH BÁO GPA < ${filter.nguongGPA || 2.0}`;
-                additionalColumns = ['GPA hiện tại', 'Số TC tích lũy'];
-                break;
-            case LoaiDanhSachEnum.KHEN_THUONG:
-                title += ' KHEN THƯỞNG';
-                additionalColumns = ['Xếp loại', 'GPA'];
-                break;
-        }
-
-        // Merge cells cho title
-        const totalCols = 7 + additionalColumns.length;
-        const lastCol = String.fromCharCode(64 + totalCols); // A=65, B=66, ...
-        worksheet.mergeCells(`A1:${lastCol}1`);
+        const title = titles[queryType] || 'DANH SÁCH SINH VIÊN';
+        worksheet.mergeCells('A1:I1');
         worksheet.getCell('A1').value = title;
-        worksheet.getCell('A1').font = { size: 14, bold: true };
-        worksheet.getCell('A1').alignment = { horizontal: 'center', vertical: 'middle' };
+        worksheet.getCell('A1').font = { size: 16, bold: true };
+        worksheet.getCell('A1').alignment = { horizontal: 'center' };
 
-        // Header row
+        // Header bảng
         const headerRow = worksheet.getRow(3);
-        const baseHeaders = ['STT', 'MSSV', 'Họ tên', 'Lớp', 'Ngành', 'Niên khóa', 'Tình trạng'];
-        headerRow.values = [...baseHeaders, ...additionalColumns];
+        headerRow.values = [
+            'STT',
+            'MSSV',
+            'Họ tên',
+            'Ngày sinh',
+            'Giới tính',
+            'Lớp hành chính',
+            'Ngành',
+            'Niên khóa',
+            'Tình trạng',
+        ];
         headerRow.font = { bold: true };
-        headerRow.eachCell((cell) => {
-            cell.fill = {
-                type: 'pattern',
-                pattern: 'solid',
-                fgColor: { argb: 'FFD9E1F2' },
-            };
-            cell.border = {
-                top: { style: 'thin' },
-                left: { style: 'thin' },
-                bottom: { style: 'thin' },
-                right: { style: 'thin' },
-            };
-            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        headerRow.eachCell(cell => {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9E1F2' } };
+            cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
         });
 
-        // Query data
-        const query = this.sinhVienRepo
-            .createQueryBuilder('sv')
+        // Query sinh viên
+        const qb = this.sinhVienRepo.createQueryBuilder('sv')
             .leftJoinAndSelect('sv.lop', 'lop')
             .leftJoinAndSelect('lop.nganh', 'nganh')
-            .leftJoinAndSelect('lop.nienKhoa', 'nk')
-            .leftJoinAndSelect('sv.ketQuaHocTaps', 'kq')
-            .leftJoinAndSelect('kq.lopHocPhan', 'lhp')
-            .leftJoinAndSelect('lhp.monHoc', 'mh');
+            .leftJoinAndSelect('lop.nienKhoa', 'nienKhoa');
 
-        if (filter.lopId) {
-            query.andWhere('lop.id = :lopId', { lopId: filter.lopId });
-        }
-        if (filter.nganhId) {
-            query.andWhere('nganh.id = :nganhId', { nganhId: filter.nganhId });
-        }
-        if (filter.nienKhoaId) {
-            query.andWhere('nk.id = :nienKhoaId', { nienKhoaId: filter.nienKhoaId });
-        }
-
-        // Nếu lọc theo lớp học phần
-        if (filter.lopHocPhanId && filter.loaiDanhSach === LoaiDanhSachEnum.LOP_HOC_PHAN) {
-            query.andWhere('lhp.id = :lopHocPhanId', { lopHocPhanId: filter.lopHocPhanId });
-        }
-
-        const sinhViens = await query.getMany();
-
-        // Filter based on loaiDanhSach
-        let filteredSV = sinhViens;
-
-        if (filter.loaiDanhSach === LoaiDanhSachEnum.ROT_2_MON_TRO_LEN) {
-            filteredSV = sinhViens.filter((sv) => {
-                const monRot = sv.ketQuaHocTaps.filter((kq) => {
-                    const tbchp = this.tinhDiemTBCHP(kq.diemQuaTrinh, kq.diemThanhPhan, kq.diemThi);
-                    return tbchp < 4.0;
-                });
-                return monRot.length >= 2;
-            });
-        } else if (filter.loaiDanhSach === LoaiDanhSachEnum.CANH_BAO_GPA) {
-            const nguongGPA = filter.nguongGPA || 2.0;
-            filteredSV = sinhViens.filter((sv) => {
-                const gpa = this.tinhGPA(sv.ketQuaHocTaps);
-                return gpa < nguongGPA;
-            });
-        } else if (filter.loaiDanhSach === LoaiDanhSachEnum.KHEN_THUONG) {
-            filteredSV = sinhViens.filter((sv) => {
-                const gpa = this.tinhGPA(sv.ketQuaHocTaps);
-                const xepLoai = this.xepLoaiHocLuc(gpa);
-
-                if (filter.xepLoai) {
-                    return xepLoai === filter.xepLoai;
-                }
-                // Mặc định lấy sinh viên Giỏi và Xuất sắc
-                return xepLoai === 'XUAT_SAC' || xepLoai === 'GIOI';
+        // Áp dụng các filter từ body
+        if (safeFilter.search) {
+            qb.andWhere('(LOWER(sv.maSinhVien) LIKE LOWER(:search) OR LOWER(sv.hoTen) LIKE LOWER(:search))', {
+                search: `%${safeFilter.search}%`,
             });
         }
+        if (safeFilter.lopId) qb.andWhere('lop.id = :lopId', { lopId: safeFilter.lopId });
+        if (safeFilter.nganhId) qb.andWhere('nganh.id = :nganhId', { nganhId: safeFilter.nganhId });
+        if (safeFilter.nienKhoaId) qb.andWhere('nienKhoa.id = :nienKhoaId', { nienKhoaId: safeFilter.nienKhoaId });
+        if (safeFilter.tinhTrang) qb.andWhere('sv.tinhTrang = :tinhTrang', { tinhTrang: safeFilter.tinhTrang });
 
-        // Populate data
+        // Lọc theo lớp học phần (nếu có)
+        if (safeFilter.lopHocPhanId) {
+            qb.innerJoin('sv.sinhVienLopHocPhans', 'svlhp')
+                .andWhere('svlhp.lop_hoc_phan_id = :lopHocPhanId', { lopHocPhanId: safeFilter.lopHocPhanId });
+        }
+
+        // Lọc theo GPA (nếu có)
+        if (safeFilter.gpaMin || safeFilter.gpaMax || safeFilter.gpaDuoi2) {
+            // Subquery tính GPA (giả sử có hàm tính GPA từ kết quả học tập)
+            qb.addSelect('(' +
+                'SELECT AVG((kq.diemQuaTrinh * 0.1 + kq.diemThanhPhan * 0.3 + kq.diemThi * 0.6)) ' +
+                'FROM ket_qua_hoc_tap kq ' +
+                'WHERE kq.sinh_vien_id = sv.id' +
+                ') AS gpa');
+            if (safeFilter.gpaMin) qb.andHaving('gpa >= :gpaMin', { gpaMin: safeFilter.gpaMin });
+            if (safeFilter.gpaMax) qb.andHaving('gpa <= :gpaMax', { gpaMax: safeFilter.gpaMax });
+            if (safeFilter.gpaDuoi2) qb.andHaving('gpa < 2.0');
+        }
+
+        // Lọc rớt ≥ 2 môn
+        if (safeFilter.soMonRotMin) {
+            qb.addSelect('(' +
+                'SELECT COUNT(*) ' +
+                'FROM ket_qua_hoc_tap kq ' +
+                'WHERE kq.sinh_vien_id = sv.id ' +
+                'AND (kq.diemQuaTrinh * 0.1 + kq.diemThanhPhan * 0.3 + kq.diemThi * 0.6) < 4.0' +
+                ') AS soMonRot');
+            qb.andHaving('soMonRot >= :soMonRotMin', { soMonRotMin: safeFilter.soMonRotMin });
+        }
+
+        // Lọc khen thưởng / kỷ luật
+        if (safeFilter.coKhenThuong || safeFilter.coKyLuat) {
+            qb.leftJoin('sv.khenThuongKyLuats', 'ktkl');
+            if (safeFilter.coKhenThuong) qb.andWhere('ktkl.loai = :khenThuong', { khenThuong: 'KHEN_THUONG' });
+            if (safeFilter.coKyLuat) qb.andWhere('ktkl.loai = :kyLuat', { kyLuat: 'KY_LUAT' });
+        }
+
+        const sinhViens = await qb.orderBy('sv.maSinhVien', 'ASC').getMany();
+
+        // Ghi dữ liệu
         let rowIndex = 4;
-        filteredSV.forEach((sv, idx) => {
+        sinhViens.forEach((sv, idx) => {
             const row = worksheet.getRow(rowIndex++);
-            const baseValues: any[] = [
+            row.values = [
                 idx + 1,
                 sv.maSinhVien,
                 sv.hoTen,
-                sv.lop.tenLop,
-                sv.lop.nganh.tenNganh,
-                sv.lop.nienKhoa.tenNienKhoa,
+                sv.ngaySinh ? new Date(sv.ngaySinh).toLocaleDateString('vi-VN') : '',
+                sv.gioiTinh,
+                sv.lop?.tenLop || '',
+                sv.lop?.nganh?.tenNganh || '',
+                sv.lop?.nienKhoa?.tenNienKhoa || '',
                 sv.tinhTrang,
             ];
-
-            // Add additional columns based on report type
-            const additionalValues: any[] = [];
-
-            if (filter.loaiDanhSach === LoaiDanhSachEnum.ROT_2_MON_TRO_LEN) {
-                const monRot = sv.ketQuaHocTaps.filter((kq) => {
-                    const tbchp = this.tinhDiemTBCHP(kq.diemQuaTrinh, kq.diemThanhPhan, kq.diemThi);
-                    return tbchp < 4.0;
-                });
-                const danhSachMonRot = monRot.map((kq) => kq.lopHocPhan.monHoc.tenMonHoc).join(', ');
-                additionalValues.push(monRot.length, danhSachMonRot);
-            } else if (filter.loaiDanhSach === LoaiDanhSachEnum.CANH_BAO_GPA) {
-                const gpa = this.tinhGPA(sv.ketQuaHocTaps);
-                const tongTC = this.tinhTongTinChi(sv.ketQuaHocTaps);
-                additionalValues.push(gpa.toFixed(2), tongTC);
-            } else if (filter.loaiDanhSach === LoaiDanhSachEnum.KHEN_THUONG) {
-                const gpa = this.tinhGPA(sv.ketQuaHocTaps);
-                const xepLoai = this.xepLoaiHocLuc(gpa);
-                additionalValues.push(this.formatXepLoai(xepLoai), gpa.toFixed(2));
-            }
-
-            row.values = [...baseValues, ...additionalValues];
-
-            // Add borders
-            row.eachCell((cell) => {
-                cell.border = {
-                    top: { style: 'thin' },
-                    left: { style: 'thin' },
-                    bottom: { style: 'thin' },
-                    right: { style: 'thin' },
-                };
-            });
         });
 
-        // Column widths
-        const baseWidths = [5, 12, 25, 15, 20, 15, 15];
-        const additionalWidths = additionalColumns.map(() => 20);
-        worksheet.columns = [...baseWidths, ...additionalWidths].map((width) => ({ width }));
+        worksheet.columns = [
+            { width: 6 },
+            { width: 15 },
+            { width: 30 },
+            { width: 15 },
+            { width: 15 },
+            { width: 20 },
+            { width: 30 },
+            { width: 20 },
+            { width: 20 },
+        ];
 
-        // Footer - Tổng số sinh viên
-        const footerRow = worksheet.getRow(rowIndex + 1);
-        footerRow.getCell(1).value = `Tổng số: ${filteredSV.length} sinh viên`;
-        footerRow.getCell(1).font = { bold: true, italic: true };
-        worksheet.mergeCells(rowIndex + 1, 1, rowIndex + 1, 3);
+        // Xuất file
+        res.setHeader(
+            'Content-Type',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        );
+        res.setHeader('Content-Disposition', `attachment; filename=danh-sach-sinh-vien-${queryType}.xlsx`);
 
-        return await workbook.xlsx.writeBuffer() as unknown as Buffer;
-    }
-
-    // Helper functions
-    private tinhGPA(ketQuaHocTaps: KetQuaHocTap[]): number {
-        if (ketQuaHocTaps.length === 0) return 0;
-
-        let tongDiemNhan = 0;
-        let tongTinChi = 0;
-
-        ketQuaHocTaps.forEach((kq) => {
-            const tbchp = this.tinhDiemTBCHP(kq.diemQuaTrinh, kq.diemThanhPhan, kq.diemThi);
-            const diemSo = Math.round(tbchp * 10) / 10;
-            const soTinChi = kq.lopHocPhan.monHoc.soTinChi;
-
-            // Chỉ tính các môn đạt (>= 4.0) vào GPA
-            if (diemSo >= 4.0) {
-                tongDiemNhan += diemSo * soTinChi;
-                tongTinChi += soTinChi;
-            }
-        });
-
-        return tongTinChi > 0 ? tongDiemNhan / tongTinChi : 0;
-    }
-
-    private tinhTongTinChi(ketQuaHocTaps: KetQuaHocTap[]): number {
-        return ketQuaHocTaps.reduce((sum, kq) => {
-            const tbchp = this.tinhDiemTBCHP(kq.diemQuaTrinh, kq.diemThanhPhan, kq.diemThi);
-            // Chỉ tính tín chỉ của các môn đạt
-            if (tbchp >= 4.0) {
-                return sum + kq.lopHocPhan.monHoc.soTinChi;
-            }
-            return sum;
-        }, 0);
-    }
-
-    private xepLoaiHocLuc(gpa: number): string {
-        if (gpa >= 3.6) return 'XUAT_SAC';
-        if (gpa >= 3.2) return 'GIOI';
-        if (gpa >= 2.5) return 'KHA';
-        if (gpa >= 2.0) return 'TRUNG_BINH';
-        return 'YEU';
-    }
-
-    private formatXepLoai(xepLoai: string): string {
-        const map: { [key: string]: string } = {
-            XUAT_SAC: 'Xuất sắc',
-            GIOI: 'Giỏi',
-            KHA: 'Khá',
-            TRUNG_BINH: 'Trung bình',
-            YEU: 'Yếu',
-        };
-        return map[xepLoai] || xepLoai;
+        await workbook.xlsx.write(res);
+        res.end();
     }
 }
