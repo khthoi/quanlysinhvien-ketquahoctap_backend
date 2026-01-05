@@ -242,22 +242,55 @@ export class AuthService {
     }
 
     async update(id: number, updateUserDto: UpdateUserDto) {
-        const user = await this.nguoiDungRepo.findOne({ where: { id } });
+        const user = await this.nguoiDungRepo.findOne({
+            where: { id },
+            relations: ['sinhVien', 'giangVien'], // ← Load quan hệ để kiểm tra
+        });
+
         if (!user) throw new NotFoundException('Người dùng không tồn tại');
 
+        // === KIỂM TRA TÊN ĐĂNG NHẬP TRÙNG ===
         if (updateUserDto.tenDangNhap) {
-            const exist = await this.nguoiDungRepo.findOne({ where: { tenDangNhap: updateUserDto.tenDangNhap } });
+            const exist = await this.nguoiDungRepo.findOne({
+                where: { tenDangNhap: updateUserDto.tenDangNhap },
+            });
             if (exist && exist.id !== id) {
                 throw new BadRequestException('Tên đăng nhập đã tồn tại');
             }
             user.tenDangNhap = updateUserDto.tenDangNhap;
         }
 
+        // === VALIDATION VAI TRÒ MỚI ===
         if (updateUserDto.vaiTro) {
-            user.vaiTro = updateUserDto.vaiTro;
+            const newRole = updateUserDto.vaiTro;
+            const currentRole = user.vaiTro;
+
+            // Trường hợp 1: User là sinh viên → chỉ được giữ SINH_VIEN
+            if (user.sinhVien) {
+                if (newRole !== VaiTroNguoiDungEnum.SINH_VIEN) {
+                    throw new BadRequestException('Sinh viên chỉ được giữ vai trò SINH_VIEN');
+                }
+            }
+            // Trường hợp 2: User là giảng viên → chỉ được GIANG_VIEN hoặc CAN_BO_PHONG_DAO_TAO
+            else if (user.giangVien) {
+                if (![VaiTroNguoiDungEnum.GIANG_VIEN, VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO].includes(newRole)) {
+                    throw new BadRequestException('Giảng viên chỉ được có vai trò GIANG_VIEN hoặc CAN_BO_PHONG_DAO_TAO');
+                }
+            }
+            // Trường hợp 3: User không phải sinh viên cũng không phải giảng viên → không cho đổi vai trò
+            else {
+                if (newRole !== currentRole) {
+                    throw new BadRequestException('Không thể thay đổi vai trò của tài khoản hệ thống này');
+                }
+            }
+
+            user.vaiTro = newRole;
         }
 
+        // Lưu thay đổi
         await this.nguoiDungRepo.save(user);
+
+        // Trả về không có mật khẩu
         const { matKhau, ...result } = user;
         return result;
     }
