@@ -505,7 +505,7 @@ export class DanhMucService {
 
         if (search) {
             qb.andWhere(
-                'LOWER(giangVien.hoTen) LIKE LOWER(:search)',
+                'LOWER(giangVien.hoTen) LIKE LOWER(:search) OR LOWER(giangVien.maGiangVien) LIKE LOWER(:search)',
                 { search: `%${search}%` },
             );
         }
@@ -562,6 +562,11 @@ export class DanhMucService {
         const existing = await this.giangVienRepository.findOneBy({ email: createGiangVienDto.email });
         if (existing) {
             throw new BadRequestException('Email đã được sử dụng');
+        }
+
+        const existingMGV = await this.giangVienRepository.findOneBy({ maGiangVien: createGiangVienDto.maGiangVien });
+        if (existingMGV) {
+            throw new BadRequestException('Mã giảng viên đã được sử dụng');
         }
 
         const giangVien = this.giangVienRepository.create(createGiangVienDto);

@@ -5,19 +5,22 @@ import { LopHocPhan } from 'src/giang-day/entity/lop-hoc-phan.entity';
 import { NguoiDung } from 'src/auth/entity/nguoi-dung.entity';
 
 @Entity('giang_vien')
+@Unique(['maGiangVien'])
 @Unique(['email'])
-@Unique(['sdt'])
 export class GiangVien {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ name: 'ho_ten', length: 100 })
+  @Column({ name: 'ma_giang_vien', length: 20, nullable: false })
+  maGiangVien: string;
+
+  @Column({ name: 'ho_ten', length: 100, nullable: false })
   hoTen: string;
 
   @Column({ name: 'ngay_sinh', type: 'date', nullable: true })
   ngaySinh: Date;
 
-  @Column({ length: 100 })
+  @Column({ length: 100, nullable: false })
   email: string;
 
   @Column({ length: 15, nullable: true })

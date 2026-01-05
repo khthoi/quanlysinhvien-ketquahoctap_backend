@@ -716,10 +716,9 @@ export class AuthService {
     }
 
     /**
- * Tạo tài khoản cho sinh viên (phiên bản đơn giản)
+ * Tạo tài khoản cho sinh viên (đăng nhập = mã sinh viên)
  */
     async createAccountForSinhVienBasic(sinhVienId: number) {
-        // Kiểm tra sinh viên có tồn tại không
         const sinhVien = await this.sinhVienRepo.findOne({
             where: { id: sinhVienId },
         });
@@ -728,10 +727,15 @@ export class AuthService {
             throw new NotFoundException(`Không tìm thấy sinh viên với ID ${sinhVienId}`);
         }
 
-        // Kiểm tra sinh viên có email không
         if (!sinhVien.email) {
             throw new BadRequestException(
                 'Sinh viên này chưa có email. Vui lòng cập nhật email trước khi tạo tài khoản.',
+            );
+        }
+
+        if (!sinhVien.maSinhVien) {
+            throw new BadRequestException(
+                'Sinh viên này chưa có mã sinh viên.',
             );
         }
 
@@ -744,32 +748,40 @@ export class AuthService {
             throw new BadRequestException('Sinh viên này đã có tài khoản');
         }
 
-        // Kiểm tra email đã được dùng làm tên đăng nhập chưa
+        // Kiểm tra trùng tên đăng nhập (mã sinh viên)
         const existingUsername = await this.nguoiDungRepo.findOne({
-            where: { tenDangNhap: sinhVien.email },
+            where: { tenDangNhap: sinhVien.maSinhVien },
         });
 
         if (existingUsername) {
-            throw new BadRequestException('Email này đã được sử dụng làm tên đăng nhập');
+            throw new BadRequestException('Mã sinh viên đã được sử dụng làm tên đăng nhập');
         }
 
-        // Lấy mật khẩu mặc định từ env
-        const defaultPassword = this.configService.get<string>('DEFAULT_PASSWORD') || '123456';
+        // Kiểm tra trùng email (thông qua sinh viên liên kết)
+        const existingEmail = await this.nguoiDungRepo.findOne({
+            where: { sinhVien: { email: sinhVien.email } },
+        });
+
+        if (existingEmail) {
+            throw new BadRequestException('Email này đã được sử dụng cho tài khoản khác');
+        }
+
+        const defaultPassword =
+            this.configService.get<string>('DEFAULT_PASSWORD') || '123456';
         const hashedPassword = await bcrypt.hash(defaultPassword, 10);
 
-        // Tạo tài khoản mới
         const nguoiDung = this.nguoiDungRepo.create({
-            tenDangNhap: sinhVien.email,
+            tenDangNhap: sinhVien.maSinhVien,
             matKhau: hashedPassword,
             vaiTro: VaiTroNguoiDungEnum.SINH_VIEN,
-            sinhVien: sinhVien,
+            sinhVien,
             ngayTao: new Date(),
         });
 
         await this.nguoiDungRepo.save(nguoiDung);
 
         return {
-            message: 'Tạo tài khoản thành công với mật khẩu mặc định.',
+            message: 'Tạo tài khoản sinh viên thành công với mật khẩu mặc định.',
             data: {
                 id: nguoiDung.id,
                 tenDangNhap: nguoiDung.tenDangNhap,
@@ -781,10 +793,9 @@ export class AuthService {
     }
 
     /**
-     * Tạo tài khoản cho giảng viên (phiên bản đơn giản)
-     */
+  * Tạo tài khoản cho giảng viên (đăng nhập = mã giảng viên)
+  */
     async createAccountForGiangVienBasic(giangVienId: number) {
-        // Kiểm tra giảng viên có tồn tại không
         const giangVien = await this.giangVienRepo.findOne({
             where: { id: giangVienId },
         });
@@ -793,10 +804,15 @@ export class AuthService {
             throw new NotFoundException(`Không tìm thấy giảng viên với ID ${giangVienId}`);
         }
 
-        // Kiểm tra giảng viên có email không
         if (!giangVien.email) {
             throw new BadRequestException(
                 'Giảng viên này chưa có email. Vui lòng cập nhật email trước khi tạo tài khoản.',
+            );
+        }
+
+        if (!giangVien.maGiangVien) {
+            throw new BadRequestException(
+                'Giảng viên này chưa có mã giảng viên.',
             );
         }
 
@@ -809,32 +825,40 @@ export class AuthService {
             throw new BadRequestException('Giảng viên này đã có tài khoản');
         }
 
-        // Kiểm tra email đã được dùng làm tên đăng nhập chưa
+        // Kiểm tra trùng tên đăng nhập (mã giảng viên)
         const existingUsername = await this.nguoiDungRepo.findOne({
-            where: { tenDangNhap: giangVien.email },
+            where: { tenDangNhap: giangVien.maGiangVien },
         });
 
         if (existingUsername) {
-            throw new BadRequestException('Email này đã được sử dụng làm tên đăng nhập');
+            throw new BadRequestException('Mã giảng viên đã được sử dụng làm tên đăng nhập');
         }
 
-        // Lấy mật khẩu mặc định từ env
-        const defaultPassword = this.configService.get<string>('DEFAULT_PASSWORD') || '123456';
+        // Kiểm tra trùng email (thông qua giảng viên liên kết)
+        const existingEmail = await this.nguoiDungRepo.findOne({
+            where: { giangVien: { email: giangVien.email } },
+        });
+
+        if (existingEmail) {
+            throw new BadRequestException('Email này đã được sử dụng cho tài khoản khác');
+        }
+
+        const defaultPassword =
+            this.configService.get<string>('DEFAULT_PASSWORD') || '123456';
         const hashedPassword = await bcrypt.hash(defaultPassword, 10);
 
-        // Tạo tài khoản mới
         const nguoiDung = this.nguoiDungRepo.create({
-            tenDangNhap: giangVien.email,
+            tenDangNhap: giangVien.maGiangVien,
             matKhau: hashedPassword,
             vaiTro: VaiTroNguoiDungEnum.GIANG_VIEN,
-            giangVien: giangVien,
+            giangVien,
             ngayTao: new Date(),
         });
 
         await this.nguoiDungRepo.save(nguoiDung);
 
         return {
-            message: 'Tạo tài khoản thành công với mật khẩu mặc định.',
+            message: 'Tạo tài khoản giảng viên thành công với mật khẩu mặc định.',
             data: {
                 id: nguoiDung.id,
                 tenDangNhap: nguoiDung.tenDangNhap,

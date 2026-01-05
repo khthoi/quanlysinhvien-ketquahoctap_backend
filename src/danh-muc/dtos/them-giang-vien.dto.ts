@@ -2,6 +2,11 @@ import { IsNotEmpty, IsEmail, IsOptional, IsString, IsEnum, IsDateString, Length
 import { GioiTinh } from '../enums/gioi-tinh.enum';
 
 export class CreateGiangVienDto {
+
+  @IsNotEmpty({ message: 'Mã giảng viên không được để trống' })
+  @IsString()
+  maGiangVien: string;
+
   @IsNotEmpty({ message: 'Họ tên không được để trống' })
   @IsString()
   hoTen: string;

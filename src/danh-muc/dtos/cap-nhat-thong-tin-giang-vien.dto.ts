@@ -2,6 +2,7 @@ import { IsOptional, IsEmail, IsString, IsEnum, IsDateString, Length } from 'cla
 import { GioiTinh } from '../enums/gioi-tinh.enum';
 
 export class UpdateGiangVienDto {
+
   @IsOptional()
   @IsString()
   hoTen?: string;
