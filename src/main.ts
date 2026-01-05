@@ -1,18 +1,22 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // ===== Validation =====
   app.useGlobalPipes(
-  new ValidationPipe({
-    whitelist: true,                // Chỉ cho phép các field có trong DTO
-    forbidNonWhitelisted: true,     // Throw lỗi nếu có field lạ
-    forbidUnknownValues: true,    // Không cho phép giá trị không xác định
-  }),
-);
+    new ValidationPipe({
+      whitelist: true,              // Chỉ cho phép field có trong DTO
+      forbidNonWhitelisted: true,   // Báo lỗi nếu có field lạ
+      forbidUnknownValues: true,    // Không cho giá trị không xác định
+      transform: true,              // Quan trọng: tự convert type (string -> number)
+    }),
+  );
 
+  // ===== CORS =====
   app.enableCors({
     origin: [
       'http://localhost:3001',
@@ -21,6 +25,18 @@ async function bootstrap() {
     ],
     credentials: true,
   });
+
+  // ===== Swagger =====
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('QLSV API')
+    .setDescription('Tài liệu API hệ thống quản lý sinh viên')
+    .setVersion('1.0')
+    // .addBearerAuth() // bật nếu dùng JWT
+    .build();
+
+  const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
+
+  SwaggerModule.setup('api-docs', app, swaggerDocument);
 
   await app.listen(process.env.PORT ?? 3000);
 }

@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Not, Repository } from 'typeorm';
 import { Khoa } from './entity/khoa.entity';
 import { CreateKhoaDto } from './dtos/tao-khoa.dto';
 import { UpdateKhoaDto } from './dtos/cap-nhat-khoa.dto';
@@ -58,7 +58,7 @@ export class DanhMucService {
             .leftJoinAndSelect('khoa.nganhs', 'nganh'); // load ngành thuộc khoa
 
         if (search) {
-            qb.andWhere('LOWER(khoa.tenKhoa) LIKE LOWER(:search)', { search: `%${search}%` });
+            qb.andWhere('LOWER(khoa.tenKhoa) LIKE LOWER(:search) OR LOWER(khoa.maKhoa) LIKE LOWER(:search)', { search: `%${search}%` });
         }
 
         qb.orderBy('khoa.tenKhoa', 'ASC');
@@ -95,6 +95,16 @@ export class DanhMucService {
 
     // Thêm khoa mới
     async createKhoa(createKhoaDto: CreateKhoaDto): Promise<Khoa> {
+        // Kiểm tra mã khoa đã tồn tại chưa
+        const existingKhoa = await this.khoaRepository.findOneBy({
+            maKhoa: createKhoaDto.maKhoa,
+        });
+
+        if (existingKhoa) {
+            throw new BadRequestException('Mã khoa đã tồn tại trong hệ thống');
+        }
+
+        // Nếu không trùng thì tạo mới
         const khoa = this.khoaRepository.create(createKhoaDto);
         return await this.khoaRepository.save(khoa);
     }
@@ -103,6 +113,20 @@ export class DanhMucService {
     async updateKhoa(id: number, updateKhoaDto: UpdateKhoaDto): Promise<Khoa> {
         const khoa = await this.getKhoaById(id); // sẽ throw NotFound nếu không tồn tại
 
+        // ***KIỂM TRA TRÙNG MÃ KHOA KHI CẬP NHẬT***
+        if (updateKhoaDto.maKhoa && updateKhoaDto.maKhoa !== khoa.maKhoa) {
+            // Chỉ kiểm tra khi có thay đổi mã khoa
+            const existingKhoa = await this.khoaRepository.findOneBy({
+                maKhoa: updateKhoaDto.maKhoa,
+                id: Not(id), // Loại trừ chính bản ghi đang cập nhật
+            });
+
+            if (existingKhoa) {
+                throw new BadRequestException('Mã khoa này đã được sử dụng bởi khoa khác');
+            }
+        }
+
+        // Cập nhật các trường khác (bao gồm cả maKhoa nếu hợp lệ)
         Object.assign(khoa, updateKhoaDto);
 
         return await this.khoaRepository.save(khoa);
@@ -132,7 +156,7 @@ export class DanhMucService {
         }
 
         if (search) {
-            qb.andWhere('LOWER(nganh.tenNganh) LIKE LOWER(:search)', { search: `%${search}%` });
+            qb.andWhere('LOWER(nganh.tenNganh) LIKE LOWER(:search) OR LOWER(nganh.maNganh) LIKE LOWER(:search)', { search: `%${search}%` });
         }
 
         qb.orderBy('nganh.tenNganh', 'ASC');
@@ -171,6 +195,16 @@ export class DanhMucService {
 
     // Thêm ngành mới
     async createNganh(createNganhDto: CreateNganhDto): Promise<Nganh> {
+        // Kiểm tra mã ngành đã tồn tại chưa
+        const existingNganh = await this.nganhRepository.findOneBy({
+            maNganh: createNganhDto.maNganh,
+        });
+
+        if (existingNganh) {
+            throw new BadRequestException('Mã ngành này đã tồn tại trong hệ thống');
+        }
+
+        // Kiểm tra khoa tồn tại
         const khoa = await this.khoaRepository.findOne({
             where: { id: createNganhDto.khoaId },
         });
@@ -179,7 +213,9 @@ export class DanhMucService {
             throw new BadRequestException(`Khoa với id ${createNganhDto.khoaId} không tồn tại`);
         }
 
+        // Tạo ngành mới
         const nganh = this.nganhRepository.create({
+            maNganh: createNganhDto.maNganh,
             tenNganh: createNganhDto.tenNganh,
             moTa: createNganhDto.moTa,
             khoa,
@@ -190,19 +226,34 @@ export class DanhMucService {
 
     // Cập nhật ngành
     async updateNganh(id: number, updateNganhDto: UpdateNganhDto): Promise<Nganh> {
-        const nganh = await this.getNganhById(id);
+        const nganh = await this.getNganhById(id); // throw NotFound nếu không tồn tại
 
-        if (updateNganhDto.khoaId) {
+        // Kiểm tra nếu có thay đổi mã ngành
+        if (updateNganhDto.maNganh && updateNganhDto.maNganh !== nganh.maNganh) {
+            const existingNganh = await this.nganhRepository.findOneBy({
+                maNganh: updateNganhDto.maNganh,
+            });
+
+            if (existingNganh) {
+                throw new BadRequestException('Mã ngành này đã được sử dụng bởi ngành khác');
+            }
+        }
+
+        // Cập nhật khoa nếu có thay đổi
+        if (updateNganhDto.khoaId && updateNganhDto.khoaId !== nganh.khoa.id) {
             const khoa = await this.khoaRepository.findOne({
                 where: { id: updateNganhDto.khoaId },
             });
+
             if (!khoa) {
                 throw new BadRequestException(`Khoa với id ${updateNganhDto.khoaId} không tồn tại`);
             }
             nganh.khoa = khoa;
         }
 
+        // Cập nhật các trường khác
         Object.assign(nganh, {
+            maNganh: updateNganhDto.maNganh,
             tenNganh: updateNganhDto.tenNganh,
             moTa: updateNganhDto.moTa,
         });
@@ -223,7 +274,7 @@ export class DanhMucService {
         const qb = this.nienKhoaRepository.createQueryBuilder('nienKhoa');
 
         if (search) {
-            qb.andWhere('LOWER(nienKhoa.tenNienKhoa) LIKE LOWER(:search)', { search: `%${search}%` });
+            qb.andWhere('LOWER(nienKhoa.tenNienKhoa) LIKE LOWER(:search) OR LOWER(nienKhoa.maNamHoc) LIKE LOWER(:search)', { search: `%${search}%` });
         }
 
         qb.orderBy('nienKhoa.namBatDau', 'DESC');
@@ -258,29 +309,41 @@ export class DanhMucService {
 
     // Thêm niên khóa mới (chỉ cán bộ ĐT)
     async createNienKhoa(createNienKhoaDto: CreateNienKhoaDto): Promise<NienKhoa> {
-        // Kiểm tra trùng tên niên khóa (do có @Unique(['tenNienKhoa']))
-        const existing = await this.nienKhoaRepository.findOneBy({ tenNienKhoa: createNienKhoaDto.tenNienKhoa });
+        // Kiểm tra trùng tên niên khóa (ví dụ: "2023-2024")
+        const existing = await this.nienKhoaRepository.findOneBy({
+            tenNienKhoa: createNienKhoaDto.tenNienKhoa,
+        });
+
         if (existing) {
-            throw new BadRequestException('Tên niên khóa đã tồn tại');
+            throw new BadRequestException('Tên niên khóa này đã tồn tại trong hệ thống');
         }
 
+        // Tạo mới niên khóa
         const nienKhoa = this.nienKhoaRepository.create(createNienKhoaDto);
         return await this.nienKhoaRepository.save(nienKhoa);
     }
 
     // Cập nhật niên khóa (chỉ cán bộ ĐT)
     async updateNienKhoa(id: number, updateNienKhoaDto: UpdateNienKhoaDto): Promise<NienKhoa> {
-        const nienKhoa = await this.getNienKhoaById(id);
+        const nienKhoa = await this.getNienKhoaById(id); // throw NotFoundException nếu không tồn tại
 
-        // Nếu sửa tên, kiểm tra trùng
-        if (updateNienKhoaDto.tenNienKhoa && updateNienKhoaDto.tenNienKhoa !== nienKhoa.tenNienKhoa) {
-            const existing = await this.nienKhoaRepository.findOneBy({ tenNienKhoa: updateNienKhoaDto.tenNienKhoa });
+        // Chỉ kiểm tra trùng tên nếu người dùng thay đổi tên niên khóa
+        if (
+            updateNienKhoaDto.tenNienKhoa &&
+            updateNienKhoaDto.tenNienKhoa !== nienKhoa.tenNienKhoa
+        ) {
+            const existing = await this.nienKhoaRepository.findOneBy({
+                tenNienKhoa: updateNienKhoaDto.tenNienKhoa,
+            });
+
             if (existing) {
-                throw new BadRequestException('Tên niên khóa đã tồn tại');
+                throw new BadRequestException('Tên niên khóa này đã được sử dụng bởi niên khóa khác');
             }
         }
 
+        // Cập nhật các trường (bao gồm tenNienKhoa nếu hợp lệ)
         Object.assign(nienKhoa, updateNienKhoaDto);
+
         return await this.nienKhoaRepository.save(nienKhoa);
     }
 
@@ -317,7 +380,7 @@ export class DanhMucService {
             qb.andWhere('lop.nien_khoa_id = :nienKhoaId', { nienKhoaId });
         }
         if (search) {
-            qb.andWhere('LOWER(lop.tenLop) LIKE LOWER(:search)', { search: `%${search}%` });
+            qb.andWhere('LOWER(lop.tenLop) LIKE LOWER(:search) OR LOWER(lop.maLop) LIKE LOWER(:search)', { search: `%${search}%` });
         }
 
         qb.orderBy('lop.tenLop', 'ASC');
@@ -360,6 +423,16 @@ export class DanhMucService {
 
     // Thêm lớp mới
     async createLop(createLopDto: CreateLopDto): Promise<Lop> {
+        // Kiểm tra mã lớp đã tồn tại chưa
+        const existingLop = await this.lopRepository.findOneBy({
+            maLop: createLopDto.maLop,
+        });
+
+        if (existingLop) {
+            throw new BadRequestException('Mã lớp này đã tồn tại trong hệ thống');
+        }
+
+        // Kiểm tra ngành tồn tại
         const nganh = await this.nganhRepository.findOne({
             where: { id: createLopDto.nganhId },
         });
@@ -367,6 +440,7 @@ export class DanhMucService {
             throw new BadRequestException(`Ngành với id ${createLopDto.nganhId} không tồn tại`);
         }
 
+        // Kiểm tra niên khóa tồn tại
         const nienKhoa = await this.nienKhoaRepository.findOne({
             where: { id: createLopDto.nienKhoaId },
         });
@@ -374,7 +448,9 @@ export class DanhMucService {
             throw new BadRequestException(`Niên khóa với id ${createLopDto.nienKhoaId} không tồn tại`);
         }
 
+        // Tạo lớp mới
         const lop = this.lopRepository.create({
+            maLop: createLopDto.maLop,
             tenLop: createLopDto.tenLop,
             nganh,
             nienKhoa,
@@ -385,9 +461,21 @@ export class DanhMucService {
 
     // Cập nhật lớp
     async updateLop(id: number, updateLopDto: UpdateLopDto): Promise<Lop> {
-        const lop = await this.getLopById(id);
+        const lop = await this.getLopById(id); // throw NotFoundException nếu không tồn tại
 
-        if (updateLopDto.nganhId) {
+        // Kiểm tra nếu thay đổi mã lớp
+        if (updateLopDto.maLop && updateLopDto.maLop !== lop.maLop) {
+            const existingLop = await this.lopRepository.findOneBy({
+                maLop: updateLopDto.maLop,
+            });
+
+            if (existingLop) {
+                throw new BadRequestException('Mã lớp này đã được sử dụng bởi lớp khác');
+            }
+        }
+
+        // Cập nhật ngành nếu có thay đổi
+        if (updateLopDto.nganhId && updateLopDto.nganhId !== lop.nganh.id) {
             const nganh = await this.nganhRepository.findOne({
                 where: { id: updateLopDto.nganhId },
             });
@@ -397,7 +485,8 @@ export class DanhMucService {
             lop.nganh = nganh;
         }
 
-        if (updateLopDto.nienKhoaId) {
+        // Cập nhật niên khóa nếu có thay đổi
+        if (updateLopDto.nienKhoaId && updateLopDto.nienKhoaId !== lop.nienKhoa.id) {
             const nienKhoa = await this.nienKhoaRepository.findOne({
                 where: { id: updateLopDto.nienKhoaId },
             });
@@ -407,8 +496,12 @@ export class DanhMucService {
             lop.nienKhoa = nienKhoa;
         }
 
+        // Cập nhật tên lớp và mã lớp (nếu hợp lệ)
         if (updateLopDto.tenLop) {
             lop.tenLop = updateLopDto.tenLop;
+        }
+        if (updateLopDto.maLop) {
+            lop.maLop = updateLopDto.maLop;
         }
 
         return await this.lopRepository.save(lop);
@@ -436,7 +529,7 @@ export class DanhMucService {
         const qb = this.monHocRepository.createQueryBuilder('monHoc');
 
         if (search) {
-            qb.andWhere('LOWER(monHoc.tenMonHoc) LIKE LOWER(:search)', { search: `%${search}%` });
+            qb.andWhere('LOWER(monHoc.tenMonHoc) LIKE LOWER(:search) OR LOWER(monHoc.maMonHoc) LIKE LOWER(:search)', { search: `%${search}%` });
         }
 
         qb.orderBy('monHoc.tenMonHoc', 'ASC');
@@ -471,14 +564,36 @@ export class DanhMucService {
 
     // Thêm môn học mới
     async createMonHoc(createMonHocDto: CreateMonHocDto): Promise<MonHoc> {
+        // Kiểm tra mã môn học đã tồn tại chưa
+        const existingMonHoc = await this.monHocRepository.findOneBy({
+            maMonHoc: createMonHocDto.maMonHoc,
+        });
+
+        if (existingMonHoc) {
+            throw new BadRequestException('Mã môn học này đã tồn tại trong hệ thống');
+        }
+
+        // Tạo môn học mới
         const monHoc = this.monHocRepository.create(createMonHocDto);
         return await this.monHocRepository.save(monHoc);
     }
 
     // Cập nhật môn học
     async updateMonHoc(id: number, updateMonHocDto: UpdateMonHocDto): Promise<MonHoc> {
-        const monHoc = await this.getMonHocById(id);
+        const monHoc = await this.getMonHocById(id); // throw NotFoundException nếu không tồn tại
 
+        // Kiểm tra nếu thay đổi mã môn học
+        if (updateMonHocDto.maMonHoc && updateMonHocDto.maMonHoc !== monHoc.maMonHoc) {
+            const existingMonHoc = await this.monHocRepository.findOneBy({
+                maMonHoc: updateMonHocDto.maMonHoc,
+            });
+
+            if (existingMonHoc) {
+                throw new BadRequestException('Mã môn học này đã được sử dụng bởi môn học khác');
+            }
+        }
+
+        // Cập nhật các trường (bao gồm maMonHoc nếu hợp lệ)
         Object.assign(monHoc, updateMonHocDto);
 
         return await this.monHocRepository.save(monHoc);
@@ -576,6 +691,14 @@ export class DanhMucService {
     // Cập nhật giảng viên (admin)
     async updateGiangVien(id: number, updateGiangVienDto: UpdateGiangVienDto): Promise<GiangVien> {
         const giangVien = await this.getGiangVienById(id);
+
+        // Nếu cập nhật mã giảng viên, kiểm tra trùng
+        if (updateGiangVienDto.maGiangVien && updateGiangVienDto.maGiangVien !== giangVien.maGiangVien) {
+            const existingMGV = await this.giangVienRepository.findOneBy({ maGiangVien: updateGiangVienDto.maGiangVien });
+            if (existingMGV) {
+                throw new BadRequestException('Mã giảng viên đã được sử dụng');
+            }
+        }
 
         // Nếu cập nhật email, kiểm tra trùng
         if (updateGiangVienDto.email && updateGiangVienDto.email !== giangVien.email) {
@@ -704,6 +827,7 @@ export class DanhMucService {
         return {
             giangVien: {
                 id: giangVien.id,
+                maGiangVien: giangVien.maGiangVien,
                 hoTen: giangVien.hoTen,
                 email: giangVien.email,
                 sdt: giangVien.sdt,

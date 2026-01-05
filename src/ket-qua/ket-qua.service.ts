@@ -24,7 +24,7 @@ export class KetQuaService {
     private svLhpRepo: Repository<SinhVienLopHocPhan>,
     @InjectRepository(NguoiDung)
     private nguoiDungRepo: Repository<NguoiDung>,
-  ) {}
+  ) { }
 
   // Tính điểm trung bình cộng học phần (thang 10)
   private tinhTBCHP(kq: KetQuaHocTap): number | null {
@@ -53,46 +53,58 @@ export class KetQuaService {
   }
 
   private tinhDiemSo(diemTB: number | null): number | null {
-  if (diemTB === null) return null;
-  return Number((diemTB / 10 * 4).toFixed(2));
-}
+    if (diemTB === null) return null;
+    return Number((diemTB / 10 * 4).toFixed(2));
+  }
 
   // Nhập điểm (POST)
-  async nhapDiem(lopHocPhanId: number, sinhVienId: number, dto: NhapDiemDto) {
-    const lhp = await this.lopHocPhanRepo.findOneBy({ id: lopHocPhanId });
-    if (!lhp) throw new NotFoundException('Lớp học phần không tồn tại');
+  async nhapDiem(dto: NhapDiemDto) {
+    // 1. Kiểm tra lớp học phần tồn tại
+    const lhp = await this.lopHocPhanRepo.findOneBy({ id: dto.lopHocPhanId });
+    if (!lhp) {
+      throw new NotFoundException('Lớp học phần không tồn tại');
+    }
 
+    // 2. Kiểm tra lớp đã khóa điểm chưa
     if (lhp.khoaDiem) {
-      throw new ForbiddenException('Lớp học phần đã khóa điểm, không thể nhập/sửa điểm');
+      throw new ForbiddenException('Lớp học phần đã khóa điểm, không thể nhập điểm');
     }
 
-    // Kiểm tra sinh viên có đăng ký lớp này không
+    // 3. Kiểm tra sinh viên có đăng ký lớp này không
     const dangKy = await this.svLhpRepo.findOneBy({
-      lopHocPhan: { id: lopHocPhanId },
-      sinhVien: { id: sinhVienId },
+      lopHocPhan: { id: dto.lopHocPhanId },
+      sinhVien: { id: dto.sinhVienId },
     });
-    if (!dangKy) throw new BadRequestException('Sinh viên không đăng ký lớp học phần này');
-
-    let ketQua = await this.ketQuaRepo.findOneBy({
-      lopHocPhan: { id: lopHocPhanId },
-      sinhVien: { id: sinhVienId },
-    });
-
-    if (!ketQua) {
-      ketQua = this.ketQuaRepo.create({
-        lopHocPhan: lhp,
-        sinhVien: { id: sinhVienId } as any,
-        ...dto,
-      });
-    } else {
-      ketQua.diemQuaTrinh = dto.diemQuaTrinh;
-      ketQua.diemThanhPhan = dto.diemThanhPhan;
-      ketQua.diemThi = dto.diemThi;
+    if (!dangKy) {
+      throw new BadRequestException('Sinh viên không đăng ký lớp học phần này');
     }
+
+    // 4. ***QUAN TRỌNG***: Kiểm tra đã tồn tại kết quả chưa → Không cho phép nhập lại
+    const ketQuaTonTai = await this.ketQuaRepo.findOneBy({
+      lopHocPhan: { id: dto.lopHocPhanId },
+      sinhVien: { id: dto.sinhVienId },
+    });
+
+    if (ketQuaTonTai) {
+      throw new BadRequestException('Sinh viên đã có kết quả ở lớp học phần này');
+    }
+
+    // 5. (Tùy chọn) Validate điểm hợp lệ
+    this.validateDiem(dto);
+
+    // 6. Tạo mới kết quả
+    const ketQua = this.ketQuaRepo.create({
+      lopHocPhan: lhp,
+      sinhVien: { id: dto.sinhVienId } as any,
+      diemQuaTrinh: dto.diemQuaTrinh,
+      diemThanhPhan: dto.diemThanhPhan,
+      diemThi: dto.diemThi,
+    });
 
     const saved = await this.ketQuaRepo.save(ketQua);
 
     const tbchp = this.tinhTBCHP(saved);
+
     return {
       id: saved.id,
       diemQuaTrinh: saved.diemQuaTrinh,
@@ -102,6 +114,25 @@ export class KetQuaService {
       DiemSo: this.tinhDiemSo(tbchp),
       DiemChu: tbchp !== null ? this.tinhDiemChu(tbchp) : null,
     };
+  }
+
+  // Hàm validate điểm (có thể tách ra riêng)
+  private validateDiem(dto: NhapDiemDto) {
+    const errors: string[] = [];
+
+    if (dto.diemQuaTrinh !== null && (dto.diemQuaTrinh < 0 || dto.diemQuaTrinh > 10)) {
+      errors.push('Điểm quá trình phải từ 0 đến 10');
+    }
+    if (dto.diemThanhPhan !== null && (dto.diemThanhPhan < 0 || dto.diemThanhPhan > 10)) {
+      errors.push('Điểm thành phần phải từ 0 đến 10');
+    }
+    if (dto.diemThi !== null && (dto.diemThi < 0 || dto.diemThi > 10)) {
+      errors.push('Điểm thi phải từ 0 đến 10');
+    }
+
+    if (errors.length > 0) {
+      throw new BadRequestException(errors.join('; '));
+    }
   }
 
   // Sửa điểm (PUT)

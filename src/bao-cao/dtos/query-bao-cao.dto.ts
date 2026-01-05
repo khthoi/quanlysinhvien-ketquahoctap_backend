@@ -1,3 +1,4 @@
+import { ApiPropertyOptional } from "@nestjs/swagger";
 import { Type } from "class-transformer";
 import { IsOptional, IsNumber, IsEnum } from "class-validator";
 
@@ -8,21 +9,25 @@ export enum LoaiHocLaiEnum {
 }
 
 export class FilterHocLaiDto {
+  @ApiPropertyOptional({ description: 'ID học kỳ', example: 1 })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   hocKyId?: number;
 
+  @ApiPropertyOptional({ description: 'ID ngành', example: 1 })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   nganhId?: number;
 
+  @ApiPropertyOptional({ description: 'ID niên khóa', example: 1 })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   nienKhoaId?: number;
 
+  @ApiPropertyOptional({ description: 'Loại học lại', example: LoaiHocLaiEnum.TAT_CA })
   @IsOptional()
   @IsEnum(LoaiHocLaiEnum)
   loaiHocLai?: LoaiHocLaiEnum;}

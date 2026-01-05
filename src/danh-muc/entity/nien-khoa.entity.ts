@@ -7,6 +7,9 @@ export class NienKhoa {
   @PrimaryGeneratedColumn()
   id: number;
 
+  @Column({ name: 'ma_nien_khoa', length: 20})
+  maNienKhoa: string;
+
   @Column({ name: 'ten_nien_khoa', length: 20 })
   tenNienKhoa: string;
 

@@ -11,6 +11,17 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiBody,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiUnauthorizedResponse,
+  ApiForbiddenResponse,
+} from '@nestjs/swagger';
 import { KetQuaService } from './ket-qua.service';
 import { NhapDiemDto } from './dtos/nhap-diem.dto';
 import { GetKetQuaLopQueryDto } from './dtos/get-ket-qua-lop-query.dto';
@@ -20,28 +31,59 @@ import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { GetUser } from 'src/auth/decorators/get-user.decorator';
 import { VaiTroNguoiDungEnum } from 'src/auth/enums/vai-tro-nguoi-dung.enum';
 
+@ApiTags('Kết quả học tập')
+@ApiBearerAuth()
+@ApiUnauthorizedResponse({ description: 'Chưa đăng nhập hoặc token hết hạn' })
+@ApiForbiddenResponse({ description: 'Không có quyền truy cập' })
 @Controller('ket-qua')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class KetQuaController {
   constructor(private readonly ketQuaService: KetQuaService) {}
 
-  // Nhập điểm
+  @ApiOperation({
+    summary: 'Nhập điểm cho sinh viên trong lớp học phần',
+    description:
+      'Chỉ giảng viên hoặc cán bộ phòng Đào tạo được phép nhập điểm. Body phải chứa lopHocPhanId, sinhVienId và các trường điểm.',
+  })
+  @ApiBody({
+    type: NhapDiemDto,
+    description:
+      'Ngoài các trường điểm, cần thêm lopHocPhanId và sinhVienId vào body',
+  })
+  @ApiResponse({ status: 201, description: 'Nhập điểm thành công' })
   @Post('nhap-diem')
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO, VaiTroNguoiDungEnum.GIANG_VIEN)
   async nhapDiem(
-    @Body() dto: NhapDiemDto & { lopHocPhanId: number; sinhVienId: number },
+    @Body() dto: NhapDiemDto,
   ) {
-    return this.ketQuaService.nhapDiem(dto.lopHocPhanId, dto.sinhVienId, dto);
+    return this.ketQuaService.nhapDiem(dto);
   }
 
-  // Sửa điểm
+  @ApiOperation({
+    summary: 'Sửa điểm của một bản ghi kết quả',
+    description: 'Chỉ cán bộ phòng Đào tạo được phép sửa điểm đã nhập',
+  })
+  @ApiParam({ name: 'id', type: Number, description: 'ID của bản ghi kết quả học tập' })
+  @ApiBody({ type: NhapDiemDto })
+  @ApiResponse({ status: 200, description: 'Điểm đã được cập nhật thành công' })
   @Put(':id')
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async suaDiem(@Param('id', ParseIntPipe) id: number, @Body() dto: NhapDiemDto) {
     return this.ketQuaService.suaDiem(id, dto);
   }
 
-  // DS điểm của lớp học phần
+  @ApiOperation({
+    summary: 'Lấy danh sách điểm của toàn bộ lớp học phần',
+    description: 'Chỉ cán bộ phòng Đào tạo được xem',
+  })
+  @ApiParam({
+    name: 'lop_hoc_phan_id',
+    type: Number,
+    description: 'ID lớp học phần',
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Trang hiện tại' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Số bản ghi mỗi trang' })
+  @ApiResponse({ status: 200, description: 'Danh sách điểm của lớp học phần' })
   @Get('lop-hoc-phan/:lop_hoc_phan_id')
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async getDanhSachDiemLop(
@@ -51,7 +93,14 @@ export class KetQuaController {
     return this.ketQuaService.getDanhSachDiemLop(lopHocPhanId, query);
   }
 
-  // Sinh viên xem kết quả của mình
+  @ApiOperation({
+    summary: 'Sinh viên xem kết quả học tập của chính mình',
+    description: 'Chỉ sinh viên đang đăng nhập mới được gọi endpoint này',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách các môn học và điểm của sinh viên',
+  })
   @Get('sinh-vien/me')
   @Roles(VaiTroNguoiDungEnum.SINH_VIEN)
   async getKetQuaCuaToi(@GetUser('userId') userId: number) {

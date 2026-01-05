@@ -16,7 +16,7 @@ export class SinhVien {
   @Column({ name: 'ho_ten', length: 100 })
   hoTen: string;
 
-  @Column({ name: 'ngay_sinh', type: 'date', nullable: true })
+  @Column({ name: 'ngay_sinh', type: 'date', nullable: false })
   ngaySinh: Date;
 
   @Column({

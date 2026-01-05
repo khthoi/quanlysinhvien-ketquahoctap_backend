@@ -12,25 +12,40 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiBody,
+  ApiParam,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { CreateUserDto } from './dtos/create-user.dto';
 import { LoginDto } from './dtos/login.dto';
 import { UpdateUserDto } from './dtos/update-user.dto';
 import { RequestChangePasswordDto } from './dtos/request-change-password.dto';
 import { VerifyChangePasswordOtpDto } from './dtos/verify-change-password-otp.dto';
+import { ResetPasswordDto } from './dtos/reset-password.dto';
+import { GetUsersQueryDto } from './dtos/get-user-query.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { Roles } from './decorators/roles.decorator';
 import { GetUser } from './decorators/get-user.decorator';
-import { ResetPasswordDto } from './dtos/reset-password.dto';
-import { GetUsersQueryDto } from './dtos/get-user-query.dto';
 import { VaiTroNguoiDungEnum } from './enums/vai-tro-nguoi-dung.enum';
 
+@ApiTags('Xác thực & Quản lý người dùng')
+@ApiBearerAuth() // Áp dụng JWT cho tất cả API cần auth
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) { }
+  constructor(private readonly authService: AuthService) {}
 
   @Post('login')
+  @ApiOperation({ summary: 'Đăng nhập hệ thống' })
+  @ApiBody({ type: LoginDto })
+  @ApiResponse({ status: 200, description: 'Đăng nhập thành công, trả về JWT token' })
+  @ApiResponse({ status: 401, description: 'Sai tên đăng nhập hoặc mật khẩu' })
   async login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto);
   }
@@ -38,6 +53,9 @@ export class AuthController {
   @Post('new-users')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.ADMIN)
+  @ApiOperation({ summary: 'Tạo người dùng mới (chỉ Admin)' })
+  @ApiBody({ type: CreateUserDto })
+  @ApiResponse({ status: 201, description: 'Tạo người dùng thành công' })
   async createUser(@Body() createUserDto: CreateUserDto) {
     return this.authService.createUser(createUserDto);
   }
@@ -45,6 +63,9 @@ export class AuthController {
   @Get('users')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.ADMIN)
+  @ApiOperation({ summary: 'Lấy danh sách người dùng (Admin)' })
+  @ApiQuery({ type: GetUsersQueryDto })
+  @ApiResponse({ status: 200, description: 'Danh sách người dùng' })
   async getAllUsers(@Query() query: GetUsersQueryDto) {
     return this.authService.findAll(query);
   }
@@ -52,6 +73,9 @@ export class AuthController {
   @Get('users/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.ADMIN)
+  @ApiOperation({ summary: 'Lấy thông tin người dùng theo ID (Admin)' })
+  @ApiParam({ name: 'id', description: 'ID người dùng' })
+  @ApiResponse({ status: 200, description: 'Thông tin người dùng' })
   async getUser(@Param('id', ParseIntPipe) id: number) {
     return this.authService.findOne(id);
   }
@@ -59,6 +83,10 @@ export class AuthController {
   @Put('users/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.ADMIN)
+  @ApiOperation({ summary: 'Cập nhật người dùng (Admin)' })
+  @ApiParam({ name: 'id', description: 'ID người dùng' })
+  @ApiBody({ type: UpdateUserDto })
+  @ApiResponse({ status: 200, description: 'Cập nhật thành công' })
   async updateUser(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateUserDto: UpdateUserDto,
@@ -70,15 +98,18 @@ export class AuthController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.ADMIN)
   @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Xóa người dùng (Admin)' })
+  @ApiParam({ name: 'id', description: 'ID người dùng' })
+  @ApiResponse({ status: 204, description: 'Xóa thành công' })
   async deleteUser(@Param('id', ParseIntPipe) id: number): Promise<void> {
     await this.authService.remove(id);
   }
 
-  /**
-   * Bước 1: Yêu cầu đổi mật khẩu - Gửi OTP qua email
-   */
   @Post('change-password/me')
   @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Yêu cầu đổi mật khẩu (gửi OTP qua email)' })
+  @ApiBody({ type: RequestChangePasswordDto })
+  @ApiResponse({ status: 200, description: 'OTP đã được gửi' })
   async requestChangePassword(
     @GetUser('userId') userId: number,
     @Body() dto: RequestChangePasswordDto,
@@ -86,11 +117,11 @@ export class AuthController {
     return this.authService.requestChangePassword(userId, dto);
   }
 
-  /**
-   * Bước 2: Xác thực OTP và đổi mật khẩu
-   */
   @Post('change-password/verify-otp')
   @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Xác thực OTP và đổi mật khẩu' })
+  @ApiBody({ type: VerifyChangePasswordOtpDto })
+  @ApiResponse({ status: 200, description: 'Đổi mật khẩu thành công' })
   async verifyChangePasswordOtp(
     @GetUser('sub') userId: number,
     @Body() dto: VerifyChangePasswordOtpDto,
@@ -101,6 +132,8 @@ export class AuthController {
   @Post('reset-password')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.ADMIN)
+  @ApiOperation({ summary: 'Reset mật khẩu người dùng khác (Admin)' })
+  @ApiBody({ type: ResetPasswordDto })
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
   }
@@ -108,18 +141,20 @@ export class AuthController {
   @Post('users/sinh-vien/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.ADMIN, VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
-  async createAccountForSinhVien(
-    @Param('id', ParseIntPipe) sinhVienId: number,
-  ) {
+  @ApiOperation({ summary: 'Tạo tài khoản cho sinh viên' })
+  @ApiParam({ name: 'id', description: 'ID sinh viên' })
+  @ApiResponse({ status: 201, description: 'Tài khoản sinh viên được tạo' })
+  async createAccountForSinhVien(@Param('id', ParseIntPipe) sinhVienId: number) {
     return this.authService.createAccountForSinhVienBasic(sinhVienId);
   }
 
   @Post('users/giang-vien/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.ADMIN, VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
-  async createAccountForGiangVien(
-    @Param('id', ParseIntPipe) giangVienId: number,
-  ) {
+  @ApiOperation({ summary: 'Tạo tài khoản cho giảng viên' })
+  @ApiParam({ name: 'id', description: 'ID giảng viên' })
+  @ApiResponse({ status: 201, description: 'Tài khoản giảng viên được tạo' })
+  async createAccountForGiangVien(@Param('id', ParseIntPipe) giangVienId: number) {
     return this.authService.createAccountForGiangVienBasic(giangVienId);
   }
 }

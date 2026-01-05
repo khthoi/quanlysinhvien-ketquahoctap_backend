@@ -1,24 +1,50 @@
-import { Controller, Get, Post, Param, Body, Res, ParseIntPipe, HttpStatus, Query, BadRequestException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Param,
+  Body,
+  Res,
+  ParseIntPipe,
+  HttpStatus,
+  Query,
+  BadRequestException,
+} from '@nestjs/common';
 import type { Response } from 'express';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiBody,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiConsumes,
+  ApiProduces,
+} from '@nestjs/swagger';
 import { BaoCaoService } from './bao-cao.service';
 import {
   FilterHocLaiDto,
   FilterThongKeNganhDto,
   FilterThongKeLopHocPhanDto,
-  FilterDanhSachSinhVienDto
 } from './dtos/query-bao-cao.dto';
-import { VaiTroNguoiDungEnum } from 'src/auth/enums/vai-tro-nguoi-dung.enum';
-import { Roles } from 'src/auth/decorators/roles.decorator';
 import { DanhSachSinhVienReportDto } from './dtos/danh-sach-sinh-vien.dto';
 
+@ApiTags('Báo cáo')
+@ApiBearerAuth()
 @Controller('bao-cao')
 export class BaoCaoController {
-  constructor(private readonly baoCaoService: BaoCaoService) { }
+  constructor(private readonly baoCaoService: BaoCaoService) {}
 
-  /**
-   * GET /bao-cao/bang-diem-lop-hoc-phan/:id
-   * Xuất bảng điểm của tất cả sinh viên trong 1 lớp học phần
-   */
+  @ApiOperation({
+    summary: 'Xuất bảng điểm toàn bộ sinh viên trong một lớp học phần (Excel)',
+    description: 'Trả về file Excel chứa bảng điểm chi tiết của lớp học phần.',
+  })
+  @ApiParam({ name: 'id', type: Number, description: 'ID lớp học phần' })
+  @ApiProduces('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @ApiResponse({ status: 200, description: 'File Excel bảng điểm lớp học phần' })
+  @ApiResponse({ status: 404, description: 'Lớp học phần không tồn tại' })
+  @ApiResponse({ status: 500, description: 'Lỗi khi xuất báo cáo' })
   @Get('bang-diem-lop-hoc-phan/:id')
   async xuatBangDiemLopHocPhan(
     @Param('id', ParseIntPipe) id: number,
@@ -38,10 +64,15 @@ export class BaoCaoController {
     }
   }
 
-  /**
-   * GET /bao-cao/phieu-diem/:sinh-vien_id
-   * Xuất phiếu điểm cá nhân của sinh viên
-   */
+  @ApiOperation({
+    summary: 'Xuất phiếu điểm cá nhân của một sinh viên (Excel)',
+    description: 'Trả về file Excel chứa toàn bộ kết quả học tập của sinh viên.',
+  })
+  @ApiParam({ name: 'sinh_vien_id', type: Number, description: 'ID sinh viên' })
+  @ApiProduces('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @ApiResponse({ status: 200, description: 'File Excel phiếu điểm cá nhân' })
+  @ApiResponse({ status: 404, description: 'Sinh viên không tồn tại' })
+  @ApiResponse({ status: 500, description: 'Lỗi khi xuất phiếu điểm' })
   @Get('phieu-diem/:sinh_vien_id')
   async xuatPhieuDiem(
     @Param('sinh_vien_id', ParseIntPipe) sinhVienId: number,
@@ -62,10 +93,15 @@ export class BaoCaoController {
     }
   }
 
-  /**
-   * GET /bao-cao/giang-vien/:giang-vien_id
-   * Báo cáo giảng dạy của giảng viên
-   */
+  @ApiOperation({
+    summary: 'Xuất báo cáo giảng dạy của một giảng viên (Excel)',
+    description: 'Trả về file Excel thống kê các lớp học phần giảng viên đã dạy.',
+  })
+  @ApiParam({ name: 'giang_vien_id', type: Number, description: 'ID giảng viên' })
+  @ApiProduces('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @ApiResponse({ status: 200, description: 'File Excel báo cáo giảng dạy' })
+  @ApiResponse({ status: 404, description: 'Giảng viên không tồn tại' })
+  @ApiResponse({ status: 500, description: 'Lỗi khi xuất báo cáo giảng viên' })
   @Get('giang-vien/:giang_vien_id')
   async xuatBaoCaoGiangVien(
     @Param('giang_vien_id', ParseIntPipe) giangVienId: number,
@@ -86,14 +122,21 @@ export class BaoCaoController {
     }
   }
 
-  /**
-   * GET /bao-cao/sinh-vien/hoc-lai
-   * Query:
-   *  - hocKyId?
-   *  - nganhId?
-   *  - nienKhoaId?
-   *  - loaiHocLai? = HOC_LAI | HOC_CAI_THIEN | TAT_CA
-   */
+  @ApiOperation({
+    summary: 'Xuất danh sách sinh viên học lại / học cải thiện (Excel)',
+  })
+  @ApiQuery({ name: 'hocKyId', required: false, type: Number, description: 'Lọc theo học kỳ' })
+  @ApiQuery({ name: 'nganhId', required: false, type: Number, description: 'Lọc theo ngành' })
+  @ApiQuery({ name: 'nienKhoaId', required: false, type: Number, description: 'Lọc theo niên khóa' })
+  @ApiQuery({
+    name: 'loaiHocLai',
+    required: false,
+    enum: ['HOC_LAI', 'HOC_CAI_THIEN', 'TAT_CA'],
+    description: 'Loại học lại',
+  })
+  @ApiProduces('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @ApiResponse({ status: 200, description: 'File Excel danh sách học lại' })
+  @ApiResponse({ status: 500, description: 'Lỗi khi xuất danh sách học lại' })
   @Get('sinh-vien/hoc-lai')
   async xuatDanhSachHocLai(
     @Query() filterDto: FilterHocLaiDto,
@@ -120,12 +163,15 @@ export class BaoCaoController {
     }
   }
 
-
-  /**
-   * POST /bao-cao/thong-ke/nganh-hoc-ky
-   * Thống kê kết quả theo ngành/học kỳ
-   * Body: { nganhId: number, hocKyId: number, nienKhoaId?: number }
-   */
+  @ApiOperation({
+    summary: 'Xuất thống kê kết quả học tập theo ngành và học kỳ (Excel)',
+  })
+  @ApiBody({ type: FilterThongKeNganhDto })
+  @ApiConsumes('application/json')
+  @ApiProduces('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @ApiResponse({ status: 200, description: 'File Excel thống kê ngành - học kỳ' })
+  @ApiResponse({ status: 400, description: 'Thiếu tham số bắt buộc' })
+  @ApiResponse({ status: 500, description: 'Lỗi khi xuất thống kê ngành' })
   @Post('thong-ke/nganh-hoc-ky')
   async xuatThongKeNganh(
     @Body() filterDto: FilterThongKeNganhDto,
@@ -145,11 +191,15 @@ export class BaoCaoController {
     }
   }
 
-  /**
-   * POST /bao-cao/thong-ke/lop-hoc-phan
-   * Thống kê kết quả lớp học phần
-   * Body: { lopHocPhanIds?: number[], hocKyId?: number, monHocId?: number, giangVienId?: number }
-   */
+  @ApiOperation({
+    summary: 'Xuất thống kê kết quả theo lớp học phần (Excel)',
+    description: 'Có thể lọc theo nhiều lớp học phần, học kỳ, môn học, giảng viên.',
+  })
+  @ApiBody({ type: FilterThongKeLopHocPhanDto })
+  @ApiConsumes('application/json')
+  @ApiProduces('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @ApiResponse({ status: 200, description: 'File Excel thống kê lớp học phần' })
+  @ApiResponse({ status: 500, description: 'Lỗi khi xuất thống kê lớp học phần' })
   @Post('thong-ke/lop-hoc-phan')
   async xuatThongKeLopHocPhan(
     @Body() filterDto: FilterThongKeLopHocPhanDto,
@@ -169,16 +219,33 @@ export class BaoCaoController {
     }
   }
 
-  /**
-   * POST /bao-cao/danh-sach-sinh-vien
-   * Danh sách sinh viên tổng hợp
-   * Body: { 
-   *   loaiDanhSach: 'LOP_HANH_CHINH' | 'NGANH_NIEN_KHOA' | 'LOP_HOC_PHAN' | 'ROT_2_MON_TRO_LEN' | 'CANH_BAO_GPA' | 'KHEN_THUONG',
-   *   lopId?, nganhId?, nienKhoaId?, lopHocPhanId?, hocKyId?, nguongGPA?, xepLoai?
-   * }
-   */
+  @ApiOperation({
+    summary: 'Xuất các loại danh sách sinh viên tổng hợp (Excel)',
+    description:
+      'Hỗ trợ nhiều loại báo cáo: lớp hành chính, ngành niên khóa, lớp học phần, tình trạng, kết quả, rớt môn, cảnh báo GPA, khen thưởng kỷ luật.',
+  })
+  @ApiParam({
+    name: 'query',
+    type: String,
+    enum: [
+      'lop-hanh-chinh',
+      'nganh-nien-khoa',
+      'lop-hoc-phan',
+      'tinh-trang',
+      'ket-qua',
+      'rot-mon',
+      'canh-bao-gpa',
+      'khen-thuong-ky-luat',
+    ],
+    description: 'Loại danh sách cần xuất',
+  })
+  @ApiBody({ type: DanhSachSinhVienReportDto })
+  @ApiConsumes('application/json')
+  @ApiProduces('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @ApiResponse({ status: 200, description: 'File Excel danh sách sinh viên' })
+  @ApiResponse({ status: 400, description: 'Loại báo cáo không hợp lệ' })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
   @Post('danh-sach-sinh-vien/:query')
-  //@Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async xuatDanhSachSinhVien(
     @Param('query') queryType: string,
     @Body() filter: DanhSachSinhVienReportDto,

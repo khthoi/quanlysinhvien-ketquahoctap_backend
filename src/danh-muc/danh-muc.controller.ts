@@ -9,15 +9,21 @@ import {
   HttpCode,
   HttpStatus,
   Delete,
-  BadRequestException,
   Query,
-  Req,
-  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import {
-  DanhMucService,
-} from './danh-muc.service';
+  ApiBearerAuth,
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiParam,
+  ApiQuery,
+  ApiBody,
+  ApiUnauthorizedResponse,
+  ApiForbiddenResponse,
+} from '@nestjs/swagger';
+import { DanhMucService } from './danh-muc.service';
 import { CreateKhoaDto } from './dtos/tao-khoa.dto';
 import { UpdateKhoaDto } from './dtos/cap-nhat-khoa.dto';
 import { Khoa } from './entity/khoa.entity';
@@ -34,7 +40,6 @@ import { UpdateGiangVienDto } from './dtos/cap-nhat-thong-tin-giang-vien.dto';
 import { CreateGiangVienDto } from './dtos/them-giang-vien.dto';
 import { GiangVien } from './entity/giang-vien.entity';
 import { PhanCongMonHocDto } from './dtos/phan-cong-mon-hoc.dto';
-import { XoaPhanCongMonHocDto } from './dtos/xoa-phan-cong-mon-hoc.dto';
 import { GiangVienMonHoc } from './entity/giangvien-monhoc.entity';
 import { GetUser } from 'src/auth/decorators/get-user.decorator';
 import { Roles } from 'src/auth/decorators/roles.decorator';
@@ -47,13 +52,19 @@ import { NienKhoa } from './entity/nien-khoa.entity';
 import { PaginationQueryDto, GetNganhQueryDto, GetLopQueryDto, GetGiangVienQueryDto } from './dtos/pagination.dto';
 import { PhanCongMonHocResponseDto } from './dtos/phan-cong-mon-hoc-response.dto';
 
+@ApiTags('Danh mục')
 @Controller('danh-muc')
 export class DanhMucController {
-  constructor(
-    private readonly danhMucService: DanhMucService
-  ) { }
+  constructor(private readonly danhMucService: DanhMucService) {}
 
-  // GET /danh-muc/khoa
+  /* ==================== KHOA ==================== */
+  @ApiOperation({ summary: 'Lấy danh sách tất cả khoa (có phân trang)' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Trang hiện tại (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Số bản ghi mỗi trang (default: 10)' })
+  @ApiResponse({ status: 200, description: 'Danh sách khoa', type: [Khoa] })
+  @ApiBearerAuth()
+  @ApiUnauthorizedResponse({ description: 'Chưa đăng nhập' })
+  @ApiForbiddenResponse({ description: 'Không có quyền (chỉ cán bộ phòng ĐT)' })
   @Get('khoa')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -61,7 +72,13 @@ export class DanhMucController {
     return this.danhMucService.getAllKhoa(query);
   }
 
-  // GET /danh-muc/khoa/:id
+  @ApiOperation({ summary: 'Lấy thông tin khoa theo ID' })
+  @ApiParam({ name: 'id', type: Number, description: 'ID của khoa' })
+  @ApiResponse({ status: 200, description: 'Thông tin khoa', type: Khoa })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy khoa' })
+  @ApiBearerAuth()
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
   @Get('khoa/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -69,7 +86,12 @@ export class DanhMucController {
     return this.danhMucService.getKhoaById(id);
   }
 
-  // POST /danh-muc/khoa
+  @ApiOperation({ summary: 'Tạo khoa mới' })
+  @ApiBody({ type: CreateKhoaDto })
+  @ApiResponse({ status: 201, description: 'Khoa đã được tạo', type: Khoa })
+  @ApiBearerAuth()
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
   @Post('khoa')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -78,7 +100,13 @@ export class DanhMucController {
     return this.danhMucService.createKhoa(createKhoaDto);
   }
 
-  // PUT /danh-muc/khoa/:id
+  @ApiOperation({ summary: 'Cập nhật thông tin khoa' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiBody({ type: UpdateKhoaDto })
+  @ApiResponse({ status: 200, description: 'Khoa đã được cập nhật', type: Khoa })
+  @ApiBearerAuth()
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
   @Put('khoa/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -89,7 +117,12 @@ export class DanhMucController {
     return this.danhMucService.updateKhoa(id, updateKhoaDto);
   }
 
-  // DELETE /danh-muc/khoa/:id
+  @ApiOperation({ summary: 'Xóa khoa' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiResponse({ status: 204, description: 'Xóa thành công' })
+  @ApiBearerAuth()
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
   @Delete('khoa/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -98,7 +131,15 @@ export class DanhMucController {
     return this.danhMucService.deleteKhoa(id);
   }
 
-  // GET /danh-muc/nganh?khoaId=...
+  /* ==================== NGÀNH ==================== */
+  @ApiOperation({ summary: 'Lấy danh sách ngành (có lọc theo khoa và phân trang)' })
+  @ApiQuery({ name: 'khoaId', required: false, type: Number })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiResponse({ status: 200, type: [Nganh] })
+  @ApiBearerAuth()
+  @ApiUnauthorizedResponse()
+  @ApiForbiddenResponse()
   @Get('nganh')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -106,7 +147,10 @@ export class DanhMucController {
     return this.danhMucService.getAllNganh(query);
   }
 
-  // GET /danh-muc/nganh/:id
+  @ApiOperation({ summary: 'Lấy thông tin ngành theo ID' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiResponse({ status: 200, type: Nganh })
+  @ApiBearerAuth()
   @Get('nganh/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -114,7 +158,10 @@ export class DanhMucController {
     return this.danhMucService.getNganhById(id);
   }
 
-  // POST /danh-muc/nganh
+  @ApiOperation({ summary: 'Tạo ngành mới' })
+  @ApiBody({ type: CreateNganhDto })
+  @ApiResponse({ status: 201, type: Nganh })
+  @ApiBearerAuth()
   @Post('nganh')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -123,7 +170,11 @@ export class DanhMucController {
     return this.danhMucService.createNganh(createNganhDto);
   }
 
-  // PUT /danh-muc/nganh/:id
+  @ApiOperation({ summary: 'Cập nhật ngành' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiBody({ type: UpdateNganhDto })
+  @ApiResponse({ status: 200, type: Nganh })
+  @ApiBearerAuth()
   @Put('nganh/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -134,7 +185,10 @@ export class DanhMucController {
     return this.danhMucService.updateNganh(id, updateNganhDto);
   }
 
-  // DELETE /danh-muc/nganh/:id
+  @ApiOperation({ summary: 'Xóa ngành' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiResponse({ status: 204 })
+  @ApiBearerAuth()
   @Delete('nganh/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -143,23 +197,32 @@ export class DanhMucController {
     return this.danhMucService.deleteNganh(id);
   }
 
-  // GET /danh-muc/nien-khoa
+  /* ==================== NIÊN KHÓA ==================== */
+  @ApiOperation({ summary: 'Lấy danh sách niên khóa (có phân trang)' })
+  @ApiResponse({ status: 200, type: [NienKhoa] })
+  @ApiBearerAuth()
+  @Get('nien-khoa')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
-  @Get('nien-khoa')
   async getAllNienKhoa(@Query() query: PaginationQueryDto) {
     return this.danhMucService.getAllNienKhoa(query);
   }
 
-  // GET /danh-muc/nien-khoa/:id 
+  @ApiOperation({ summary: 'Lấy thông tin niên khóa theo ID' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiResponse({ status: 200, type: NienKhoa })
+  @ApiBearerAuth()
+  @Get('nien-khoa/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
-  @Get('nien-khoa/:id')
   async getNienKhoaById(@Param('id', ParseIntPipe) id: number): Promise<NienKhoa> {
     return this.danhMucService.getNienKhoaById(id);
   }
 
-  // POST /danh-muc/nien-khoa (chỉ cán bộ phòng ĐT)
+  @ApiOperation({ summary: 'Tạo niên khóa mới' })
+  @ApiBody({ type: CreateNienKhoaDto })
+  @ApiResponse({ status: 201, type: NienKhoa })
+  @ApiBearerAuth()
   @Post('nien-khoa')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -168,7 +231,11 @@ export class DanhMucController {
     return this.danhMucService.createNienKhoa(createNienKhoaDto);
   }
 
-  // PUT /danh-muc/nien-khoa/:id (chỉ cán bộ phòng ĐT)
+  @ApiOperation({ summary: 'Cập nhật niên khóa' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiBody({ type: UpdateNienKhoaDto })
+  @ApiResponse({ status: 200, type: NienKhoa })
+  @ApiBearerAuth()
   @Put('nien-khoa/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -179,7 +246,10 @@ export class DanhMucController {
     return this.danhMucService.updateNienKhoa(id, updateNienKhoaDto);
   }
 
-  // DELETE /danh-muc/nien-khoa/:id (chỉ cán bộ phòng ĐT)
+  @ApiOperation({ summary: 'Xóa niên khóa' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiResponse({ status: 204 })
+  @ApiBearerAuth()
   @Delete('nien-khoa/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -188,7 +258,14 @@ export class DanhMucController {
     return this.danhMucService.deleteNienKhoa(id);
   }
 
-  // GET /danh-muc/lop?nganhId=...&nienKhoaId=...
+  /* ==================== LỚP ==================== */
+  @ApiOperation({ summary: 'Lấy danh sách lớp (lọc theo ngành và niên khóa, có phân trang)' })
+  @ApiQuery({ name: 'nganhId', required: false, type: Number })
+  @ApiQuery({ name: 'nienKhoaId', required: false, type: Number })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiResponse({ status: 200, type: [Lop] })
+  @ApiBearerAuth()
   @Get('lop')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -196,7 +273,10 @@ export class DanhMucController {
     return this.danhMucService.getAllLop(query);
   }
 
-  // GET /danh-muc/lop/:id
+  @ApiOperation({ summary: 'Lấy thông tin lớp theo ID' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiResponse({ status: 200, type: Lop })
+  @ApiBearerAuth()
   @Get('lop/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -204,7 +284,10 @@ export class DanhMucController {
     return this.danhMucService.getLopById(id);
   }
 
-  // POST /danh-muc/lop
+  @ApiOperation({ summary: 'Tạo lớp mới' })
+  @ApiBody({ type: CreateLopDto })
+  @ApiResponse({ status: 201, type: Lop })
+  @ApiBearerAuth()
   @Post('lop')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -213,7 +296,11 @@ export class DanhMucController {
     return this.danhMucService.createLop(createLopDto);
   }
 
-  // PUT /danh-muc/lop/:id
+  @ApiOperation({ summary: 'Cập nhật lớp' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiBody({ type: UpdateLopDto })
+  @ApiResponse({ status: 200, type: Lop })
+  @ApiBearerAuth()
   @Put('lop/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -224,7 +311,10 @@ export class DanhMucController {
     return this.danhMucService.updateLop(id, updateLopDto);
   }
 
-  // DELETE /danh-muc/lop/:id
+  @ApiOperation({ summary: 'Xóa lớp' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiResponse({ status: 204 })
+  @ApiBearerAuth()
   @Delete('lop/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -233,7 +323,10 @@ export class DanhMucController {
     return this.danhMucService.deleteLop(id);
   }
 
-  // GET /danh-muc/mon-hoc
+  /* ==================== MÔN HỌC ==================== */
+  @ApiOperation({ summary: 'Lấy tất cả môn học (không phân trang)' })
+  @ApiResponse({ status: 200, type: [MonHoc] })
+  @ApiBearerAuth()
   @Get('mon-hoc')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -241,7 +334,9 @@ export class DanhMucController {
     return this.danhMucService.getAllMonHoc();
   }
 
-  // version /danh-muc/mon-hoc có phân trang
+  @ApiOperation({ summary: 'Lấy danh sách môn học có phân trang' })
+  @ApiResponse({ status: 200, type: [MonHoc] })
+  @ApiBearerAuth()
   @Get('mon-hoc/paginated')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -249,7 +344,10 @@ export class DanhMucController {
     return this.danhMucService.getAllMonHocWithPagination(query);
   }
 
-  // GET /danh-muc/mon-hoc/:id
+  @ApiOperation({ summary: 'Lấy môn học theo ID' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiResponse({ status: 200, type: MonHoc })
+  @ApiBearerAuth()
   @Get('mon-hoc/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -257,7 +355,10 @@ export class DanhMucController {
     return this.danhMucService.getMonHocById(id);
   }
 
-  // POST /danh-muc/mon-hoc
+  @ApiOperation({ summary: 'Tạo môn học mới' })
+  @ApiBody({ type: CreateMonHocDto })
+  @ApiResponse({ status: 201, type: MonHoc })
+  @ApiBearerAuth()
   @Post('mon-hoc')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -266,7 +367,11 @@ export class DanhMucController {
     return this.danhMucService.createMonHoc(createMonHocDto);
   }
 
-  // PUT /danh-muc/mon-hoc/:id
+  @ApiOperation({ summary: 'Cập nhật môn học' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiBody({ type: UpdateMonHocDto })
+  @ApiResponse({ status: 200, type: MonHoc })
+  @ApiBearerAuth()
   @Put('mon-hoc/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -277,7 +382,10 @@ export class DanhMucController {
     return this.danhMucService.updateMonHoc(id, updateMonHocDto);
   }
 
-  // DELETE /danh-muc/mon-hoc/:id
+  @ApiOperation({ summary: 'Xóa môn học' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiResponse({ status: 204 })
+  @ApiBearerAuth()
   @Delete('mon-hoc/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -286,7 +394,10 @@ export class DanhMucController {
     return this.danhMucService.deleteMonHoc(id);
   }
 
-  // GET /danh-muc/giang-vien
+  /* ==================== GIẢNG VIÊN ==================== */
+  @ApiOperation({ summary: 'Lấy danh sách giảng viên (có lọc và phân trang)' })
+  @ApiResponse({ status: 200, type: [GiangVien] })
+  @ApiBearerAuth()
   @Get('giang-vien')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -294,7 +405,10 @@ export class DanhMucController {
     return this.danhMucService.getAllGiangVien(query);
   }
 
-  // GET /danh-muc/giang-vien/:id
+  @ApiOperation({ summary: 'Lấy thông tin giảng viên theo ID' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiResponse({ status: 200, type: GiangVien })
+  @ApiBearerAuth()
   @Get('giang-vien/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -302,7 +416,10 @@ export class DanhMucController {
     return this.danhMucService.getGiangVienById(id);
   }
 
-  // POST /danh-muc/giang-vien
+  @ApiOperation({ summary: 'Tạo giảng viên mới' })
+  @ApiBody({ type: CreateGiangVienDto })
+  @ApiResponse({ status: 201, type: GiangVien })
+  @ApiBearerAuth()
   @Post('giang-vien')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -311,7 +428,11 @@ export class DanhMucController {
     return this.danhMucService.createGiangVien(createGiangVienDto);
   }
 
-  // PUT /danh-muc/giang-vien/:id
+  @ApiOperation({ summary: 'Cập nhật thông tin giảng viên (bởi cán bộ phòng ĐT)' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiBody({ type: UpdateGiangVienDto })
+  @ApiResponse({ status: 200, type: GiangVien })
+  @ApiBearerAuth()
   @Put('giang-vien/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -322,7 +443,10 @@ export class DanhMucController {
     return this.danhMucService.updateGiangVien(id, updateGiangVienDto);
   }
 
-  // DELETE /danh-muc/giang-vien/:id
+  @ApiOperation({ summary: 'Xóa giảng viên' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiResponse({ status: 204 })
+  @ApiBearerAuth()
   @Delete('giang-vien/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -331,8 +455,11 @@ export class DanhMucController {
     return this.danhMucService.deleteGiangVien(id);
   }
 
-  // PUT /danh-muc/giang-vien/me
-  // Chỉ giảng viên đang đăng nhập mới được gọi
+  @ApiOperation({ summary: 'Giảng viên cập nhật thông tin cá nhân của mình' })
+  @ApiBody({ type: UpdateGiangVienDto })
+  @ApiResponse({ status: 200, type: GiangVien })
+  @ApiBearerAuth()
+  @ApiForbiddenResponse({ description: 'Chỉ giảng viên mới được phép' })
   @Put('giang-vien/me')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.GIANG_VIEN)
@@ -344,8 +471,11 @@ export class DanhMucController {
     return this.danhMucService.updateMyProfile({ userId, vaiTro }, updateGiangVienDto);
   }
 
-  // POST /danh-muc/giang-vien/phancongmonhoc
-  // Body: { "giangVienId": 5, "monHocId": 10 }
+  /* ==================== PHÂN CÔNG MÔN HỌC ==================== */
+  @ApiOperation({ summary: 'Phân công môn học cho giảng viên' })
+  @ApiBody({ type: PhanCongMonHocDto })
+  @ApiResponse({ status: 201, type: GiangVienMonHoc })
+  @ApiBearerAuth()
   @Post('giang-vien/phancongmonhoc')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -354,8 +484,11 @@ export class DanhMucController {
     return this.danhMucService.phanCongMonHoc(dto);
   }
 
-  // DELETE: Xóa phân công môn học cho giảng viên
-  // URL: DELETE /danh-muc/giang-vien/:giangVienId/phan-cong-mon-hoc/:monHocId
+  @ApiOperation({ summary: 'Xóa phân công môn học của giảng viên' })
+  @ApiParam({ name: 'giangVienId', type: Number })
+  @ApiParam({ name: 'monHocId', type: Number })
+  @ApiResponse({ status: 204 })
+  @ApiBearerAuth()
   @Delete('giang-vien/:giangVienId/phan-cong-mon-hoc/:monHocId')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -367,8 +500,10 @@ export class DanhMucController {
     await this.danhMucService.xoaPhanCongMonHoc({ giangVienId, monHocId });
   }
 
-  // GET: Lấy danh sách môn học được phân công của một giảng viên
-  // URL: GET /danh-muc/giang-vien/:giangVienId/phan-cong-mon-hoc
+  @ApiOperation({ summary: 'Lấy danh sách môn học đã được phân công cho giảng viên' })
+  @ApiParam({ name: 'giangVienId', type: Number })
+  @ApiResponse({ status: 200, type: PhanCongMonHocResponseDto })
+  @ApiBearerAuth()
   @Get('giang-vien/:giangVienId/phan-cong-mon-hoc')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)

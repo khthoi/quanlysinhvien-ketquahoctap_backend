@@ -1,24 +1,30 @@
 import { IsOptional, IsInt, Min, IsIn } from 'class-validator';
 import { Transform } from 'class-transformer';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class GetMyLopHocPhanQueryDto {
+
+  @ApiPropertyOptional({ description: 'Trang số', example: 1 })
   @IsOptional()
   @Transform(({ value }) => parseInt(value, 10))
   @IsInt()
   @Min(1)
   page?: number = 1;
 
+  @ApiPropertyOptional({ description: 'Số mục trên trang', example: 10 })
   @IsOptional()
   @Transform(({ value }) => parseInt(value, 10))
   @IsInt()
   @Min(1)
   limit?: number = 10;
 
+  @ApiPropertyOptional({ description: 'ID giảng viên', example: 5 })
   @IsOptional()
   @Transform(({ value }) => parseInt(value, 10))
   @IsInt()
   hocKyId?: number;
 
+  @ApiPropertyOptional({ description: 'ID môn học', example: 10 })
   @IsOptional()
   @Transform(({ value }) => parseInt(value, 10))
   @IsInt()

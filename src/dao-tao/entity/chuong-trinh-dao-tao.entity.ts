@@ -1,12 +1,16 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, OneToMany, Unique } from 'typeorm';
 import { Nganh } from 'src/danh-muc/entity/nganh.entity';
 import { ApDungChuongTrinhDT } from './ap-dung-chuong-trinh-dt.entity';
 import { ChiTietChuongTrinhDaoTao } from './chi-tiet-chuong-trinh-dao-tao.entity';
 
 @Entity('chuong_trinh_dao_tao')
+@Unique(['maChuongTrinh'])
 export class ChuongTrinhDaoTao {
   @PrimaryGeneratedColumn()
   id: number;
+
+  @Column({ name: 'ma_chuong_trinh', length: 30})
+  maChuongTrinh: string;
 
   @Column({ name: 'ten_chuong_trinh', length: 100 })
   tenChuongTrinh: string;

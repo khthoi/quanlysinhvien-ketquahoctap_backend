@@ -13,6 +13,17 @@ import {
   HttpStatus,
   Patch,
 } from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiParam,
+  ApiQuery,
+  ApiBody,
+  ApiResponse,
+  ApiUnauthorizedResponse,
+  ApiForbiddenResponse,
+} from '@nestjs/swagger';
 import { GiangDayService } from './giang-day.service';
 import { CreateLopHocPhanDto } from './dtos/create-lop-hoc-phan.dto';
 import { UpdateLopHocPhanDto } from './dtos/update-lop-hoc-phan.dto';
@@ -24,40 +35,65 @@ import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { VaiTroNguoiDungEnum } from 'src/auth/enums/vai-tro-nguoi-dung.enum';
 import { GetUser } from 'src/auth/decorators/get-user.decorator';
 import { GetPhanCongQueryDto } from './dtos/get-phan-cong-query.dto';
-import { PaginationQueryDto } from './dtos/pagination-query.dto';
 import { GetMyLopHocPhanQueryDto } from './dtos/get-my-lop-hoc-phan-query.dto';
 
+@ApiTags('Giảng dạy')
+@ApiBearerAuth()
+@ApiUnauthorizedResponse({ description: 'Chưa đăng nhập hoặc token hết hạn' })
+@ApiForbiddenResponse({ description: 'Không có quyền truy cập' })
 @Controller('giang-day')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class GiangDayController {
-  constructor(private readonly giangDayService: GiangDayService) { }
+  constructor(private readonly giangDayService: GiangDayService) {}
 
-  // ==================== LỚP HỌC PHẦN (Cán bộ ĐT) ====================
+  /* ==================== LỚP HỌC PHẦN (Chỉ cán bộ phòng Đào tạo) ==================== */
 
+  @ApiOperation({ summary: 'Tạo lớp học phần mới' })
+  @ApiBody({ type: CreateLopHocPhanDto })
+  @ApiResponse({ status: 201, description: 'Lớp học phần đã được tạo thành công' })
   @Post('lop-hoc-phan')
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async create(@Body() dto: CreateLopHocPhanDto) {
     return this.giangDayService.create(dto);
   }
 
+  @ApiOperation({ summary: 'Lấy danh sách lớp học phần (có lọc và phân trang)' })
+  @ApiQuery({ name: 'monHocId', required: false, type: Number })
+  @ApiQuery({ name: 'hocKyId', required: false, type: Number })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiResponse({ status: 200, description: 'Danh sách lớp học phần' })
   @Get('lop-hoc-phan')
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async findAll(@Query() query: GetLopHocPhanQueryDto) {
     return this.giangDayService.findAll(query);
   }
 
+  @ApiOperation({ summary: 'Lấy thông tin chi tiết một lớp học phần' })
+  @ApiParam({ name: 'id', type: Number, description: 'ID lớp học phần' })
+  @ApiResponse({ status: 200, description: 'Thông tin lớp học phần' })
   @Get('lop-hoc-phan/:id')
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async findOne(@Param('id', ParseIntPipe) id: number) {
     return this.giangDayService.findOne(id);
   }
 
+  @ApiOperation({ summary: 'Cập nhật thông tin lớp học phần' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiBody({ type: UpdateLopHocPhanDto })
+  @ApiResponse({ status: 200, description: 'Lớp học phần đã được cập nhật' })
   @Put('lop-hoc-phan/:id')
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
-  async update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateLopHocPhanDto) {
+  async update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateLopHocPhanDto,
+  ) {
     return this.giangDayService.update(id, dto);
   }
 
+  @ApiOperation({ summary: 'Xóa lớp học phần' })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiResponse({ status: 204, description: 'Xóa thành công' })
   @Delete('lop-hoc-phan/:id')
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -65,10 +101,13 @@ export class GiangDayController {
     await this.giangDayService.delete(id);
   }
 
-  // Đăng ký SV vào lớp học phần
+  @ApiOperation({ summary: 'Đăng ký sinh viên vào lớp học phần (cán bộ ĐT)' })
+  @ApiParam({ name: 'lop_hoc_phan_id', type: Number, description: 'ID lớp học phần' })
+  @ApiParam({ name: 'sinh_vien_id', type: Number, description: 'ID sinh viên' })
+  @ApiResponse({ status: 201, description: 'Đăng ký thành công' })
   @Post('lop-hoc-phan/:lop_hoc_phan_id/sinh-vien-dang-ky/:sinh_vien_id')
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
-  @HttpCode(HttpStatus.CREATED) // 201 Created
+  @HttpCode(HttpStatus.CREATED)
   async dangKySinhVien(
     @Param('lop_hoc_phan_id', ParseIntPipe) lopHocPhanId: number,
     @Param('sinh_vien_id', ParseIntPipe) sinhVienId: number,
@@ -80,7 +119,10 @@ export class GiangDayController {
     };
   }
 
-  // Xóa SV khỏi lớp học phần
+  @ApiOperation({ summary: 'Xóa sinh viên khỏi lớp học phần' })
+  @ApiParam({ name: 'lop_hoc_phan_id', type: Number })
+  @ApiParam({ name: 'sinh_vien_id', type: Number })
+  @ApiResponse({ status: 204, description: 'Xóa thành công' })
   @Delete('lop-hoc-phan/:lop_hoc_phan_id/sinh-vien-dang-ky/:sinh_vien_id')
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -91,7 +133,11 @@ export class GiangDayController {
     await this.giangDayService.xoaSinhVienKhoiLop(lopHocPhanId, sinhVienId);
   }
 
-  // Lấy danh sách SV trong 1 lớp học phần
+  @ApiOperation({ summary: 'Lấy danh sách sinh viên trong một lớp học phần (có phân trang)' })
+  @ApiParam({ name: 'lop_hoc_phan_id', type: Number })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiResponse({ status: 200, description: 'Danh sách sinh viên' })
   @Get('lop-hoc-phan/danh-sach-sinh-vien/:lop_hoc_phan_id')
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async getDanhSachSinhVien(
@@ -101,8 +147,14 @@ export class GiangDayController {
     return this.giangDayService.getDanhSachSinhVien(lopHocPhanId, query);
   }
 
-  // ==================== GIẢNG VIÊN XEM LỚP PHÂN CÔNG ====================
+  /* ==================== GIẢNG VIÊN XEM LỚP ĐƯỢC PHÂN CÔNG ==================== */
 
+  @ApiOperation({ summary: 'Giảng viên hoặc cán bộ ĐT xem danh sách lớp học phần của mình' })
+  @ApiQuery({ name: 'hocKyId', required: false, type: Number })
+  @ApiQuery({ name: 'namHocId', required: false, type: Number })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiResponse({ status: 200, description: 'Danh sách lớp học phần được phân công' })
   @Get('lop-hoc-phan/giang-vien/me')
   @Roles(VaiTroNguoiDungEnum.GIANG_VIEN, VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async getLopHocPhanCuaToi(
@@ -112,7 +164,12 @@ export class GiangDayController {
     return this.giangDayService.getLopHocPhanCuaGiangVien(userId, query);
   }
 
-  // Phân công / Thay đổi giảng viên cho lớp học phần
+  /* ==================== PHÂN CÔNG GIẢNG VIÊN ==================== */
+
+  @ApiOperation({ summary: 'Phân công hoặc thay đổi giảng viên cho lớp học phần' })
+  @ApiParam({ name: 'lop_hoc_phan_id', type: Number })
+  @ApiParam({ name: 'giang_vien_id', type: Number })
+  @ApiResponse({ status: 200, description: 'Phân công thành công' })
   @Patch('phan-cong/giang-vien/:giang_vien_id/lop-hoc-phan/:lop_hoc_phan_id')
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async phanCongHoacThayDoi(
@@ -122,7 +179,9 @@ export class GiangDayController {
     return this.giangDayService.phanCongGiangVien(lopHocPhanId, giangVienId);
   }
 
-  // Hủy phân công
+  @ApiOperation({ summary: 'Hủy phân công giảng viên khỏi lớp học phần' })
+  @ApiParam({ name: 'lop_hoc_phan_id', type: Number })
+  @ApiResponse({ status: 204, description: 'Hủy phân công thành công' })
   @Delete('phan-cong/giang-vien/:giang_vien_id/lop-hoc-phan/:lop_hoc_phan_id')
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   @HttpCode(HttpStatus.NO_CONTENT)
@@ -132,14 +191,25 @@ export class GiangDayController {
     await this.giangDayService.huyPhanCongGiangVien(lopHocPhanId);
   }
 
-  // DS phân công (đã dùng GetPhanCongQueryDto có phân trang)
+  @ApiOperation({ summary: 'Lấy danh sách tất cả phân công giảng viên (có lọc và phân trang)' })
+  @ApiQuery({ name: 'hocKyId', required: false, type: Number })
+  @ApiQuery({ name: 'monHocId', required: false, type: Number })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiResponse({ status: 200, description: 'Danh sách phân công' })
   @Get('phan-cong')
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async getDanhSachPhanCong(@Query() query: GetPhanCongQueryDto) {
     return this.giangDayService.getDanhSachPhanCong(query);
   }
 
-  // Lịch phân công của 1 giảng viên – thêm query phân trang
+  @ApiOperation({ summary: 'Lấy lịch phân công của một giảng viên cụ thể' })
+  @ApiParam({ name: 'giang_vien_id', type: Number, description: 'ID giảng viên' })
+  @ApiQuery({ name: 'hocKyId', required: false, type: Number })
+  @ApiQuery({ name: 'namHocId', required: false, type: Number })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiResponse({ status: 200, description: 'Danh sách lớp học phần của giảng viên' })
   @Get('giang-vien/:giang_vien_id')
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async getLichPhanCongGV(
@@ -149,7 +219,9 @@ export class GiangDayController {
     return this.giangDayService.getLopHocPhanCuaGiangVien(giangVienId, query);
   }
 
-  // Khoá điểm lớp học phần
+  @ApiOperation({ summary: 'Khóa điểm của lớp học phần (không cho sửa điểm nữa)' })
+  @ApiParam({ name: 'lop_hoc_phan_id', type: Number })
+  @ApiResponse({ status: 200, description: 'Khóa điểm thành công' })
   @Patch('lop-hoc-phan/khoa-diem/:lop_hoc_phan_id')
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async khoaDiemLopHocPhan(

@@ -61,7 +61,7 @@ export class DaoTaoService {
       .addOrderBy('hocKy.tenHocKy', 'ASC');
 
     if (search) {
-      qb.andWhere('LOWER(namHoc.tenNamHoc) LIKE LOWER(:search)', {
+      qb.andWhere('LOWER(namHoc.tenNamHoc) LIKE LOWER(:search) OR LOWER(namHoc.maNamHoc) LIKE LOWER(:search)', {
         search: `%${search}%`,
       });
     }
@@ -89,6 +89,15 @@ export class DaoTaoService {
 
   async createNamHoc(dto: CreateNamHocDto) {
     // Kiểm tra trùng năm bắt đầu + kết thúc (do có @Unique)
+
+    const existNamhoc = await this.namHocRepo.findOneBy({
+      maNamHoc: dto.maNamHoc,
+    });
+
+    if (existNamhoc) {
+      throw new BadRequestException('Mã năm học đã tồn tại');
+    }
+
     const exist = await this.namHocRepo.findOneBy({
       namBatDau: dto.namBatDau,
       namKetThuc: dto.namKetThuc,
@@ -104,6 +113,14 @@ export class DaoTaoService {
   async updateNamHoc(id: number, dto: UpdateNamHocDto) {
     const namHoc = await this.namHocRepo.findOneBy({ id });
     if (!namHoc) throw new NotFoundException('Năm học không tồn tại');
+
+    const existMa = await this.namHocRepo.findOneBy({
+      maNamHoc: dto.maNamHoc,
+    });
+
+    if (existMa && existMa.id !== id) {
+      throw new BadRequestException('Mã năm học đã tồn tại');
+    }
 
     // Nếu cập nhật năm bắt đầu/kết thúc → kiểm tra trùng
     if (dto.namBatDau || dto.namKetThuc) {
@@ -151,7 +168,7 @@ export class DaoTaoService {
     }
 
     if (search) {
-      qb.andWhere('LOWER(hocKy.tenHocKy) LIKE LOWER(:search)', {
+      qb.andWhere('LOWER(hocKy.tenHocKy) LIKE LOWER(:search) OR LOWER(hocKy.maHocKy) LIKE LOWER(:search)', {
         search: `%${search}%`,
       });
     }
@@ -160,6 +177,14 @@ export class DaoTaoService {
   }
 
   async createHocKy(dto: CreateHocKyDto) {
+
+    const HocKyExist = await this.hocKyRepo.findOneBy({
+      maHocKy: dto.maHocKy,
+    });
+    if (HocKyExist) {
+      throw new BadRequestException('Mã học kỳ đã tồn tại');
+    }
+
     const namHoc = await this.namHocRepo.findOneBy({ id: dto.namHocId });
     if (!namHoc) throw new BadRequestException('Năm học không tồn tại');
 
@@ -174,6 +199,14 @@ export class DaoTaoService {
   async updateHocKy(id: number, dto: UpdateHocKyDto) {
     const hocKy = await this.hocKyRepo.findOneBy({ id });
     if (!hocKy) throw new NotFoundException('Học kỳ không tồn tại');
+
+    const HocKyExist = await this.hocKyRepo.findOneBy({
+      maHocKy: dto.maHocKy,
+    });
+
+    if (HocKyExist && HocKyExist.id !== id) {
+      throw new BadRequestException('Mã học kỳ đã tồn tại');
+    }
 
     if (dto.namHocId) {
       const namHoc = await this.namHocRepo.findOneBy({ id: dto.namHocId });
@@ -196,8 +229,18 @@ export class DaoTaoService {
   // ==================== CHƯƠNG TRÌNH ĐÀO TẠO ====================
 
   async createChuongTrinh(dto: CreateChuongTrinhDto) {
+
+    const existCTDT = await this.chuongTrinhRepo.findOneBy({
+      maChuongTrinh: dto.maChuongTrinh,
+    });
+    if (existCTDT) {
+      throw new BadRequestException('Mã chương trình đào tạo đã tồn tại');
+    }
+
+
     const nganh = await this.nganhRepo.findOneBy({ id: dto.nganhId });
     if (!nganh) throw new BadRequestException('Ngành không tồn tại');
+  
 
     const ct = this.chuongTrinhRepo.create({
       tenChuongTrinh: dto.tenChuongTrinh,
@@ -221,7 +264,7 @@ export class DaoTaoService {
     if (nganhId) qb.andWhere('nganh.id = :nganhId', { nganhId });
     if (nienKhoaId) qb.andWhere('nienKhoa.id = :nienKhoaId', { nienKhoaId });
     if (search) {
-      qb.andWhere('LOWER(ct.tenChuongTrinh) LIKE LOWER(:search)', { search: `%${search}%` });
+      qb.andWhere('LOWER(ct.tenChuongTrinh) LIKE LOWER(:search) OR LOWER(ct.maChuongTrinh) LIKE LOWER(:search)', { search: `%${search}%` });
     }
 
     qb.orderBy('ct.tenChuongTrinh', 'ASC');
@@ -251,6 +294,14 @@ export class DaoTaoService {
 
   async updateChuongTrinh(id: number, dto: UpdateChuongTrinhDto) {
     const ct = await this.getChuongTrinhById(id);
+
+    const existCTDT = await this.chuongTrinhRepo.findOneBy({
+      maChuongTrinh: dto.maChuongTrinh,
+    });
+
+    if (existCTDT) {
+      throw new BadRequestException('Mã chương trình đào tạo đã tồn tại');
+    }
 
     if (dto.nganhId) {
       const nganh = await this.nganhRepo.findOneBy({ id: dto.nganhId });

@@ -1,10 +1,14 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique } from 'typeorm';
 import { NamHoc } from './nam-hoc.entity';
 
 @Entity('hoc_ky')
+@Unique(['maHocKy'])
 export class HocKy {
   @PrimaryGeneratedColumn()
   id: number;
+
+  @Column({ name: 'ma_hoc_ky', length: 30})
+  maHocKy: string;
 
   @Column({ name: 'ten_hoc_ky', length: 10 })
   tenHocKy: string;
