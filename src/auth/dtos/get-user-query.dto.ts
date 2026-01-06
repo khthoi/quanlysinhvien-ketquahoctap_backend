@@ -24,10 +24,10 @@ export class GetUsersQueryDto {
 
   @ApiPropertyOptional({
     description: 'Lọc theo vai trò',
-    enum: ['SINH_VIEN', 'GIANG_VIEN', 'ADMIN', 'CAN_BO_PHONG_DAO_TAO'],
-    example: 'SINH_VIEN',
+    enum: ['sinhvien', 'giangvien', 'admin', 'canbophongdaotao'],
+    example: 'sinhvien',
   })
   @IsOptional()
-  @IsIn(['SINH_VIEN', 'GIANG_VIEN', 'ADMIN', 'CAN_BO_PHONG_DAO_TAO'])
+  @IsIn(['sinhvien', 'giangvien', 'admin', 'canbophongdaotao'])
   vaiTro?: string;
 }
