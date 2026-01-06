@@ -89,6 +89,26 @@ export class AuthService {
                 throw new BadRequestException('Vai trò không hợp lệ');
         }
 
+        // ===== VALIDATION MỚI: Không cho phép 1 sinh viên/giảng viên có 2 tài khoản =====
+        if (sinhVienId) {
+            const existSinhVienAccount = await this.nguoiDungRepo.findOne({
+                where: { sinhVien: { id: sinhVienId } },
+            });
+            if (existSinhVienAccount) {
+                throw new BadRequestException('Sinh viên này đã có tài khoản rồi, không thể tạo thêm');
+            }
+        }
+
+        if (giangVienId) {
+            const existGiangVienAccount = await this.nguoiDungRepo.findOne({
+                where: { giangVien: { id: giangVienId } },
+            });
+            if (existGiangVienAccount) {
+                throw new BadRequestException('Giảng viên này đã có tài khoản rồi, không thể tạo thêm');
+            }
+        }
+        // ===== Kết thúc validation mới =====
+
         // ===== CHECK USERNAME =====
         const exist = await this.nguoiDungRepo.findOne({
             where: { tenDangNhap: createUserDto.tenDangNhap },
