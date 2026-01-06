@@ -17,7 +17,7 @@ export class GetUsersQueryDto {
   @Min(1)
   limit?: number = 10;
 
-  @ApiPropertyOptional({ description: 'Tìm kiếm theo tên đăng nhập hoặc vai trò', example: 'admin' })
+  @ApiPropertyOptional({ description: 'Tìm kiếm theo tên đăng nhập', example: 'admin1' })
   @IsOptional()
   @IsString()
   search?: string;
