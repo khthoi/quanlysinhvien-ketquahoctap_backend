@@ -1,7 +1,5 @@
 import { Module } from '@nestjs/common';
-import { GiangDayService } from './giang-day.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { GiangDayController } from './giang-day.controller';
 import { LopHocPhan } from './entity/lop-hoc-phan.entity';
 import { SinhVienLopHocPhan } from './entity/sinhvien-lophocphan.entity';
 import { GiangVien } from 'src/danh-muc/entity/giang-vien.entity';
@@ -18,7 +16,7 @@ import { ApDungChuongTrinhDT } from 'src/dao-tao/entity/ap-dung-chuong-trinh-dt.
 
 @Module({
   imports: [TypeOrmModule.forFeature([LopHocPhan, SinhVienLopHocPhan, GiangVien, GiangVienMonHoc, MonHoc, Nganh, NienKhoa, HocKy, SinhVien, KetQuaHocTap, NguoiDung, GiangVien, ApDungChuongTrinhDT, ChiTietChuongTrinhDaoTao])],
-  controllers: [GiangDayController],
-  providers: [GiangDayService],
+  controllers: [],
+  providers: [],
 })
 export class GiangDayModule {}
