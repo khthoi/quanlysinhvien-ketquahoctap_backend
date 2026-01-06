@@ -64,7 +64,6 @@ export class AuthController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.ADMIN)
   @ApiOperation({ summary: 'Lấy danh sách người dùng (Admin)' })
-  @ApiQuery({ type: GetUsersQueryDto })
   @ApiResponse({ status: 200, description: 'Danh sách người dùng' })
   async getAllUsers(@Query() query: GetUsersQueryDto) {
     return this.authService.findAll(query);
@@ -123,7 +122,7 @@ export class AuthController {
   @ApiBody({ type: VerifyChangePasswordOtpDto })
   @ApiResponse({ status: 200, description: 'Đổi mật khẩu thành công' })
   async verifyChangePasswordOtp(
-    @GetUser('sub') userId: number,
+    @GetUser('userId') userId: number,
     @Body() dto: VerifyChangePasswordOtpDto,
   ) {
     return this.authService.verifyChangePasswordOtp(userId, dto);
