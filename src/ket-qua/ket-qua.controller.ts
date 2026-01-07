@@ -38,7 +38,7 @@ import { VaiTroNguoiDungEnum } from 'src/auth/enums/vai-tro-nguoi-dung.enum';
 @Controller('ket-qua')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class KetQuaController {
-  constructor(private readonly ketQuaService: KetQuaService) {}
+  constructor(private readonly ketQuaService: KetQuaService) { }
 
   @ApiOperation({
     summary: 'Nhập điểm cho sinh viên trong lớp học phần',
@@ -53,10 +53,19 @@ export class KetQuaController {
   @ApiResponse({ status: 201, description: 'Nhập điểm thành công' })
   @Post('nhap-diem')
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO, VaiTroNguoiDungEnum.GIANG_VIEN)
+  @ApiOperation({ summary: 'Nhập điểm cho sinh viên trong lớp học phần' })
+  @ApiBody({
+    type: NhapDiemDto,
+    description:
+      'Cần lopHocPhanId, sinhVienId và các trường điểm. Giảng viên chỉ được nhập cho lớp mình phụ trách.',
+  })
+  @ApiResponse({ status: 201, description: 'Nhập điểm thành công' })
+  @ApiResponse({ status: 403, description: 'Không có quyền nhập điểm cho lớp này' })
   async nhapDiem(
+    @GetUser('userId') userId: number, // ← Lấy userId từ JWT
     @Body() dto: NhapDiemDto,
   ) {
-    return this.ketQuaService.nhapDiem(dto);
+    return this.ketQuaService.nhapDiem(userId, dto);
   }
 
   @ApiOperation({

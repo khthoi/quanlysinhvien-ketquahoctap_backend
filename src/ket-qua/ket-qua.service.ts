@@ -12,6 +12,8 @@ import { SinhVienLopHocPhan } from 'src/giang-day/entity/sinhvien-lophocphan.ent
 import { NhapDiemDto } from './dtos/nhap-diem.dto';
 import { GetKetQuaLopQueryDto } from './dtos/get-ket-qua-lop-query.dto';
 import { NguoiDung } from 'src/auth/entity/nguoi-dung.entity';
+import { VaiTroNguoiDungEnum } from 'src/auth/enums/vai-tro-nguoi-dung.enum';
+import { SinhVien } from 'src/sinh-vien/entity/sinh-vien.entity';
 
 @Injectable()
 export class KetQuaService {
@@ -58,16 +60,17 @@ export class KetQuaService {
   }
 
   // Nhập điểm (POST)
-  async nhapDiem(dto: NhapDiemDto) {
-    // 1. Kiểm tra lớp học phần tồn tại
-    const lhp = await this.lopHocPhanRepo.findOneBy({ id: dto.lopHocPhanId });
-    if (!lhp) {
-      throw new NotFoundException('Lớp học phần không tồn tại');
-    }
+  async nhapDiem(userId: number, dto: NhapDiemDto) {
+    // 1. Load lớp học phần + giảng viên phụ trách
+    const lhp = await this.lopHocPhanRepo.findOne({
+      where: { id: dto.lopHocPhanId },
+      relations: ['giangVien'],
+    });
+    if (!lhp) throw new NotFoundException('Lớp học phần không tồn tại');
 
     // 2. Kiểm tra lớp đã khóa điểm chưa
     if (lhp.khoaDiem) {
-      throw new ForbiddenException('Lớp học phần đã khóa điểm, không thể nhập điểm');
+      throw new ForbiddenException('Lớp học phần đã khóa điểm, không thể nhập/sửa điểm');
     }
 
     // 3. Kiểm tra sinh viên có đăng ký lớp này không
@@ -79,7 +82,28 @@ export class KetQuaService {
       throw new BadRequestException('Sinh viên không đăng ký lớp học phần này');
     }
 
-    // 4. ***QUAN TRỌNG***: Kiểm tra đã tồn tại kết quả chưa → Không cho phép nhập lại
+    // 4. Kiểm tra quyền của người nhập điểm
+    const nguoiDung = await this.nguoiDungRepo.findOne({
+      where: { id: userId },
+      relations: ['giangVien'],
+    });
+
+    if (!nguoiDung) {
+      throw new ForbiddenException('Không tìm thấy thông tin tài khoản');
+    }
+
+    if (!nguoiDung.giangVien) {
+      throw new ForbiddenException('Tài khoản giảng viên chưa liên kết với hồ sơ giảng viên');
+    }
+
+    if (
+      (!lhp.giangVien || lhp.giangVien.id !== nguoiDung.giangVien.id) &&
+      nguoiDung.vaiTro !== VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO
+    ) {
+      throw new ForbiddenException('Bạn không được phép nhập điểm cho lớp học phần này');
+    }
+
+    // 5. Kiểm tra đã tồn tại kết quả chưa → Không cho phép nhập lại
     const ketQuaTonTai = await this.ketQuaRepo.findOneBy({
       lopHocPhan: { id: dto.lopHocPhanId },
       sinhVien: { id: dto.sinhVienId },
@@ -89,13 +113,13 @@ export class KetQuaService {
       throw new BadRequestException('Sinh viên đã có kết quả ở lớp học phần này');
     }
 
-    // 5. (Tùy chọn) Validate điểm hợp lệ
+    // 6. Validate điểm hợp lệ (tùy chọn)
     this.validateDiem(dto);
 
-    // 6. Tạo mới kết quả
+    // 7. Tạo mới kết quả
     const ketQua = this.ketQuaRepo.create({
       lopHocPhan: lhp,
-      sinhVien: { id: dto.sinhVienId } as any,
+      sinhVien: { id: dto.sinhVienId } as SinhVien,
       diemQuaTrinh: dto.diemQuaTrinh,
       diemThanhPhan: dto.diemThanhPhan,
       diemThi: dto.diemThi,
