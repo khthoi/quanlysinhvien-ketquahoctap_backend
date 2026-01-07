@@ -91,6 +91,9 @@ export class AuthService {
 
         // ===== VALIDATION MỚI: Không cho phép 1 sinh viên/giảng viên có 2 tài khoản =====
         if (sinhVienId) {
+            if (!await this.sinhVienRepo.findOneBy({ id: sinhVienId })) {
+                throw new BadRequestException('Sinh viên không tồn tại');
+            }
             const existSinhVienAccount = await this.nguoiDungRepo.findOne({
                 where: { sinhVien: { id: sinhVienId } },
             });
@@ -100,6 +103,9 @@ export class AuthService {
         }
 
         if (giangVienId) {
+            if (!await this.giangVienRepo.findOneBy({ id: giangVienId })) {
+                throw new BadRequestException('Giảng viên không tồn tại');
+            }
             const existGiangVienAccount = await this.nguoiDungRepo.findOne({
                 where: { giangVien: { id: giangVienId } },
             });

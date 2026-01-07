@@ -15,6 +15,9 @@ import { GetLichHocMeQueryDto } from './dtos/get-lich-hoc-me-query.dto';
 import { SinhVienLopHocPhan } from 'src/giang-day/entity/sinhvien-lophocphan.entity';
 import { ImportSinhVienBatchDto } from './dtos/import-sinh-vien.dto';
 import { TinhTrangHocTapEnum } from './enums/tinh-trang-hoc-tap.enum';
+import * as ExcelJS from 'exceljs';
+import * as fs from 'fs';
+import { GioiTinh } from 'src/danh-muc/enums/gioi-tinh.enum';
 
 @Injectable()
 export class SinhVienService {
@@ -31,88 +34,140 @@ export class SinhVienService {
         private svLhpRepo: Repository<SinhVienLopHocPhan>,
     ) { }
 
-    async importBatch(dto: ImportSinhVienBatchDto) {
+    async importFromExcel(filePath: string) {
         const results = {
             success: 0,
             failed: 0,
             errors: [] as { row: number; maSinhVien: string; error: string }[],
         };
 
-        const maSinhVienSet = new Set<string>();
-        const emailSet = new Set<string>();
-        const sdtSet = new Set<string>();
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.readFile(filePath);
 
-        // Lấy tất cả sinh viên hiện có để kiểm tra trùng
+        const worksheet = workbook.getWorksheet(1);
+        if (!worksheet) {
+            throw new BadRequestException('File Excel không có sheet dữ liệu');
+        }
+
+        // Giả định dòng 1 là header
+        const rows = worksheet.getRows(2, worksheet.rowCount - 1); // bỏ header
+        if (!rows || rows.length === 0) {
+            throw new BadRequestException('File Excel không có dữ liệu');
+        }
+
+        // Load dữ liệu kiểm tra trùng (giữ nguyên như cũ)
         const existingSinhViens = await this.sinhVienRepo.find({
             select: ['maSinhVien', 'email', 'sdt'],
         });
-        existingSinhViens.forEach(sv => {
-            maSinhVienSet.add(sv.maSinhVien);
-            if (sv.email) emailSet.add(sv.email);
-            if (sv.sdt) sdtSet.add(sv.sdt);
-        });
+        const maSinhVienSet = new Set(existingSinhViens.map(sv => sv.maSinhVien));
+        const emailSet = new Set(existingSinhViens.map(sv => sv.email).filter(Boolean));
+        const sdtSet = new Set(existingSinhViens.map(sv => sv.sdt).filter(Boolean));
 
-        // Lấy tất cả lớp để map maLop → lop entity
         const allLops = await this.lopRepo.find();
         const maLopToLop = new Map<string, Lop>();
         allLops.forEach(lop => maLopToLop.set(lop.maLop, lop));
 
-        for (let i = 0; i < dto.sinhViens.length; i++) {
-            const svDto = dto.sinhViens[i];
-            const rowNum = i + 2; // vì Excel bắt đầu từ dòng 2 (dòng 1 là header)
+        for (const row of rows) {
+            const rowNum = row.number;
+
+            const maSinhVien = row.getCell(1).value?.toString().trim();
+            const hoTen = row.getCell(2).value?.toString().trim();
+            const ngaySinh = row.getCell(3).value?.toString();
+            const gioiTinhStr = row.getCell(4).value?.toString();
+            const diaChi = row.getCell(5).value?.toString();
+            const email = this.getCellValue(row.getCell(6)).trim();
+            const sdt = row.getCell(7).value?.toString();
+            const ngayNhapHoc = row.getCell(8).value?.toString();
+            const tinhTrangStr = row.getCell(9).value?.toString();
+            const maLop = row.getCell(10).value?.toString().trim();
+
+            if (!maSinhVien || !hoTen || !email || !ngayNhapHoc || !maLop) {
+                results.failed++;
+                results.errors.push({
+                    row: rowNum,
+                    maSinhVien: maSinhVien || 'N/A',
+                    error: 'Thiếu dữ liệu bắt buộc',
+                });
+                continue;
+            }
 
             try {
-                // Kiểm tra trùng trong file nhập (trước khi vào DB)
-                if (maSinhVienSet.has(svDto.maSinhVien)) {
+                // Validate trùng
+                if (maSinhVienSet.has(maSinhVien)) {
                     throw new BadRequestException('Mã sinh viên đã tồn tại trong hệ thống');
                 }
-                if (emailSet.has(svDto.email)) {
+                if (emailSet.has(email)) {
                     throw new BadRequestException('Email đã được sử dụng');
                 }
-                if (svDto.sdt && sdtSet.has(svDto.sdt)) {
+                if (sdt && sdtSet.has(sdt)) {
                     throw new BadRequestException('Số điện thoại đã được sử dụng');
                 }
 
-                // Kiểm tra mã lớp tồn tại
-                const lop = maLopToLop.get(svDto.maLop);
+                const lop = maLopToLop.get(maLop);
                 if (!lop) {
-                    throw new BadRequestException(`Mã lớp "${svDto.maLop}" không tồn tại`);
+                    throw new BadRequestException(`Mã lớp "${maLop}" không tồn tại`);
                 }
 
-                // Tạo sinh viên
-                const sinhVienData: Partial<SinhVien> = {
-                    maSinhVien: svDto.maSinhVien,
-                    hoTen: svDto.hoTen,
-                    ngaySinh: svDto.ngaySinh ? new Date(svDto.ngaySinh) : undefined,
-                    gioiTinh: svDto.gioiTinh,
-                    diaChi: svDto.diaChi || undefined,
-                    email: svDto.email,
-                    sdt: svDto.sdt || undefined,
-                    ngayNhapHoc: new Date(svDto.ngayNhapHoc),
-                    tinhTrang: svDto.tinhTrang || TinhTrangHocTapEnum.DANG_HOC,
+                const gioiTinh = gioiTinhStr ? (gioiTinhStr as GioiTinh) : undefined;
+                const tinhTrang = tinhTrangStr ? (tinhTrangStr as TinhTrangHocTapEnum) : TinhTrangHocTapEnum.DANG_HOC;
+
+                const sinhVien = this.sinhVienRepo.create({
+                    maSinhVien,
+                    hoTen,
+                    ngaySinh: ngaySinh ? new Date(ngaySinh) : undefined,
+                    gioiTinh,
+                    diaChi: diaChi || undefined,
+                    email,
+                    sdt: sdt || undefined,
+                    ngayNhapHoc: new Date(ngayNhapHoc),
+                    tinhTrang,
                     lop,
-                };
-                const sinhVien = this.sinhVienRepo.create(sinhVienData);
+                });
 
                 await this.sinhVienRepo.save(sinhVien);
 
-                // Thêm vào set để kiểm tra trùng trong batch
-                maSinhVienSet.add(svDto.maSinhVien);
-                emailSet.add(svDto.email);
-                if (svDto.sdt) sdtSet.add(svDto.sdt);
+                // Cập nhật set
+                maSinhVienSet.add(maSinhVien);
+                emailSet.add(email);
+                if (sdt) sdtSet.add(sdt);
 
                 results.success++;
             } catch (error) {
                 results.failed++;
                 results.errors.push({
                     row: rowNum,
-                    maSinhVien: svDto.maSinhVien,
+                    maSinhVien: maSinhVien || 'N/A',
                     error: error.message || 'Lỗi không xác định',
                 });
             }
         }
 
+        // Xóa file tạm sau khi xử lý
+        fs.unlinkSync(filePath);
+
         return results;
+    }
+
+    private getCellValue(cell: any): string {
+        if (!cell || cell.value == null) return '';
+
+        const v = cell.value;
+
+        if (typeof v === 'object') {
+            // Nếu là hyperlink: lấy text hoặc address
+            if (v.text) return v.text.toString();
+            if (v.hyperlink) return v.hyperlink.toString();
+
+            // Nếu là RichText (nhiều đoạn)
+            if (Array.isArray(v.richText)) {
+                return v.richText.map((p: any) => p.text).join('');
+            }
+
+            // Nếu là object khác thì stringify
+            return v.toString();
+        }
+
+        return v.toString();
     }
 
     async create(dto: CreateSinhVienDto) {
@@ -362,7 +417,7 @@ export class SinhVienService {
         }
 
         qb.orderBy('namHoc.namBatDau', 'DESC')
-            .addOrderBy('hocKy.tenHocKy', 'ASC')
+            .addOrderBy('hocKy.hoc_ky', 'ASC')
             .addOrderBy('monHoc.tenMonHoc', 'ASC');
 
         const total = await qb.getCount();

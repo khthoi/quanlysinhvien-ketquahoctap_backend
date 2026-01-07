@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsInt } from 'class-validator';
+import { IsOptional, IsString, IsInt, IsNumber } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -9,8 +9,9 @@ export class GetHocKyQueryDto {
   @IsInt()
   namHocId?: number;
 
-  @ApiPropertyOptional({ description: 'Từ khóa tìm kiếm', example: 'Học kỳ 1' })
+  @ApiPropertyOptional({ description: 'Tìm theo thứ tự học kỳ', example: '1' })
   @IsOptional()
-  @IsString()
-  search?: string;
+  @IsNumber()
+  @Transform(({ value }) => parseInt(value, 10))
+  hockythu?: string;
 }

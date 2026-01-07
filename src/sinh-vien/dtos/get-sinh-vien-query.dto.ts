@@ -4,7 +4,7 @@ import { TinhTrangHocTapEnum } from '../enums/tinh-trang-hoc-tap.enum';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 export class GetSinhVienQueryDto {
 
-  @ApiPropertyOptional({ description: 'ID lớp học phần', example: 1 })
+  @ApiPropertyOptional({ description: 'ID lớp niên chế', example: 1 })
   @IsOptional()
   @Transform(({ value }) => parseInt(value, 10))
   @IsInt()

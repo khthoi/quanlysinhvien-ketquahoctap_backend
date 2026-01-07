@@ -87,7 +87,7 @@ export class BaoCaoService {
         const ngayBD = new Date(lhp.hocKy.ngayBatDau).toLocaleDateString('vi-VN');
         const ngayKT = new Date(lhp.hocKy.ngayKetThuc).toLocaleDateString('vi-VN');
         worksheet.mergeCells('A3:K3');
-        worksheet.getCell('A3').value = `Học kỳ: ${lhp.hocKy.tenHocKy} (${ngayBD} - ${ngayKT}) - ${lhp.hocKy.namHoc.tenNamHoc}`;
+        worksheet.getCell('A3').value = `Học kỳ: ${lhp.hocKy.hocKy} (${ngayBD} - ${ngayKT}) - ${lhp.hocKy.namHoc.tenNamHoc}`;
 
         // Table header
         const headerRow = worksheet.getRow(5);
@@ -196,7 +196,7 @@ export class BaoCaoService {
                 kq.lopHocPhan.monHoc.tenMonHoc,
                 kq.lopHocPhan.maLopHocPhan,
                 kq.lopHocPhan.monHoc.soTinChi,
-                `${kq.lopHocPhan.hocKy.tenHocKy} (${ngayBD} - ${ngayKT}) - ${kq.lopHocPhan.hocKy.namHoc.tenNamHoc}`,
+                `${kq.lopHocPhan.hocKy.hocKy} (${ngayBD} - ${ngayKT}) - ${kq.lopHocPhan.hocKy.namHoc.tenNamHoc}`,
                 diemSo.toFixed(1),
                 diemChu,
             ];
@@ -379,7 +379,7 @@ export class BaoCaoService {
                 const namA = a.hocKy.namHoc.namBatDau;
                 const namB = b.hocKy.namHoc.namBatDau;
                 if (namB !== namA) return namB - namA;
-                return a.hocKy.tenHocKy.localeCompare(b.hocKy.tenHocKy);
+                return a.hocKy.hocKy - b.hocKy.hocKy;
             })
             .forEach((lhp, idx) => {
                 const row = sheetLopHP.getRow(4 + idx);
@@ -391,7 +391,7 @@ export class BaoCaoService {
                     lhp.maLopHocPhan,
                     lhp.monHoc.tenMonHoc,
                     lhp.monHoc.soTinChi,
-                    `${lhp.hocKy.tenHocKy} (${ngayBD} - ${ngayKT}) - ${lhp.hocKy.namHoc.tenNamHoc}`,
+                    `Học kỳ ${lhp.hocKy.hocKy} (${ngayBD} - ${ngayKT}) - ${lhp.hocKy.namHoc.tenNamHoc}`,
                     lhp.sinhVienLopHocPhans.length,
                     lhp.trangThai, // ← Trạng thái tiếng Việt đẹp
                 ];
@@ -524,7 +524,7 @@ export class BaoCaoService {
                 ? new Date(latestDk.lopHocPhan.hocKy.ngayKetThuc).toLocaleDateString('vi-VN')
                 : 'N/A';
 
-            const hocKyGanNhat = `${latestDk.lopHocPhan.hocKy.tenHocKy} (${ngayBD} - ${ngayKT}) - Năm học: ${latestDk.lopHocPhan.hocKy.namHoc.tenNamHoc}`;
+            const hocKyGanNhat = `${latestDk.lopHocPhan.hocKy.hocKy} (${ngayBD} - ${ngayKT}) - Năm học: ${latestDk.lopHocPhan.hocKy.namHoc.tenNamHoc}`;
 
             // Tìm điểm cũ: ưu tiên lớp gần nhất có điểm → nếu không có thì tìm ngược về trước
             let oldDiem: number | null = null;
@@ -966,10 +966,9 @@ export class BaoCaoService {
                 const diemTbChung = sumTb / totalValid;
                 const ngayBD = new Date(hocKyTruoc.ngayBatDau).toLocaleDateString('vi-VN');
                 const ngayKT = new Date(hocKyTruoc.ngayKetThuc).toLocaleDateString('vi-VN');
-                const hocKyTruocWithDates = { ...hocKyTruoc };
-                hocKyTruocWithDates.tenHocKy = `${hocKyTruoc.tenHocKy} (${ngayBD} - ${ngayKT})`;
+                const hocKyTruocWithDates = `Học kỳ ${hocKyTruoc.hocKy} (${ngayBD} - ${ngayKT})`;
                 ketQuaStats = {
-                    tieuDe: `Kết quả học kỳ ${hocKyTruocWithDates.tenHocKy} - ${hocKyTruoc.namHoc.tenNamHoc}`,
+                    tieuDe: `Kết quả học kỳ ${hocKyTruocWithDates} - ${hocKyTruoc.namHoc.tenNamHoc}`,
                     tyLeDat: (dat / totalValid) * 100,
                     diemTbChung: diemTbChung,
                     phanLoai: {
@@ -985,7 +984,7 @@ export class BaoCaoService {
         const ngayBD = new Date(hocKyHienTai.ngayBatDau).toLocaleDateString('vi-VN');
         const ngayKT = new Date(hocKyHienTai.ngayKetThuc).toLocaleDateString('vi-VN');
 
-        hocKyHienTai.tenHocKy = `${hocKyHienTai.tenHocKy} (${ngayBD} - ${ngayKT})`;
+        const hocKyHienTaiWithDates = `${hocKyHienTai.hocKy} (${ngayBD} - ${ngayKT})`;
 
         // Trả về (fallback nếu không có dữ liệu)
         return {
@@ -997,7 +996,7 @@ export class BaoCaoService {
             },
             tongGiangVien,
             lopHocPhan: {
-                tieuDe: `Lớp học phần ${hocKyHienTai.tenHocKy} - ${hocKyHienTai.namHoc.tenNamHoc}`,
+                tieuDe: `Lớp học phần học kỳ ${hocKyHienTaiWithDates} - ${hocKyHienTai.namHoc.tenNamHoc}`,
                 tongLop,
                 coGiangVien: coGv,
                 chuaCoGiangVien: chuaGv,

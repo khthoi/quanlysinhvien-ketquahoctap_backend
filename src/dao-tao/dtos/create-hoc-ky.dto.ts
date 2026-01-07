@@ -1,30 +1,25 @@
-import { IsNotEmpty, IsInt, IsOptional, IsDateString, Length, IsString } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
+import { IsNotEmpty, IsInt, Min, IsDateString } from 'class-validator';
 
 export class CreateHocKyDto {
+  @ApiProperty({ description: 'Thứ tự học kỳ trong năm học (1, 2, ...)', example: 1 })
+  @IsNotEmpty()
+  @IsInt()
+  @Min(1, { message: 'Thứ tự học kỳ phải lớn hơn hoặc bằng 1' })
+  hocKy: number;
 
-  @ApiProperty({ description: 'Mã học kỳ', example: 'HK1_2024' })
-  @IsNotEmpty({ message: 'Mã học kỳ là bắt buộc' })
-  @Length(1, 10)
-  maHocKy: string;
-
-  @ApiProperty({ description: 'Tên học kỳ', example: 'Học kỳ 1' })
-  @IsNotEmpty({ message: 'Tên học kỳ là bắt buộc' })
-  @Length(1, 10)
-  tenHocKy: string;
-
-  @ApiProperty({ description: 'Ngày bắt đầu học kỳ', example: '2024-09-01' })
+  @ApiProperty({ description: 'Ngày bắt đầu học kỳ', example: '2025-09-01' })
   @IsNotEmpty()
   @IsDateString({}, { message: 'Ngày bắt đầu không hợp lệ' })
   ngayBatDau: string;
 
-  @ApiProperty({ description: 'Ngày kết thúc học kỳ', example: '2025-01-15' })
+  @ApiProperty({ description: 'Ngày kết thúc học kỳ', example: '2026-01-20' })
   @IsNotEmpty()
   @IsDateString({}, { message: 'Ngày kết thúc không hợp lệ' })
   ngayKetThuc: string;
 
-  @ApiProperty({ description: 'ID năm học', example: 2024 })
-  @IsNotEmpty({ message: 'Năm học là bắt buộc' })
+  @ApiProperty({ description: 'ID năm học', example: 5 })
+  @IsNotEmpty()
   @IsInt()
   namHocId: number;
 }

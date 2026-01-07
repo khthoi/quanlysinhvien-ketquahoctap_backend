@@ -188,7 +188,7 @@ export class GiangDayService {
         }
 
         qb.orderBy('namHoc.namBatDau', 'DESC')
-            .addOrderBy('hocKy.tenHocKy', 'ASC')
+            .addOrderBy('hocKy.hoc_ky', 'ASC')
             .addOrderBy('lhp.maLopHocPhan', 'ASC');
 
         // Lấy tổng trước khi phân trang (để tính total chính xác)
@@ -450,12 +450,12 @@ export class GiangDayService {
         // Load sinh viên
         const sinhVien = await this.sinhVienRepo.findOne({
             where: { id: sinhVienId },
-            relations: ['lop', 'lop.nienKhoa'],
+            relations: ['lop', 'lop.nienKhoa', 'lop.nganh'],
         });
 
         if (!sinhVien) throw new NotFoundException('Sinh viên không tồn tại');
-        if (!sinhVien.lop || !sinhVien.lop.nienKhoa) {
-            throw new BadRequestException('Sinh viên không có lớp niên chế hoặc niên khóa');
+        if (!sinhVien.lop || !sinhVien.lop.nienKhoa || !sinhVien.lop.nganh) {
+            throw new BadRequestException('Sinh viên không có thông tin lớp hành chính đầy đủ (sinh viên không có hoặc lớp của sinh viên không có ngành hoặc niên khóa)');
         }
 
         // Kiểm tra tình trạng
@@ -465,6 +465,32 @@ export class GiangDayService {
         ) {
             throw new BadRequestException('Sinh viên đang nghỉ học hoặc bảo lưu không được đăng ký');
         }
+
+        // ===== VALIDATION MỚI: Môn học phải thuộc CTDT của sinh viên =====
+        const apDung = await this.apDungRepo.findOne({
+            where: {
+                nganh: { id: sinhVien.lop.nganh.id },
+                nienKhoa: { id: sinhVien.lop.nienKhoa.id },
+            },
+            relations: ['chuongTrinh', 'chuongTrinh.chiTietMonHocs', 'chuongTrinh.chiTietMonHocs.monHoc'],
+        });
+
+        if (!apDung) {
+            throw new BadRequestException(
+                'Không tìm thấy chương trình đào tạo áp dụng cho ngành và niên khóa của sinh viên này',
+            );
+        }
+
+        const monHocTrongCTDT = apDung.chuongTrinh.chiTietMonHocs.some(
+            ct => ct.monHoc.id === lhp.monHoc.id,
+        );
+
+        if (!monHocTrongCTDT) {
+            throw new BadRequestException(
+                `Môn học ${lhp.monHoc.tenMonHoc} với mã môn ${lhp.monHoc.maMonHoc} không thuộc chương trình đào tạo của sinh viên này (ngành: ${sinhVien.lop.nganh.tenNganh}, niên khóa: ${sinhVien.lop.nienKhoa.tenNienKhoa})`,
+            );
+        }
+        // ===== Kết thúc validation mới =====
 
         // Kiểm tra trùng đăng ký
         const exist = await this.svLhpRepo.findOneBy({
@@ -640,7 +666,7 @@ export class GiangDayService {
         if (nienKhoaId) qb.andWhere('lhp.nien_khoa_id = :nienKhoaId', { nienKhoaId });
 
         qb.orderBy('namHoc.namBatDau', 'DESC')
-            .addOrderBy('hocKy.tenHocKy', 'ASC')
+            .addOrderBy('hocKy.hoc_ky', 'ASC')
             .addOrderBy('monHoc.tenMonHoc', 'ASC');
 
         const total = await qb.getCount();
@@ -769,7 +795,7 @@ export class GiangDayService {
         if (monHocId) qb.andWhere('monHoc.id = :monHocId', { monHocId });
 
         qb.orderBy('namHoc.namBatDau', 'DESC')
-            .addOrderBy('hocKy.tenHocKy', 'ASC')
+            .addOrderBy('hocKy.hoc_ky', 'ASC')
             .addOrderBy('monHoc.tenMonHoc', 'ASC');
 
         // Lấy toàn bộ dữ liệu trước để tính trạng thái (vì không thể filter trạng thái ở SQL)

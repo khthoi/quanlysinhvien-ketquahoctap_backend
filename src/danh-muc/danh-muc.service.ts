@@ -309,13 +309,18 @@ export class DanhMucService {
 
     // Thêm niên khóa mới (chỉ cán bộ ĐT)
     async createNienKhoa(createNienKhoaDto: CreateNienKhoaDto): Promise<NienKhoa> {
-        // Kiểm tra trùng tên niên khóa (ví dụ: "2023-2024")
+
+        if (createNienKhoaDto.namKetThuc <= createNienKhoaDto.namBatDau) {
+            throw new BadRequestException('Năm kết thúc phải lớn hơn năm bắt đầu');
+        }
+
+        // Kiểm tra trùng mã niên khóa (ví dụ: "K2022")
         const existing = await this.nienKhoaRepository.findOneBy({
-            tenNienKhoa: createNienKhoaDto.tenNienKhoa,
+            maNienKhoa: createNienKhoaDto.maNienKhoa,
         });
 
         if (existing) {
-            throw new BadRequestException('Tên niên khóa này đã tồn tại trong hệ thống');
+            throw new BadRequestException('Mã niên khóa này đã tồn tại trong hệ thống');
         }
 
         // Tạo mới niên khóa
@@ -326,6 +331,19 @@ export class DanhMucService {
     // Cập nhật niên khóa (chỉ cán bộ ĐT)
     async updateNienKhoa(id: number, updateNienKhoaDto: UpdateNienKhoaDto): Promise<NienKhoa> {
         const nienKhoa = await this.getNienKhoaById(id); // throw NotFoundException nếu không tồn tại
+
+        const trungmaNienKhoa = await this.nienKhoaRepository.findOneBy({
+            maNienKhoa: updateNienKhoaDto.maNienKhoa,
+            id: Not(id),
+        });
+
+        if (trungmaNienKhoa) {
+            throw new BadRequestException('Mã niên khóa này đã được sử dụng bởi niên khóa khác');
+        }
+
+        if (updateNienKhoaDto.namKetThuc && updateNienKhoaDto.namBatDau && updateNienKhoaDto.namKetThuc <= updateNienKhoaDto.namBatDau) {
+            throw new BadRequestException('Năm kết thúc phải lớn hơn năm bắt đầu');
+        }
 
         // Chỉ kiểm tra trùng tên nếu người dùng thay đổi tên niên khóa
         if (

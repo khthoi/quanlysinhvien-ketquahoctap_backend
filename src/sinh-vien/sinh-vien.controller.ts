@@ -12,6 +12,9 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  BadRequestException,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -23,6 +26,7 @@ import {
   ApiResponse,
   ApiUnauthorizedResponse,
   ApiForbiddenResponse,
+  ApiConsumes,
 } from '@nestjs/swagger';
 import { SinhVienService } from './sinh-vien.service';
 import { CreateSinhVienDto } from './dtos/create-sinh-vien.dto';
@@ -38,6 +42,9 @@ import { GetUser } from 'src/auth/decorators/get-user.decorator';
 import { VaiTroNguoiDungEnum } from 'src/auth/enums/vai-tro-nguoi-dung.enum';
 import { GetLichHocMeQueryDto } from './dtos/get-lich-hoc-me-query.dto';
 import { ImportSinhVienBatchDto } from './dtos/import-sinh-vien.dto';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
 
 @ApiTags('Sinh viên')
 @ApiBearerAuth()
@@ -61,11 +68,49 @@ export class SinhVienController {
 
   @Post('import')
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO, VaiTroNguoiDungEnum.ADMIN)
-  @ApiOperation({ summary: 'Nhập danh sách sinh viên hàng loạt từ Excel/JSON' })
-  @ApiBody({ type: ImportSinhVienBatchDto })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: './uploads/temp', // tạo thư mục nếu chưa có
+        filename: (req, file, cb) => {
+          const randomName = Array(32)
+            .fill(null)
+            .map(() => Math.round(Math.random() * 16).toString(16))
+            .join('');
+          cb(null, `${randomName}${extname(file.originalname)}`);
+        },
+      }),
+      fileFilter: (req, file, cb) => {
+        if (!file.originalname.match(/\.(xlsx|xls|csv)$/)) {
+          return cb(new BadRequestException('Chỉ chấp nhận file Excel (.xlsx, .xls, .csv)'), false);
+        }
+        cb(null, true);
+      },
+      limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+    }),
+  )
+  @ApiOperation({ summary: 'Nhập danh sách sinh viên hàng loạt từ file Excel' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'File Excel chứa danh sách sinh viên',
+    type: 'multipart/form-data',
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
   @ApiResponse({ status: 200, description: 'Kết quả nhập liệu' })
-  async importSinhVien(@Body() dto: ImportSinhVienBatchDto) {
-    return this.sinhVienService.importBatch(dto);
+  async importSinhVien(@UploadedFile() file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('Không có file được tải lên');
+    }
+
+    return this.sinhVienService.importFromExcel(file.path);
   }
 
   @ApiOperation({ summary: 'Lấy danh sách sinh viên (có lọc theo lớp, ngành, niên khóa và phân trang)' })

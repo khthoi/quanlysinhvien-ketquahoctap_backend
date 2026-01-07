@@ -58,7 +58,7 @@ export class DaoTaoService {
       .createQueryBuilder('namHoc')
       .leftJoinAndSelect('namHoc.hocKys', 'hocKy')
       .orderBy('namHoc.namBatDau', 'DESC')
-      .addOrderBy('hocKy.tenHocKy', 'ASC');
+      .addOrderBy('hocKy.hoc_ky', 'ASC');
 
     if (search) {
       qb.andWhere('LOWER(namHoc.tenNamHoc) LIKE LOWER(:search) OR LOWER(namHoc.maNamHoc) LIKE LOWER(:search)', {
@@ -88,16 +88,18 @@ export class DaoTaoService {
   }
 
   async createNamHoc(dto: CreateNamHocDto) {
-    // Kiểm tra trùng năm bắt đầu + kết thúc (do có @Unique)
+    // Kiểm tra năm kết thúc phải = năm bắt đầu + 1
+    if (dto.namKetThuc !== dto.namBatDau + 1) {
+      throw new BadRequestException('Năm kết thúc phải bằng năm bắt đầu + 1');
+    }
 
-    const existNamhoc = await this.namHocRepo.findOneBy({
-      maNamHoc: dto.maNamHoc,
-    });
-
-    if (existNamhoc) {
+    // Kiểm tra trùng mã năm học
+    const existMa = await this.namHocRepo.findOneBy({ maNamHoc: dto.maNamHoc });
+    if (existMa) {
       throw new BadRequestException('Mã năm học đã tồn tại');
     }
 
+    // Kiểm tra trùng khoảng thời gian (do có @Unique)
     const exist = await this.namHocRepo.findOneBy({
       namBatDau: dto.namBatDau,
       namKetThuc: dto.namKetThuc,
@@ -114,23 +116,27 @@ export class DaoTaoService {
     const namHoc = await this.namHocRepo.findOneBy({ id });
     if (!namHoc) throw new NotFoundException('Năm học không tồn tại');
 
-    const existMa = await this.namHocRepo.findOneBy({
-      maNamHoc: dto.maNamHoc,
-    });
+    // Nếu cập nhật năm bắt đầu hoặc kết thúc → kiểm tra đúng khoảng 1 năm
+    const finalNamBatDau = dto.namBatDau ?? namHoc.namBatDau;
+    const finalNamKetThuc = dto.namKetThuc ?? namHoc.namKetThuc;
 
-    if (existMa && existMa.id !== id) {
-      throw new BadRequestException('Mã năm học đã tồn tại');
+    if (finalNamKetThuc !== finalNamBatDau + 1) {
+      throw new BadRequestException('Năm kết thúc phải bằng năm bắt đầu + 1');
     }
 
-    // Nếu cập nhật năm bắt đầu/kết thúc → kiểm tra trùng
-    if (dto.namBatDau || dto.namKetThuc) {
-      const exist = await this.namHocRepo.findOneBy({
-        namBatDau: dto.namBatDau || namHoc.namBatDau,
-        namKetThuc: dto.namKetThuc || namHoc.namKetThuc,
-      });
-      if (exist && exist.id !== id) {
-        throw new BadRequestException('Khoảng thời gian năm học đã tồn tại');
-      }
+    // Kiểm tra trùng mã
+    if (dto.maNamHoc && dto.maNamHoc !== namHoc.maNamHoc) {
+      const existMa = await this.namHocRepo.findOneBy({ maNamHoc: dto.maNamHoc });
+      if (existMa) throw new BadRequestException('Mã năm học đã tồn tại');
+    }
+
+    // Kiểm tra trùng khoảng thời gian
+    const exist = await this.namHocRepo.findOneBy({
+      namBatDau: finalNamBatDau,
+      namKetThuc: finalNamKetThuc,
+    });
+    if (exist && exist.id !== id) {
+      throw new BadRequestException('Khoảng thời gian năm học đã tồn tại');
     }
 
     Object.assign(namHoc, dto);
@@ -155,66 +161,178 @@ export class DaoTaoService {
   // ==================== HỌC KỲ ====================
 
   async getAllHocKy(query: GetHocKyQueryDto) {
-    const { namHocId, search } = query;
+    const { namHocId, hockythu } = query;
 
     const qb = this.hocKyRepo
       .createQueryBuilder('hocKy')
       .leftJoinAndSelect('hocKy.namHoc', 'namHoc')
       .orderBy('namHoc.namBatDau', 'DESC')
-      .addOrderBy('hocKy.tenHocKy', 'ASC');
+      .addOrderBy('hocKy.hoc_ky', 'ASC');
 
     if (namHocId) {
       qb.andWhere('hocKy.nam_hoc_id = :namHocId', { namHocId });
     }
 
-    if (search) {
-      qb.andWhere('LOWER(hocKy.tenHocKy) LIKE LOWER(:search) OR LOWER(hocKy.maHocKy) LIKE LOWER(:search)', {
-        search: `%${search}%`,
-      });
+    if (hockythu) {
+      qb.andWhere('hocKy.hoc_ky = :hockythu', { hockythu });
     }
 
     return await qb.getMany();
   }
 
   async createHocKy(dto: CreateHocKyDto) {
+    const { hocKy, namHocId, ngayBatDau, ngayKetThuc } = dto;
 
-    const HocKyExist = await this.hocKyRepo.findOneBy({
-      maHocKy: dto.maHocKy,
-    });
-    if (HocKyExist) {
-      throw new BadRequestException('Mã học kỳ đã tồn tại');
-    }
-
-    const namHoc = await this.namHocRepo.findOneBy({ id: dto.namHocId });
+    const namHoc = await this.namHocRepo.findOneBy({ id: namHocId });
     if (!namHoc) throw new BadRequestException('Năm học không tồn tại');
 
-    const hocKy = this.hocKyRepo.create({
-      ...dto,
+    if (ngayBatDau >= ngayKetThuc) {
+      throw new BadRequestException('Ngày bắt đầu phải nhỏ hơn ngày kết thúc');
+    }
+
+    // Validate ngày thuộc đúng năm học
+    const startOfNamBatDau = new Date(namHoc.namBatDau, 0, 1); // 01/01/namBatDau
+    const endOfNamKetThuc = new Date(namHoc.namKetThuc, 11, 31); // 31/12/namKetThuc
+
+    const bd = new Date(ngayBatDau);
+    const kt = new Date(ngayKetThuc);
+
+    if (bd < startOfNamBatDau) {
+      throw new BadRequestException(`Ngày bắt đầu phải từ ngày 01/01/${namHoc.namBatDau} trở đi`);
+    }
+    if (kt > endOfNamKetThuc) {
+      throw new BadRequestException(`Ngày kết thúc không được vượt quá 31/12/${namHoc.namKetThuc}`);
+    }
+    if (bd >= kt) {
+      throw new BadRequestException('Ngày bắt đầu phải nhỏ hơn ngày kết thúc');
+    }
+
+    // Kiểm tra trùng thứ tự học kỳ
+    const exist = await this.hocKyRepo.findOne({
+      where: { hocKy, namHoc: { id: namHocId } },
+    });
+    if (exist) {
+      throw new BadRequestException(`Năm học này đã có học kỳ thứ ${hocKy}`);
+    }
+
+    // Kiểm tra liền kề với học kỳ cao nhất hiện có
+    const maxHocKy = await this.hocKyRepo.findOne({
+      where: { namHoc: { id: namHocId } },
+      order: { hocKy: 'DESC' },
+    });
+
+    if (maxHocKy && hocKy !== maxHocKy.hocKy + 1) {
+      throw new BadRequestException(`Học kỳ mới phải là thứ ${maxHocKy.hocKy + 1} (liền kề)`);
+    }
+    if (!maxHocKy && hocKy !== 1) {
+      throw new BadRequestException('Học kỳ đầu tiên phải là học kỳ 1');
+    }
+
+    // Kiểm tra chồng thời gian với các học kỳ hiện có
+    const allHocKy = await this.hocKyRepo.find({
+      where: { namHoc: { id: namHocId } },
+    });
+
+    for (const hk of allHocKy) {
+      const hkBd = new Date(hk.ngayBatDau);
+      const hkKt = new Date(hk.ngayKetThuc);
+
+      // Chồng nếu: bd mới nằm trong khoảng cũ hoặc kt mới nằm trong khoảng cũ
+      if (!(kt <= hkBd || bd >= hkKt)) {
+        throw new BadRequestException(
+          `Thời gian học kỳ chồng với học kỳ thứ ${hk.hocKy} (${hk.ngayBatDau.toLocaleDateString('vi-VN')} - ${hk.ngayKetThuc.toLocaleDateString('vi-VN')})`,
+        );
+      }
+    }
+
+    const hocKyEntity = this.hocKyRepo.create({
+      hocKy,
+      ngayBatDau: bd,
+      ngayKetThuc: kt,
       namHoc,
     });
 
-    return await this.hocKyRepo.save(hocKy);
+    return await this.hocKyRepo.save(hocKyEntity);
   }
 
   async updateHocKy(id: number, dto: UpdateHocKyDto) {
-    const hocKy = await this.hocKyRepo.findOneBy({ id });
+    const hocKy = await this.hocKyRepo.findOne({
+      where: { id },
+      relations: ['namHoc'],
+    });
     if (!hocKy) throw new NotFoundException('Học kỳ không tồn tại');
 
-    const HocKyExist = await this.hocKyRepo.findOneBy({
-      maHocKy: dto.maHocKy,
+    let finalNamHoc = hocKy.namHoc;
+    if (dto.namHocId && dto.namHocId !== hocKy.namHoc.id) {
+      const foundNamHoc = await this.namHocRepo.findOneBy({ id: dto.namHocId });
+      if (!foundNamHoc) throw new BadRequestException('Năm học không tồn tại');
+      finalNamHoc = foundNamHoc;
+    }
+
+    // Validate ngày nếu có thay đổi
+    let finalBd = hocKy.ngayBatDau;
+    let finalKt = hocKy.ngayKetThuc;
+    if (dto.ngayBatDau) finalBd = new Date(dto.ngayBatDau);
+    if (dto.ngayKetThuc) finalKt = new Date(dto.ngayKetThuc);
+
+    const startOfNam = new Date(finalNamHoc.namBatDau, 0, 1);
+    const endOfNam = new Date(finalNamHoc.namKetThuc, 11, 31);
+
+    if (finalBd < startOfNam) {
+      throw new BadRequestException(`Ngày bắt đầu phải từ 01/01/${finalNamHoc.namBatDau} trở đi`);
+    }
+    if (finalKt > endOfNam) {
+      throw new BadRequestException(`Ngày kết thúc không được vượt quá 31/12/${finalNamHoc.namKetThuc}`);
+    }
+    if (finalBd >= finalKt) {
+      throw new BadRequestException('Ngày bắt đầu phải nhỏ hơn ngày kết thúc');
+    }
+
+    // Nếu đổi thứ tự học kỳ → kiểm tra trùng và liền kề
+    if (dto.hocKy !== undefined) {
+      if (dto.hocKy <= 0) throw new BadRequestException('Thứ tự học kỳ phải >= 1');
+
+      const exist = await this.hocKyRepo.findOne({
+        where: { hocKy: dto.hocKy, namHoc: { id: finalNamHoc.id } },
+      });
+      if (exist && exist.id !== id) {
+        throw new BadRequestException(`Năm học này đã có học kỳ thứ ${dto.hocKy}`);
+      }
+
+      const max = await this.hocKyRepo.findOne({
+        where: { namHoc: { id: finalNamHoc.id } },
+        order: { hocKy: 'DESC' },
+      });
+      const expected = max ? max.hocKy + 1 : 1;
+      if (dto.hocKy !== hocKy.hocKy && dto.hocKy !== expected) {
+        throw new BadRequestException(`Chỉ được đổi thành học kỳ thứ ${expected}`);
+      }
+    }
+
+    // Kiểm tra chồng thời gian với các học kỳ khác (trừ chính nó)
+    const others = await this.hocKyRepo.find({
+      where: { namHoc: { id: finalNamHoc.id } },
     });
 
-    if (HocKyExist && HocKyExist.id !== id) {
-      throw new BadRequestException('Mã học kỳ đã tồn tại');
+    for (const other of others) {
+      if (other.id === id) continue;
+
+      const otherBd = new Date(other.ngayBatDau);
+      const otherKt = new Date(other.ngayKetThuc);
+
+      if (!(finalKt <= otherBd || finalBd >= otherKt)) {
+        throw new BadRequestException(
+          `Thời gian chồng với học kỳ thứ ${other.hocKy} (${other.ngayBatDau.toLocaleDateString('vi-VN')} - ${other.ngayKetThuc.toLocaleDateString('vi-VN')})`,
+        );
+      }
     }
 
-    if (dto.namHocId) {
-      const namHoc = await this.namHocRepo.findOneBy({ id: dto.namHocId });
-      if (!namHoc) throw new BadRequestException('Năm học không tồn tại');
-      hocKy.namHoc = namHoc;
-    }
+    // Cập nhật
+    if (dto.hocKy !== undefined) hocKy.hocKy = dto.hocKy;
+    if (dto.ngayBatDau) hocKy.ngayBatDau = finalBd;
+    if (dto.ngayKetThuc) hocKy.ngayKetThuc = finalKt;
+    if (dto.namHocId) hocKy.namHoc = finalNamHoc;
 
-    Object.assign(hocKy, dto);
     return await this.hocKyRepo.save(hocKy);
   }
 
@@ -240,9 +358,10 @@ export class DaoTaoService {
 
     const nganh = await this.nganhRepo.findOneBy({ id: dto.nganhId });
     if (!nganh) throw new BadRequestException('Ngành không tồn tại');
-  
+
 
     const ct = this.chuongTrinhRepo.create({
+      maChuongTrinh: dto.maChuongTrinh,
       tenChuongTrinh: dto.tenChuongTrinh,
       thoiGianDaoTao: dto.thoiGianDaoTao,
       nganh,
