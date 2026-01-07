@@ -23,6 +23,10 @@ class SinhVienTheoNienKhoaDto {
 }
 
 class ThongKeSinhVienDto {
+
+  @ApiProperty({ example: 11611 })
+  tongSinhVien: number;
+
   @ApiProperty({ type: SinhVienTheoTinhTrangDto })
   theoTinhTrang: SinhVienTheoTinhTrangDto;
 

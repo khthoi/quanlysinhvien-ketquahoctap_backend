@@ -888,6 +888,8 @@ export class BaoCaoService {
             daTotNghiep: await this.sinhVienRepo.count({ where: { tinhTrang: TinhTrangHocTapEnum.DA_TOT_NGHIEP } }),
         };
 
+        const tongSinhVien = Object.values(theoTinhTrang).reduce((a, b) => a + b, 0);
+
         // Chi tiết theo niên khóa (chỉ sinh viên đang học)
         const nienKhoas = await this.nienKhoaRepo.find({ order: { namBatDau: 'DESC' } });
         // Chỉ lấy 5 niên khóa gần nhất (nếu có ít hơn thì lấy hết)
@@ -987,7 +989,9 @@ export class BaoCaoService {
 
         // Trả về (fallback nếu không có dữ liệu)
         return {
-            sinhVien: {
+            sinhVien: 
+            {   
+                tongSinhVien,
                 theoTinhTrang,
                 theoNienKhoa,
             },
