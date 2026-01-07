@@ -16,7 +16,7 @@ import { CreateMonHocDto } from './dtos/tao-mon-hoc.dto';
 import { MonHoc } from './entity/mon-hoc.entity';
 import { NguoiDung } from 'src/auth/entity/nguoi-dung.entity';
 import { VaiTroNguoiDungEnum } from 'src/auth/enums/vai-tro-nguoi-dung.enum';
-import { UpdateGiangVienDto } from './dtos/cap-nhat-thong-tin-giang-vien.dto';
+import { CapNhatThongTinCaNhanGiangVienDto, UpdateGiangVienDto } from './dtos/cap-nhat-thong-tin-giang-vien.dto';
 import { CreateGiangVienDto } from './dtos/them-giang-vien.dto';
 import { GiangVien } from './entity/giang-vien.entity';
 import { PhanCongMonHocDto } from './dtos/phan-cong-mon-hoc.dto';
@@ -718,7 +718,7 @@ export class DanhMucService {
         await this.giangVienRepository.remove(giangVien);
     }
 
-    async updateMyProfile(user: { userId: number; vaiTro: string }, updateGiangVienDto: UpdateGiangVienDto): Promise<GiangVien> {
+    async updateMyProfile(user: { userId: number; vaiTro: string }, capNhatThongTinCaNhanGiangVienDto: CapNhatThongTinCaNhanGiangVienDto): Promise<GiangVien> {
         // Kiểm tra vai trò phải là GIANG_VIEN
         if (user.vaiTro !== VaiTroNguoiDungEnum.GIANG_VIEN) {
             throw new ForbiddenException('Chỉ giảng viên mới được phép sửa thông tin cá nhân');
@@ -737,16 +737,32 @@ export class DanhMucService {
         const giangVien = nguoiDung.giangVien;
 
         // Kiểm tra email trùng nếu có thay đổi
-        if (updateGiangVienDto.email && updateGiangVienDto.email !== giangVien.email) {
-            const existing = await this.giangVienRepository.findOneBy({ email: updateGiangVienDto.email });
+        if (capNhatThongTinCaNhanGiangVienDto.email && capNhatThongTinCaNhanGiangVienDto.email !== giangVien.email) {
+            const existing = await this.giangVienRepository.findOneBy({ email: capNhatThongTinCaNhanGiangVienDto.email });
             if (existing) {
                 throw new BadRequestException('Email đã được sử dụng bởi giảng viên khác');
             }
         }
 
-        Object.assign(giangVien, updateGiangVienDto);
+        Object.assign(giangVien, capNhatThongTinCaNhanGiangVienDto);
 
         return await this.giangVienRepository.save(giangVien);
+    }
+
+    async getMyProfile(user: { userId: number; vaiTro: string }): Promise<GiangVien> {
+        // Kiểm tra vai trò phải là GIANG_VIEN
+        if (user.vaiTro !== VaiTroNguoiDungEnum.GIANG_VIEN) {
+            throw new ForbiddenException('Chỉ giảng viên mới được phép xem thông tin cá nhân');
+        }
+        // Tìm giảng viên liên kết với userId (qua bảng NguoiDung)
+        const nguoiDung = await this.nguoiDungRepository.findOne({
+            where: { id: user.userId },
+            relations: ['giangVien'],
+        });
+        if (!nguoiDung || !nguoiDung.giangVien) {
+            throw new NotFoundException('Không tìm thấy hồ sơ giảng viên của bạn');
+        }
+        return nguoiDung.giangVien;
     }
 
     // Phân công môn học cho giảng viên

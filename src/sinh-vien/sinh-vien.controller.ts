@@ -26,7 +26,7 @@ import {
 } from '@nestjs/swagger';
 import { SinhVienService } from './sinh-vien.service';
 import { CreateSinhVienDto } from './dtos/create-sinh-vien.dto';
-import { UpdateSinhVienDto } from './dtos/update-sinh-vien.dto';
+import { UpdateSinhVienDto, UpdateSinhVienSelfDto } from './dtos/update-sinh-vien.dto';
 import { GetSinhVienQueryDto } from './dtos/get-sinh-vien-query.dto';
 import { KhenThuongKyLuatDto } from './dtos/khen-thuong-ky-luat.dto';
 import { PhanLopDto } from './dtos/phan-lop.dto';
@@ -195,6 +195,21 @@ export class SinhVienController {
   @Roles(VaiTroNguoiDungEnum.SINH_VIEN)
   async getMe(@GetUser('userId') userId: number) {
     return this.sinhVienService.findMe(userId);
+  }
+
+  @ApiOperation({
+    summary: 'Sinh viên cập nhật thông tin cá nhân của mình',
+    description: 'Chỉ sinh viên đang đăng nhập mới được gọi',
+  })
+  @ApiBody({ type: UpdateSinhVienSelfDto })
+  @ApiResponse({ status: 200, description: 'Thông tin cá nhân đã được cập nhật' })
+  @Put('me/my-profile')
+  @Roles(VaiTroNguoiDungEnum.SINH_VIEN)
+  async updateMe(
+    @GetUser('userId') userId: number,
+    @Body() dto: UpdateSinhVienSelfDto,
+  ) {
+    return this.sinhVienService.updateMe(userId, dto);
   }
 
   @ApiOperation({

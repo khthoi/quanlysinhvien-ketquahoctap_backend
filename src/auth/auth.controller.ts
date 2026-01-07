@@ -34,12 +34,13 @@ import { RolesGuard } from './guards/roles.guard';
 import { Roles } from './decorators/roles.decorator';
 import { GetUser } from './decorators/get-user.decorator';
 import { VaiTroNguoiDungEnum } from './enums/vai-tro-nguoi-dung.enum';
+import { GetAllUsersResponseDto, GetUserResponseDto } from './dtos/get-all-users-response.dto';
 
 @ApiTags('Xác thực & Quản lý người dùng')
 @ApiBearerAuth() // Áp dụng JWT cho tất cả API cần auth
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(private readonly authService: AuthService) { }
 
   @Post('login')
   @ApiOperation({ summary: 'Đăng nhập hệ thống' })
@@ -64,7 +65,11 @@ export class AuthController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.ADMIN)
   @ApiOperation({ summary: 'Lấy danh sách người dùng (Admin)' })
-  @ApiResponse({ status: 200, description: 'Danh sách người dùng' })
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách người dùng với phân trang và profile chi tiết',
+    type: GetAllUsersResponseDto,
+  })
   async getAllUsers(@Query() query: GetUsersQueryDto) {
     return this.authService.findAll(query);
   }
@@ -73,8 +78,15 @@ export class AuthController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.ADMIN)
   @ApiOperation({ summary: 'Lấy thông tin người dùng theo ID (Admin)' })
-  @ApiParam({ name: 'id', description: 'ID người dùng' })
-  @ApiResponse({ status: 200, description: 'Thông tin người dùng' })
+  @ApiParam({ name: 'id', type: Number, description: 'ID người dùng' })
+  @ApiResponse({
+    status: 200,
+    description: 'Thông tin chi tiết người dùng',
+    type: GetUserResponseDto, // <-- Quan trọng: khai báo type response
+  })
+  @ApiResponse({ status: 404, description: 'Người dùng không tồn tại' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Chỉ admin mới được truy cập' })
   async getUser(@Param('id', ParseIntPipe) id: number) {
     return this.authService.findOne(id);
   }

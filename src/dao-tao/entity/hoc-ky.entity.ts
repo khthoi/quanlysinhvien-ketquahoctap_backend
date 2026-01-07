@@ -1,5 +1,6 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique, OneToMany } from 'typeorm';
 import { NamHoc } from './nam-hoc.entity';
+import { LopHocPhan } from 'src/giang-day/entity/lop-hoc-phan.entity';
 
 @Entity('hoc_ky')
 @Unique(['maHocKy'])
@@ -22,4 +23,8 @@ export class HocKy {
   @ManyToOne(() => NamHoc, { nullable: false })
   @JoinColumn({ name: 'nam_hoc_id' })
   namHoc: NamHoc;
+  
+  // Thêm quan hệ ngược với LopHocPhan
+  @OneToMany(() => LopHocPhan, (lopHocPhan) => lopHocPhan.hocKy)
+  lopHocPhans: LopHocPhan[];
 }

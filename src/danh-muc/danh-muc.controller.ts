@@ -36,7 +36,7 @@ import { Lop } from './entity/lop.entity';
 import { UpdateMonHocDto } from './dtos/cap-nhat-mon-hoc.dto';
 import { CreateMonHocDto } from './dtos/tao-mon-hoc.dto';
 import { MonHoc } from './entity/mon-hoc.entity';
-import { UpdateGiangVienDto } from './dtos/cap-nhat-thong-tin-giang-vien.dto';
+import { CapNhatThongTinCaNhanGiangVienDto, UpdateGiangVienDto } from './dtos/cap-nhat-thong-tin-giang-vien.dto';
 import { CreateGiangVienDto } from './dtos/them-giang-vien.dto';
 import { GiangVien } from './entity/giang-vien.entity';
 import { PhanCongMonHocDto } from './dtos/phan-cong-mon-hoc.dto';
@@ -51,17 +51,24 @@ import { CreateNienKhoaDto } from './dtos/them-nien-khoa.dto';
 import { NienKhoa } from './entity/nien-khoa.entity';
 import { PaginationQueryDto, GetNganhQueryDto, GetLopQueryDto, GetGiangVienQueryDto } from './dtos/pagination.dto';
 import { PhanCongMonHocResponseDto } from './dtos/phan-cong-mon-hoc-response.dto';
+import { GetAllKhoaResponseDto, GetKhoaByIdResponseDto } from './dtos/get-all-khoa-response.dto';
+import { GetAllNganhResponseDto, GetNganhByIdResponseDto } from './dtos/get-all-nganh-response.dto';
 
 @ApiTags('Danh mục')
 @Controller('danh-muc')
 export class DanhMucController {
-  constructor(private readonly danhMucService: DanhMucService) {}
+  constructor(private readonly danhMucService: DanhMucService) { }
 
   /* ==================== KHOA ==================== */
-  @ApiOperation({ summary: 'Lấy danh sách tất cả khoa (có phân trang)' })
+  @ApiOperation({ summary: 'Lấy danh sách tất cả khoa (có phân trang và tìm kiếm)' })
   @ApiQuery({ name: 'page', required: false, type: Number, description: 'Trang hiện tại (default: 1)' })
   @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Số bản ghi mỗi trang (default: 10)' })
-  @ApiResponse({ status: 200, description: 'Danh sách khoa', type: [Khoa] })
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Tìm kiếm theo mã hoặc tên khoa' })
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách khoa kèm ngành thuộc khoa và phân trang',
+    type: GetAllKhoaResponseDto, // <-- Quan trọng: khai báo type response
+  })
   @ApiBearerAuth()
   @ApiUnauthorizedResponse({ description: 'Chưa đăng nhập' })
   @ApiForbiddenResponse({ description: 'Không có quyền (chỉ cán bộ phòng ĐT)' })
@@ -72,13 +79,17 @@ export class DanhMucController {
     return this.danhMucService.getAllKhoa(query);
   }
 
-  @ApiOperation({ summary: 'Lấy thông tin khoa theo ID' })
+  @ApiOperation({ summary: 'Lấy thông tin chi tiết khoa theo ID' })
   @ApiParam({ name: 'id', type: Number, description: 'ID của khoa' })
-  @ApiResponse({ status: 200, description: 'Thông tin khoa', type: Khoa })
+  @ApiResponse({
+    status: 200,
+    description: 'Thông tin chi tiết khoa',
+    type: GetKhoaByIdResponseDto,
+  })
   @ApiResponse({ status: 404, description: 'Không tìm thấy khoa' })
   @ApiBearerAuth()
-  @ApiUnauthorizedResponse()
-  @ApiForbiddenResponse()
+  @ApiUnauthorizedResponse({ description: 'Chưa đăng nhập' })
+  @ApiForbiddenResponse({ description: 'Không có quyền (chỉ cán bộ phòng ĐT)' })
   @Get('khoa/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -132,14 +143,21 @@ export class DanhMucController {
   }
 
   /* ==================== NGÀNH ==================== */
-  @ApiOperation({ summary: 'Lấy danh sách ngành (có lọc theo khoa và phân trang)' })
-  @ApiQuery({ name: 'khoaId', required: false, type: Number })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiResponse({ status: 200, type: [Nganh] })
+  @ApiOperation({
+    summary: 'Lấy danh sách ngành (có lọc theo khoa, tìm kiếm và phân trang)'
+  })
+  @ApiQuery({ name: 'khoaId', required: false, type: Number, description: 'Lọc theo ID khoa' })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Trang hiện tại (default: 1)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Số bản ghi mỗi trang (default: 10)' })
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Tìm kiếm theo mã hoặc tên ngành' })
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách ngành kèm thông tin khoa, filters và phân trang',
+    type: GetAllNganhResponseDto,
+  })
   @ApiBearerAuth()
-  @ApiUnauthorizedResponse()
-  @ApiForbiddenResponse()
+  @ApiUnauthorizedResponse({ description: 'Chưa đăng nhập' })
+  @ApiForbiddenResponse({ description: 'Không có quyền (chỉ cán bộ phòng ĐT)' })
   @Get('nganh')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -147,10 +165,17 @@ export class DanhMucController {
     return this.danhMucService.getAllNganh(query);
   }
 
-  @ApiOperation({ summary: 'Lấy thông tin ngành theo ID' })
-  @ApiParam({ name: 'id', type: Number })
-  @ApiResponse({ status: 200, type: Nganh })
+  @ApiOperation({ summary: 'Lấy thông tin chi tiết ngành theo ID' })
+  @ApiParam({ name: 'id', type: Number, description: 'ID ngành' })
+  @ApiResponse({
+    status: 200,
+    description: 'Thông tin chi tiết ngành kèm khoa quản lý',
+    type: GetNganhByIdResponseDto,
+  })
+  @ApiResponse({ status: 404, description: 'Không tìm thấy ngành' })
   @ApiBearerAuth()
+  @ApiUnauthorizedResponse({ description: 'Chưa đăng nhập' })
+  @ApiForbiddenResponse({ description: 'Không có quyền (chỉ cán bộ phòng ĐT)' })
   @Get('nganh/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
@@ -456,19 +481,33 @@ export class DanhMucController {
   }
 
   @ApiOperation({ summary: 'Giảng viên cập nhật thông tin cá nhân của mình' })
-  @ApiBody({ type: UpdateGiangVienDto })
+  @ApiBody({ type: CapNhatThongTinCaNhanGiangVienDto })
   @ApiResponse({ status: 200, type: GiangVien })
   @ApiBearerAuth()
   @ApiForbiddenResponse({ description: 'Chỉ giảng viên mới được phép' })
-  @Put('giang-vien/me')
+  @Put('giang-vien/me/my-profile')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.GIANG_VIEN)
   async updateMyProfile(
     @GetUser('userId') userId: number,
-    @GetUser('role') vaiTro: string,
-    @Body() updateGiangVienDto: UpdateGiangVienDto,
+    @GetUser('vaiTro') vaiTro: string,
+    @Body() capNhatThongTinCaNhanGiangVienDto: CapNhatThongTinCaNhanGiangVienDto,
   ): Promise<GiangVien> {
-    return this.danhMucService.updateMyProfile({ userId, vaiTro }, updateGiangVienDto);
+    return this.danhMucService.updateMyProfile({ userId, vaiTro }, capNhatThongTinCaNhanGiangVienDto);
+  }
+
+  @ApiOperation({ summary: 'Lấy thông tin cá nhân giảng viên' })
+  @ApiResponse({ status: 200, type: GiangVien })
+  @ApiBearerAuth()
+  @ApiForbiddenResponse({ description: 'Chỉ giảng viên mới được phép' })
+  @Get('giang-vien/me/my-profile')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(VaiTroNguoiDungEnum.GIANG_VIEN)
+  async getMyProfile(
+    @GetUser('userId') userId: number,
+    @GetUser('vaiTro') vaiTro: string,
+  ): Promise<GiangVien> {
+    return this.danhMucService.getMyProfile({ userId, vaiTro });
   }
 
   /* ==================== PHÂN CÔNG MÔN HỌC ==================== */

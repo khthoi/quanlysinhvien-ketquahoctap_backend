@@ -5,7 +5,7 @@ import { SinhVien } from './entity/sinh-vien.entity';
 import { KhenThuongKyLuat } from './entity/khenthuong-kyluat.entity';
 import { Lop } from 'src/danh-muc/entity/lop.entity';
 import { CreateSinhVienDto } from './dtos/create-sinh-vien.dto';
-import { UpdateSinhVienDto } from './dtos/update-sinh-vien.dto';
+import { UpdateSinhVienDto, UpdateSinhVienSelfDto } from './dtos/update-sinh-vien.dto';
 import { GetSinhVienQueryDto } from './dtos/get-sinh-vien-query.dto';
 import { KhenThuongKyLuatDto } from './dtos/khen-thuong-ky-luat.dto';
 import { PhanLopDto } from './dtos/phan-lop.dto';
@@ -231,6 +231,24 @@ export class SinhVienService {
         };
     }
 
+    //API /sinh-vien/me/my-profile - Sinh viên sửa thông tin cá nhân
+    async updateMe(userId: number, dto: UpdateSinhVienSelfDto) {
+        if (!userId) {
+            throw new BadRequestException('Không thể xác định người dùng từ token');
+        }
+        const nguoiDung = await this.nguoiDungRepo.findOne({
+            where: { id: userId },
+            relations: ['sinhVien'],
+        });
+        if (!nguoiDung) {
+            throw new NotFoundException('Tài khoản không tồn tại');
+        }
+
+        if (!nguoiDung.sinhVien) {
+            throw new NotFoundException('Tài khoản này không được liên kết với sinh viên nào');
+        }
+        return this.update(nguoiDung.sinhVien.id, dto);
+    }
     async update(id: number, dto: UpdateSinhVienDto) {
         const sv = await this.sinhVienRepo.findOneBy({ id });
         if (!sv) throw new NotFoundException('Sinh viên không tồn tại');

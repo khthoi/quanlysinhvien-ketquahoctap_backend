@@ -29,12 +29,15 @@ import {
   FilterThongKeLopHocPhanDto,
 } from './dtos/query-bao-cao.dto';
 import { DanhSachSinhVienReportDto } from './dtos/danh-sach-sinh-vien.dto';
+import { ThongKeTongQuanResponseDto } from './dtos/thong-ke-tong-quan.dto';
+import { VaiTroNguoiDungEnum } from 'src/auth/enums/vai-tro-nguoi-dung.enum';
+import { Roles } from 'src/auth/decorators/roles.decorator';
 
 @ApiTags('Báo cáo')
 @ApiBearerAuth()
 @Controller('bao-cao')
 export class BaoCaoController {
-  constructor(private readonly baoCaoService: BaoCaoService) {}
+  constructor(private readonly baoCaoService: BaoCaoService) { }
 
   @ApiOperation({
     summary: 'Xuất bảng điểm toàn bộ sinh viên trong một lớp học phần (Excel)',
@@ -265,7 +268,14 @@ export class BaoCaoController {
     if (!validQueries.includes(queryType)) {
       throw new BadRequestException('Loại báo cáo không hợp lệ');
     }
-
     await this.baoCaoService.xuatDanhSachSinhVien(queryType, filter, res);
+  }
+
+  @Get('thong-ke/tong-quan')
+  //@Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  @ApiOperation({ summary: 'Thống kê tổng quan: sinh viên, lớp học phần, kết quả học tập' })
+  @ApiResponse({ status: 200, type: ThongKeTongQuanResponseDto })
+  async thongKeTongQuan() {
+    return this.baoCaoService.thongKeTongQuan();
   }
 }

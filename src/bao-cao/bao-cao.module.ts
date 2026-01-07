@@ -7,6 +7,8 @@ import { KetQuaHocTap } from 'src/ket-qua/entity/ket-qua-hoc-tap.entity';
 import { SinhVienLopHocPhan } from 'src/giang-day/entity/sinhvien-lophocphan.entity';
 import { GiangVien } from 'src/danh-muc/entity/giang-vien.entity';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { HocKy } from 'src/dao-tao/entity/hoc-ky.entity';
+import { NienKhoa } from 'src/danh-muc/entity/nien-khoa.entity';
 
 @Module({
   imports: [
@@ -16,6 +18,8 @@ import { TypeOrmModule } from '@nestjs/typeorm';
       KetQuaHocTap,
       GiangVien,
       SinhVienLopHocPhan,
+      HocKy,
+      NienKhoa,
     ]),
   ],
   controllers: [BaoCaoController],
