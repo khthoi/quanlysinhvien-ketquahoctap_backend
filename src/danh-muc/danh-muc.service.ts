@@ -719,11 +719,6 @@ export class DanhMucService {
     }
 
     async updateMyProfile(user: { userId: number; vaiTro: string }, capNhatThongTinCaNhanGiangVienDto: CapNhatThongTinCaNhanGiangVienDto): Promise<GiangVien> {
-        // Kiểm tra vai trò phải là GIANG_VIEN
-        if (user.vaiTro !== VaiTroNguoiDungEnum.GIANG_VIEN) {
-            throw new ForbiddenException('Chỉ giảng viên mới được phép sửa thông tin cá nhân');
-        }
-
         // Tìm giảng viên liên kết với userId (qua bảng NguoiDung)
         const nguoiDung = await this.nguoiDungRepository.findOne({
             where: { id: user.userId },
@@ -750,10 +745,6 @@ export class DanhMucService {
     }
 
     async getMyProfile(user: { userId: number; vaiTro: string }): Promise<GiangVien> {
-        // Kiểm tra vai trò phải là GIANG_VIEN
-        if (user.vaiTro !== VaiTroNguoiDungEnum.GIANG_VIEN) {
-            throw new ForbiddenException('Chỉ giảng viên mới được phép xem thông tin cá nhân');
-        }
         // Tìm giảng viên liên kết với userId (qua bảng NguoiDung)
         const nguoiDung = await this.nguoiDungRepository.findOne({
             where: { id: user.userId },

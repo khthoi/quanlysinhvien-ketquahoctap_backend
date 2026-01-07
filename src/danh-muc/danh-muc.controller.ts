@@ -420,6 +420,36 @@ export class DanhMucController {
   }
 
   /* ==================== GIẢNG VIÊN ==================== */
+  @ApiOperation({ summary: 'Giảng viên cập nhật thông tin cá nhân của mình' })
+  @ApiBody({ type: CapNhatThongTinCaNhanGiangVienDto })
+  @ApiResponse({ status: 200, type: GiangVien })
+  @ApiBearerAuth()
+  @ApiForbiddenResponse({ description: 'Chỉ giảng viên mới được phép làm' })
+  @Put('giang-vien/me/my-profile')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(VaiTroNguoiDungEnum.GIANG_VIEN, VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  async updateMyProfile(
+    @GetUser('userId') userId: number,
+    @GetUser('vaiTro') vaiTro: string,
+    @Body() capNhatThongTinCaNhanGiangVienDto: CapNhatThongTinCaNhanGiangVienDto,
+  ): Promise<GiangVien> {
+    return this.danhMucService.updateMyProfile({ userId, vaiTro }, capNhatThongTinCaNhanGiangVienDto);
+  }
+
+  @ApiOperation({ summary: 'Lấy thông tin cá nhân giảng viên' })
+  @ApiResponse({ status: 200, type: GiangVien })
+  @ApiBearerAuth()
+  @ApiForbiddenResponse({ description: 'Chỉ giảng viên mới được phép' })
+  @Get('giang-vien/me/my-profile')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(VaiTroNguoiDungEnum.GIANG_VIEN, VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  async getMyProfile(
+    @GetUser('userId') userId: number,
+    @GetUser('vaiTro') vaiTro: string,
+  ): Promise<GiangVien> {
+    return this.danhMucService.getMyProfile({ userId, vaiTro });
+  }
+
   @ApiOperation({ summary: 'Lấy danh sách giảng viên (có lọc và phân trang)' })
   @ApiResponse({ status: 200, type: [GiangVien] })
   @ApiBearerAuth()
@@ -478,36 +508,6 @@ export class DanhMucController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteGiangVien(@Param('id', ParseIntPipe) id: number): Promise<void> {
     return this.danhMucService.deleteGiangVien(id);
-  }
-
-  @ApiOperation({ summary: 'Giảng viên cập nhật thông tin cá nhân của mình' })
-  @ApiBody({ type: CapNhatThongTinCaNhanGiangVienDto })
-  @ApiResponse({ status: 200, type: GiangVien })
-  @ApiBearerAuth()
-  @ApiForbiddenResponse({ description: 'Chỉ giảng viên mới được phép' })
-  @Put('giang-vien/me/my-profile')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(VaiTroNguoiDungEnum.GIANG_VIEN)
-  async updateMyProfile(
-    @GetUser('userId') userId: number,
-    @GetUser('vaiTro') vaiTro: string,
-    @Body() capNhatThongTinCaNhanGiangVienDto: CapNhatThongTinCaNhanGiangVienDto,
-  ): Promise<GiangVien> {
-    return this.danhMucService.updateMyProfile({ userId, vaiTro }, capNhatThongTinCaNhanGiangVienDto);
-  }
-
-  @ApiOperation({ summary: 'Lấy thông tin cá nhân giảng viên' })
-  @ApiResponse({ status: 200, type: GiangVien })
-  @ApiBearerAuth()
-  @ApiForbiddenResponse({ description: 'Chỉ giảng viên mới được phép' })
-  @Get('giang-vien/me/my-profile')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(VaiTroNguoiDungEnum.GIANG_VIEN)
-  async getMyProfile(
-    @GetUser('userId') userId: number,
-    @GetUser('vaiTro') vaiTro: string,
-  ): Promise<GiangVien> {
-    return this.danhMucService.getMyProfile({ userId, vaiTro });
   }
 
   /* ==================== PHÂN CÔNG MÔN HỌC ==================== */
