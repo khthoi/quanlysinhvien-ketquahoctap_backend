@@ -1,6 +1,9 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, OneToMany, Unique } from 'typeorm';
 import { Khoa } from './khoa.entity';
 import { ApDungChuongTrinhDT } from 'src/dao-tao/entity/ap-dung-chuong-trinh-dt.entity';
+import { Lop } from './lop.entity';
+import { ChuongTrinhDaoTao } from 'src/dao-tao/entity/chuong-trinh-dao-tao.entity';
+import { LopHocPhan } from 'src/giang-day/entity/lop-hoc-phan.entity';
 
 @Entity('nganh')
 @Unique(['maNganh'])
@@ -21,7 +24,15 @@ export class Nganh {
   @JoinColumn({ name: 'khoa_id' })
   khoa: Khoa;
 
-  // Trong class Nganh
   @OneToMany(() => ApDungChuongTrinhDT, ap => ap.nganh)
   apDungChuongTrinhs: ApDungChuongTrinhDT[];
+
+  @OneToMany(() => Lop, lop => lop.nganh)
+  lops: Lop[];
+
+  @OneToMany(() => ChuongTrinhDaoTao, chuongTrinh => chuongTrinh.nganh)
+  chuongTrinhs: ChuongTrinhDaoTao[];
+
+  @OneToMany(() => LopHocPhan, lopHocPhan => lopHocPhan.nganh)
+  lopHocPhans: LopHocPhan[];
 }

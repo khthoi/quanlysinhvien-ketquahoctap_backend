@@ -2,6 +2,7 @@ import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
 import { LoaiMonEnum } from '../enums/loai-mon.enum';
 import { GiangVienMonHoc } from './giangvien-monhoc.entity';
 import { LopHocPhan } from 'src/giang-day/entity/lop-hoc-phan.entity';
+import { ChiTietChuongTrinhDaoTao } from 'src/dao-tao/entity/chi-tiet-chuong-trinh-dao-tao.entity';
 
 @Entity('mon_hoc')
 export class MonHoc {
@@ -34,4 +35,7 @@ export class MonHoc {
   // Quan hệ ngược: một môn học có thể được mở ở nhiều lớp học phần
   @OneToMany(() => LopHocPhan, lhp => lhp.monHoc)
   lopHocPhans: LopHocPhan[];
+
+  @OneToMany(() => ChiTietChuongTrinhDaoTao, ct => ct.monHoc)
+  chiTietChuongTrinhDaoTaos: ChiTietChuongTrinhDaoTao[];
 }

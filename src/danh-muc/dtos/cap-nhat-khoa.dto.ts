@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsDate } from 'class-validator';
+import { IsString, IsOptional, IsDate, IsDateString } from 'class-validator';
 
 export class UpdateKhoaDto {
 
@@ -19,6 +19,6 @@ export class UpdateKhoaDto {
 
     @ApiPropertyOptional({ description: 'Ngày thành lập khoa', example: '2020-01-15T00:00:00Z' })
     @IsOptional()
-    @IsDate()
-    ngayThanhLap?: Date;
+    @IsDateString()
+    ngayThanhLap?: string;
 }

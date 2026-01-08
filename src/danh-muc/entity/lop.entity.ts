@@ -1,6 +1,7 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique, OneToMany } from 'typeorm';
 import { Nganh } from './nganh.entity';
 import { NienKhoa } from './nien-khoa.entity';
+import { SinhVien } from 'src/sinh-vien/entity/sinh-vien.entity';
 
 @Entity('lop')
 @Unique(['maLop'])  
@@ -21,4 +22,7 @@ export class Lop {
   @ManyToOne(() => NienKhoa, { nullable: false })
   @JoinColumn({ name: 'nien_khoa_id' })
   nienKhoa: NienKhoa;
+
+  @OneToMany(() => SinhVien, (sinhVien) => sinhVien.lop)
+  sinhViens: SinhVien[];
 }

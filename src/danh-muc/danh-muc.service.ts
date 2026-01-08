@@ -133,7 +133,20 @@ export class DanhMucService {
     }
 
     async deleteKhoa(id: number): Promise<void> {
-        const khoa = await this.getKhoaById(id);
+        const khoa = await this.khoaRepository.findOne({
+            where: { id },
+            relations: ['nganhs'],
+        });
+
+        if (!khoa) {
+            throw new NotFoundException(`Khoa với id ${id} không tồn tại`);
+        }
+
+        // Kiểm tra xem khoa có ngành nào không
+        if (khoa.nganhs && khoa.nganhs.length > 0) {
+            throw new BadRequestException('Không thể xóa khoa này vì còn ngành thuộc về khoa');
+        }
+
         await this.khoaRepository.remove(khoa);
     }
 
@@ -144,7 +157,7 @@ export class DanhMucService {
 
         // Lấy tất cả khoa (không phân trang - dùng làm filter)
         const allKhoa = await this.khoaRepository.find({
-            select: ['id', 'tenKhoa'],
+            select: ['id', 'tenKhoa', 'maKhoa'],
             order: { tenKhoa: 'ASC' },
         });
 
@@ -263,7 +276,35 @@ export class DanhMucService {
 
     // Xóa ngành
     async deleteNganh(id: number): Promise<void> {
-        const nganh = await this.getNganhById(id);
+        const nganh = await this.nganhRepository.findOne({
+            where: { id },
+            relations: ['lops,', 'apDungChuongTrinhs', 'chuongTrinhs', 'lopHocPhans'],
+        });
+
+        if (!nganh) {
+            throw new NotFoundException(`Ngành với id ${id} không tồn tại`);
+        }
+
+        // Kiểm tra xem ngành có lớp nào không
+        if (nganh.lops && nganh.lops.length > 0) {
+            throw new BadRequestException('Không thể xóa ngành này vì còn lớp thuộc về ngành');
+        }
+
+        // Kiểm tra xem ngành có áp dụng chương trình đào tạo nào không
+        if (nganh.apDungChuongTrinhs && nganh.apDungChuongTrinhs.length > 0) {
+            throw new BadRequestException('Không thể xóa ngành này vì còn ngành được áp dụng chương trình đào tạo');
+        }
+
+        // Kiểm tra xem ngành có chương trình đào tạo nào không
+        if (nganh.chuongTrinhs && nganh.chuongTrinhs.length > 0) {
+            throw new BadRequestException('Không thể xóa ngành này vì còn chương trình đào tạo của ngành đó');
+        }
+
+        // Kiểm tra xem ngành có lớp học phần nào không
+        if (nganh.lopHocPhans && nganh.lopHocPhans.length > 0) {
+            throw new BadRequestException('Không thể xóa ngành này vì còn lớp học phần của ngành này');
+        }
+
         await this.nganhRepository.remove(nganh);
     }
 
@@ -274,7 +315,7 @@ export class DanhMucService {
         const qb = this.nienKhoaRepository.createQueryBuilder('nienKhoa');
 
         if (search) {
-            qb.andWhere('LOWER(nienKhoa.tenNienKhoa) LIKE LOWER(:search) OR LOWER(nienKhoa.maNamHoc) LIKE LOWER(:search)', { search: `%${search}%` });
+            qb.andWhere('LOWER(nienKhoa.maNienKhoa) LIKE LOWER(:search) OR LOWER(nienKhoa.tenNienKhoa) LIKE LOWER(:search)', { search: `%${search}%` });
         }
 
         qb.orderBy('nienKhoa.namBatDau', 'DESC');
@@ -367,7 +408,30 @@ export class DanhMucService {
 
     // Xóa niên khóa (chỉ cán bộ ĐT)
     async deleteNienKhoa(id: number): Promise<void> {
-        const nienKhoa = await this.getNienKhoaById(id);
+        const nienKhoa = await this.nienKhoaRepository.findOne({
+            where: { id },
+            relations: ['lops,', 'apDungChuongTrinhs', 'lopHocPhans'],
+        });
+
+        if (!nienKhoa) {
+            throw new NotFoundException(`Niên khóa với id ${id} không tồn tại`);
+        }
+
+        // Kiểm tra xem niên khóa có lớp nào không
+        if (nienKhoa.lops && nienKhoa.lops.length > 0) {
+            throw new BadRequestException('Không thể xóa niên khóa này vì còn lớp thuộc về niên khóa');
+        }
+
+        // Kiểm tra xem niên khóa có áp dụng chương trình đào tạo nào không
+        if (nienKhoa.apDungChuongTrinhs && nienKhoa.apDungChuongTrinhs.length > 0) {
+            throw new BadRequestException('Không thể xóa niên khóa này vì còn niên khóa được áp dụng chương trình đào tạo');
+        }
+
+        // Kiểm tra xem niên khóa có lớp học phần nào không
+        if (nienKhoa.lopHocPhans && nienKhoa.lopHocPhans.length > 0) {
+            throw new BadRequestException('Không thể xóa niên khóa này vì còn lớp học phần của niên khóa này');
+        }
+
         await this.nienKhoaRepository.remove(nienKhoa);
     }
 
@@ -377,9 +441,9 @@ export class DanhMucService {
 
         // Lấy các danh sách filter (không phân trang)
         const [allKhoa, allNganh, allNienKhoa] = await Promise.all([
-            this.khoaRepository.find({ select: ['id', 'tenKhoa'], order: { tenKhoa: 'ASC' } }),
+            this.khoaRepository.find({ select: ['id', 'tenKhoa', 'maKhoa'], order: { tenKhoa: 'ASC' } }),
             this.nganhRepository.find({
-                select: ['id', 'tenNganh', 'khoa'],
+                select: ['id', 'tenNganh', 'khoa', 'maNganh'],
                 relations: ['khoa'],
                 order: { tenNganh: 'ASC' },
             }),
@@ -527,7 +591,20 @@ export class DanhMucService {
 
     // Xóa lớp
     async deleteLop(id: number): Promise<void> {
-        const lop = await this.getLopById(id);
+        const lop = await this.lopRepository.findOne({
+            where: { id },
+            relations: ['sinhViens'],
+        });
+
+        if (!lop) {
+            throw new NotFoundException(`Lớp với id ${id} không tồn tại`);
+        }
+
+        // Kiểm tra xem lớp có sinh viên nào không
+        if (lop.sinhViens && lop.sinhViens.length > 0) {
+            throw new BadRequestException('Không thể xóa lớp này vì còn sinh viên thuộc về lớp');
+        }
+
         await this.lopRepository.remove(lop);
     }
 
@@ -542,12 +619,16 @@ export class DanhMucService {
 
     // Thêm mới: version getAllMonHoc() có phân trang + search
     async getAllMonHocWithPagination(query: PaginationQueryDto) {
-        const { page = 1, limit = 10, search } = query;
+        const { page = 1, limit = 10, search, loaiMon } = query;
 
         const qb = this.monHocRepository.createQueryBuilder('monHoc');
 
         if (search) {
             qb.andWhere('LOWER(monHoc.tenMonHoc) LIKE LOWER(:search) OR LOWER(monHoc.maMonHoc) LIKE LOWER(:search)', { search: `%${search}%` });
+        }
+
+        if (loaiMon) {
+            qb.andWhere('monHoc.loaiMon = :loaiMon', { loaiMon });
         }
 
         qb.orderBy('monHoc.tenMonHoc', 'ASC');
@@ -619,7 +700,30 @@ export class DanhMucService {
 
     // Xóa môn học
     async deleteMonHoc(id: number): Promise<void> {
-        const monHoc = await this.getMonHocById(id);
+        const monHoc = await this.monHocRepository.findOne({
+            where: { id },
+            relations: ['lopHocPhans', 'chiTietChuongTrinhDaoTaos', 'giangVienMonHocs'],
+        });
+
+        if (!monHoc) {
+            throw new NotFoundException(`Môn học với id ${id} không tồn tại`);
+        }
+
+        // Kiểm tra xem môn học có lớp học phần nào không
+        if (monHoc.lopHocPhans && monHoc.lopHocPhans.length > 0) {
+            throw new BadRequestException('Không thể xóa môn học này vì còn lớp học phần liên quan');
+        }
+
+        // Kiểm tra xem môn học có trong chi tiết chương trình đào tạo nào không
+        if (monHoc.chiTietChuongTrinhDaoTaos && monHoc.chiTietChuongTrinhDaoTaos.length > 0) {
+            throw new BadRequestException('Không thể xóa môn học này vì còn trong chương trình đào tạo');
+        }
+
+        // Kiểm tra xem môn học có được phân công cho giảng viên nào không
+        if (monHoc.giangVienMonHocs && monHoc.giangVienMonHocs.length > 0) {
+            throw new BadRequestException('Không thể xóa môn học này vì còn giảng viên được phân công');
+        }
+
         await this.monHocRepository.remove(monHoc);
     }
 
@@ -732,7 +836,30 @@ export class DanhMucService {
 
     // Xóa giảng viên (admin)
     async deleteGiangVien(id: number): Promise<void> {
-        const giangVien = await this.getGiangVienById(id);
+        const giangVien = await this.giangVienRepository.findOne({
+            where: { id },
+            relations: ['lopHocPhans', 'monHocGiangViens', 'nguoiDung'],
+        });
+
+        if (!giangVien) {
+            throw new NotFoundException(`Giảng viên với id ${id} không tồn tại`);
+        }
+
+        // Kiểm tra xem giảng viên có được phân công vào lớp học phần nào không
+        if (giangVien.lopHocPhans && giangVien.lopHocPhans.length > 0) {
+            throw new BadRequestException('Không thể xóa giảng viên này vì còn được phân công vào lớp học phần');
+        }
+
+        // Kiểm tra xem giảng viên có được phân công môn học nào không
+        if (giangVien.monHocGiangViens && giangVien.monHocGiangViens.length > 0) {
+            throw new BadRequestException('Không thể xóa giảng viên này vì còn được phân công môn học');
+        }
+
+        // Kiểm tra xem giảng viên có liên kết với người dùng nào không
+        if (giangVien.nguoiDung) {
+            throw new BadRequestException('Không thể xóa giảng viên này vì còn liên kết với tài khoản người dùng');
+        }
+
         await this.giangVienRepository.remove(giangVien);
     }
 

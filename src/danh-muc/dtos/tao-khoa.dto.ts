@@ -16,8 +16,8 @@ export class CreateKhoaDto {
   @IsString()
   moTa?: string;
 
-  @ApiPropertyOptional({ description: 'Ngày thành lập khoa', example: '2020-01-15T00:00:00Z' }) 
+  @ApiPropertyOptional({ description: 'Ngày thành lập khoa', example: '2022-01-15' }) 
   @IsOptional()
   @IsDateString()
-  ngayThanhLap?: Date;
+  ngayThanhLap?: string;
 }

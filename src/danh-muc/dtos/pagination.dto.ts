@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsInt, Min, IsString, IsNotEmpty } from 'class-validator';
+import { IsOptional, IsInt, Min, IsString, IsNotEmpty, IsEnum } from 'class-validator';
 import { Transform } from 'class-transformer';
+import { LoaiMonEnum } from '../enums/loai-mon.enum';
 
 export class PaginationQueryDto {
   @ApiPropertyOptional({ description: 'Số trang', example: 1 })
@@ -21,6 +22,11 @@ export class PaginationQueryDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @ApiPropertyOptional({ description: 'Loại môn học', example: 'TU_CHON' })
+  @IsOptional()
+  @IsEnum(LoaiMonEnum)
+  loaiMon?: LoaiMonEnum;
 }
 
 export class GetLopQueryDto {
