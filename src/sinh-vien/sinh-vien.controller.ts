@@ -32,7 +32,7 @@ import { SinhVienService } from './sinh-vien.service';
 import { CreateSinhVienDto } from './dtos/create-sinh-vien.dto';
 import { UpdateSinhVienDto, UpdateSinhVienSelfDto } from './dtos/update-sinh-vien.dto';
 import { GetSinhVienQueryDto } from './dtos/get-sinh-vien-query.dto';
-import { KhenThuongKyLuatDto } from './dtos/khen-thuong-ky-luat.dto';
+import { GetKhenThuongKyLuatFilterDto, KhenThuongKyLuatDto } from './dtos/khen-thuong-ky-luat.dto';
 import { PhanLopDto } from './dtos/phan-lop.dto';
 import { ThayDoiTinhTrangDto } from './dtos/thay-doi-tinh-trang.dto';
 import { Roles } from 'src/auth/decorators/roles.decorator';
@@ -225,8 +225,8 @@ export class SinhVienController {
   @ApiResponse({ status: 200, description: 'Danh sách thành tích và kỷ luật' })
   @Get('thanh-tich/:sinhvien_id')
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
-  async getThanhTich(@Param('sinhvien_id', ParseIntPipe) sinhvien_id: number) {
-    return this.sinhVienService.getThanhTich(sinhvien_id);
+  async getThanhTich(@Query() query: GetKhenThuongKyLuatFilterDto, @Param('sinhvien_id', ParseIntPipe) sinhvien_id: number) {
+    return this.sinhVienService.getThanhTich(sinhvien_id, query);
   }
 
   /* ==================== SINH VIÊN TỰ XEM THÔNG TIN ==================== */

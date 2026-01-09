@@ -50,7 +50,7 @@ import { UpdateNienKhoaDto } from './dtos/cap-nhat-nien-khoa.dto';
 import { CreateNienKhoaDto } from './dtos/them-nien-khoa.dto';
 import { NienKhoa } from './entity/nien-khoa.entity';
 import { PaginationQueryDto, GetNganhQueryDto, GetLopQueryDto, GetGiangVienQueryDto } from './dtos/pagination.dto';
-import { PhanCongMonHocResponseDto } from './dtos/phan-cong-mon-hoc-response.dto';
+import { GetAllMonHocQueryDto, PhanCongMonHocResponseDto } from './dtos/phan-cong-mon-hoc-response.dto';
 import { GetAllKhoaResponseDto, GetKhoaByIdResponseDto } from './dtos/get-all-khoa-response.dto';
 import { GetAllNganhResponseDto, GetNganhByIdResponseDto } from './dtos/get-all-nganh-response.dto';
 
@@ -355,8 +355,8 @@ export class DanhMucController {
   @Get('mon-hoc')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
-  async getAllMonHoc() {
-    return this.danhMucService.getAllMonHoc();
+  async getAllMonHoc(@Query() query: GetAllMonHocQueryDto) {
+    return this.danhMucService.getAllMonHoc(query);
   }
 
   @ApiOperation({ summary: 'Lấy danh sách môn học có phân trang' })

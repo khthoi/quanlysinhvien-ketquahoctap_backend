@@ -26,7 +26,7 @@ import { CreateNienKhoaDto } from './dtos/them-nien-khoa.dto';
 import { UpdateNienKhoaDto } from './dtos/cap-nhat-nien-khoa.dto';
 import { PaginationQueryDto, GetNganhQueryDto, GetGiangVienQueryDto, GetLopQueryDto } from './dtos/pagination.dto';
 import { GioiTinh } from './enums/gioi-tinh.enum';
-import { PhanCongMonHocResponseDto } from './dtos/phan-cong-mon-hoc-response.dto';
+import { GetAllMonHocQueryDto, PhanCongMonHocResponseDto } from './dtos/phan-cong-mon-hoc-response.dto';
 
 @Injectable()
 export class DanhMucService {
@@ -609,12 +609,16 @@ export class DanhMucService {
     }
 
     // Lấy danh sách tất cả môn học
-    async getAllMonHoc(): Promise<MonHoc[]> {
-        return await this.monHocRepository.find({
-            order: {
-                tenMonHoc: 'ASC',
-            },
-        });
+    async getAllMonHoc(query: GetAllMonHocQueryDto) {
+        const { search } = query;
+        const qb = this.monHocRepository.createQueryBuilder('monHoc');
+        if (search) {
+            qb.andWhere('LOWER(monHoc.tenMonHoc) LIKE LOWER(:search) OR LOWER(monHoc.maMonHoc) LIKE LOWER(:search)', { search: `%${search}%` });
+        }
+        qb.orderBy('monHoc.tenMonHoc', 'ASC');
+
+        const items = await qb.getMany();
+        return items;
     }
 
     // Thêm mới: version getAllMonHoc() có phân trang + search
@@ -727,41 +731,48 @@ export class DanhMucService {
         await this.monHocRepository.remove(monHoc);
     }
 
-    // getAllGiangVien() - phân trang + search tên + lọc theo môn học
     async getAllGiangVien(query: PaginationQueryDto & GetGiangVienQueryDto) {
         const { page = 1, limit = 10, search, monHocId } = query;
 
         const qb = this.giangVienRepository
-            .createQueryBuilder('giangVien')
-            .leftJoinAndSelect('giangVien.monHocGiangViens', 'giangVienMonHoc')
-            .leftJoinAndSelect('giangVienMonHoc.monHoc', 'monHoc');
+            .createQueryBuilder('gv')
+            .leftJoinAndSelect('gv.monHocGiangViens', 'gvmh')
+            .leftJoinAndSelect('gvmh.monHoc', 'mh');
 
+        // ----- PHẦN FILTER CHUẨN -----
         if (monHocId) {
-            qb.andWhere('monHoc.id = :monHocId', { monHocId });
+            qb.innerJoin('gv.monHocGiangViens', 'gvmh_filter')
+                .innerJoin('gvmh_filter.monHoc', 'mh_filter')
+                .andWhere('mh_filter.id = :monHocId', { monHocId });
         }
 
+        // ----- PHẦN SEARCH -----
         if (search) {
             qb.andWhere(
-                'LOWER(giangVien.hoTen) LIKE LOWER(:search) OR LOWER(giangVien.maGiangVien) LIKE LOWER(:search)',
+                '(LOWER(gv.hoTen) LIKE LOWER(:search) OR LOWER(gv.maGiangVien) LIKE LOWER(:search))',
                 { search: `%${search}%` },
             );
         }
 
-        qb.orderBy('giangVien.hoTen', 'ASC');
+        qb.orderBy('gv.hoTen', 'ASC');
 
+        // ---- FIX getCount() để không phá join ----
+        let normalizedPage = Number(page) || 1;
+        let normalizedLimit = Number(limit) || 10;
+        if (normalizedPage < 1) normalizedPage = 1;
+        if (normalizedLimit < 1) normalizedLimit = 10;
         const total = await qb.getCount();
 
-        qb.skip((page - 1) * limit).take(limit);
-
+        qb.skip((normalizedPage - 1) * normalizedLimit).take(normalizedLimit);
         const items = await qb.getMany();
 
         return {
             data: items,
             pagination: {
                 total,
-                page,
-                limit,
-                totalPages: Math.ceil(total / limit),
+                page: normalizedPage,
+                limit: normalizedLimit,
+                totalPages: Math.ceil(total / normalizedLimit),
             },
         };
     }

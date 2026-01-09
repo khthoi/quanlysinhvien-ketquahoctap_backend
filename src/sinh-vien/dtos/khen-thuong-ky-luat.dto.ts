@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsEnum, IsDateString } from 'class-validator';
+import { IsNotEmpty, IsEnum, IsDateString, IsString, IsOptional } from 'class-validator';
 import { LoaiKhenThuongKyLuatEnum } from '../entity/khenthuong-kyluat.entity';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -17,4 +17,12 @@ export class KhenThuongKyLuatDto {
   @IsNotEmpty()
   @IsDateString({}, { message: 'ngayQuyetDinh phải có định dạng YYYY-MM-DD' })
   ngayQuyetDinh: string;
+}
+
+export class GetKhenThuongKyLuatFilterDto {
+
+  @ApiProperty({ description: 'Lọc theo loại khen thưởng/kỷ luật', example: 'KY_LUAT', required: false })
+  @IsOptional()
+  @IsEnum(LoaiKhenThuongKyLuatEnum)
+  loai?: LoaiKhenThuongKyLuatEnum;
 }

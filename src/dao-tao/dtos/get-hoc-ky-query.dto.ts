@@ -14,4 +14,16 @@ export class GetHocKyQueryDto {
   @IsNumber()
   @Transform(({ value }) => parseInt(value, 10))
   hockythu?: string;
+
+  @ApiPropertyOptional({ description: 'Tìm theo trang', example: 1 })
+  @IsOptional()
+  @Transform(({ value }) => parseInt(value, 10))
+  @IsInt()
+  page?: number;
+
+  @ApiPropertyOptional({ description: 'Số mục trên mỗi trang', example: 10 })
+  @IsOptional()
+  @Transform(({ value }) => parseInt(value, 10))
+  @IsInt()
+  limit?: number;
 }

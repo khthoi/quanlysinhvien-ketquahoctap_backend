@@ -7,7 +7,7 @@ import { Lop } from 'src/danh-muc/entity/lop.entity';
 import { CreateSinhVienDto } from './dtos/create-sinh-vien.dto';
 import { UpdateSinhVienDto, UpdateSinhVienSelfDto } from './dtos/update-sinh-vien.dto';
 import { GetSinhVienQueryDto } from './dtos/get-sinh-vien-query.dto';
-import { KhenThuongKyLuatDto } from './dtos/khen-thuong-ky-luat.dto';
+import { GetKhenThuongKyLuatFilterDto, KhenThuongKyLuatDto } from './dtos/khen-thuong-ky-luat.dto';
 import { PhanLopDto } from './dtos/phan-lop.dto';
 import { ThayDoiTinhTrangDto } from './dtos/thay-doi-tinh-trang.dto';
 import { NguoiDung } from 'src/auth/entity/nguoi-dung.entity';
@@ -194,7 +194,8 @@ export class SinhVienService {
             .createQueryBuilder('sv')
             .leftJoinAndSelect('sv.lop', 'lop')
             .leftJoinAndSelect('lop.nganh', 'nganh')
-            .leftJoinAndSelect('nganh.khoa', 'khoa');
+            .leftJoinAndSelect('nganh.khoa', 'khoa')
+            .leftJoinAndSelect('lop.nienKhoa', 'nienKhoa');
 
         if (lopId) qb.andWhere('lop.id = :lopId', { lopId });
         if (nganhId) qb.andWhere('nganh.id = :nganhId', { nganhId });
@@ -357,7 +358,10 @@ export class SinhVienService {
         return { message: 'Xóa thành công' };
     }
 
-    async getThanhTich(sinhVienId: number) {
+    async getThanhTich(sinhVienId: number, query: GetKhenThuongKyLuatFilterDto) {
+        const { loai } = query;
+
+        // Lấy thông tin sinh viên + quan hệ
         const sv = await this.sinhVienRepo.findOne({
             where: { id: sinhVienId },
             relations: ['lop', 'lop.nganh', 'lop.nienKhoa'],
@@ -365,11 +369,24 @@ export class SinhVienService {
 
         if (!sv) throw new NotFoundException('Sinh viên không tồn tại');
 
-        const ktkl = await this.ktklRepo.find({
-            where: { sinhVien: { id: sinhVienId } },
-            order: { ngayQuyetDinh: 'DESC' },
-        });
+        // Truy vấn thành tích
+        let ktkl;
 
+        // Nếu có filter loai → lọc theo loại
+        if (loai) {
+            ktkl = await this.ktklRepo.find({
+                where: { sinhVien: { id: sinhVienId }, loai },
+                order: { ngayQuyetDinh: 'DESC' },
+            });
+        } else {
+            // Không có filter → lấy toàn bộ
+            ktkl = await this.ktklRepo.find({
+                where: { sinhVien: { id: sinhVienId } },
+                order: { ngayQuyetDinh: 'DESC' },
+            });
+        }
+
+        // Trả kết quả
         return {
             sinhVien: {
                 id: sv.id,
@@ -381,6 +398,7 @@ export class SinhVienService {
             khenThuongKyLuat: ktkl,
         };
     }
+
 
     // src/sinh-vien/sinh-vien.service.ts
 

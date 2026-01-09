@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Not, Repository } from 'typeorm';
 import { NamHoc } from './entity/nam-hoc.entity';
 import { HocKy } from './entity/hoc-ky.entity';
 import { CreateNamHocDto } from './dtos/create-nam-hoc.dto';
@@ -51,33 +51,28 @@ export class DaoTaoService {
 
   // ==================== NĂM HỌC ====================
 
-  async getAllNamHoc(query: GetNamHocQueryDto & { page?: number; limit?: number }) {
+  async getAllNamHoc(query: GetNamHocQueryDto) {
     const { search, page = 1, limit = 10 } = query;
 
     const qb = this.namHocRepo
       .createQueryBuilder('namHoc')
       .leftJoinAndSelect('namHoc.hocKys', 'hocKy')
-      .orderBy('namHoc.namBatDau', 'DESC')
-      .addOrderBy('hocKy.hoc_ky', 'ASC');
+      .orderBy('namHoc.namBatDau', 'DESC'); // ❗ bỏ orderBy liên quan hocKy
 
     if (search) {
-      qb.andWhere('LOWER(namHoc.tenNamHoc) LIKE LOWER(:search) OR LOWER(namHoc.maNamHoc) LIKE LOWER(:search)', {
-        search: `%${search}%`,
-      });
+      qb.andWhere(
+        '(LOWER(namHoc.tenNamHoc) LIKE :search OR LOWER(namHoc.maNamHoc) LIKE :search)',
+        { search: `%${search.toLowerCase()}%` },
+      );
     }
 
-    // Đếm tổng số bản ghi (cho pagination)
-    const total = await qb.getCount();
-
     // Phân trang
-    const skip = (page - 1) * limit;
-    qb.skip(skip).take(limit);
+    qb.skip((page - 1) * limit).take(limit);
 
-    // Lấy dữ liệu
-    const namHocs = await qb.getMany();
+    const [data, total] = await qb.getManyAndCount();
 
     return {
-      data: namHocs,
+      data,
       pagination: {
         total,
         page,
@@ -86,6 +81,7 @@ export class DaoTaoService {
       },
     };
   }
+
 
   async createNamHoc(dto: CreateNamHocDto) {
     // Kiểm tra năm kết thúc phải = năm bắt đầu + 1
@@ -161,13 +157,12 @@ export class DaoTaoService {
   // ==================== HỌC KỲ ====================
 
   async getAllHocKy(query: GetHocKyQueryDto) {
-    const { namHocId, hockythu } = query;
+    const { namHocId, hockythu, page = 1, limit = 10 } = query;
 
     const qb = this.hocKyRepo
       .createQueryBuilder('hocKy')
       .leftJoinAndSelect('hocKy.namHoc', 'namHoc')
       .orderBy('namHoc.namBatDau', 'DESC')
-      .addOrderBy('hocKy.hoc_ky', 'ASC');
 
     if (namHocId) {
       qb.andWhere('hocKy.nam_hoc_id = :namHocId', { namHocId });
@@ -177,7 +172,16 @@ export class DaoTaoService {
       qb.andWhere('hocKy.hoc_ky = :hockythu', { hockythu });
     }
 
-    return await qb.getMany();
+    qb.skip((page - 1) * limit).take(limit);
+    const [data, total] = await qb.getManyAndCount();
+    return {
+      data,
+      pagination: {
+        total,
+        page,
+        limit,
+      },
+    };
   }
 
   async createHocKy(dto: CreateHocKyDto) {
@@ -416,6 +420,7 @@ export class DaoTaoService {
 
     const existCTDT = await this.chuongTrinhRepo.findOneBy({
       maChuongTrinh: dto.maChuongTrinh,
+      id: Not(id),
     });
 
     if (existCTDT) {
@@ -624,22 +629,6 @@ export class DaoTaoService {
       throw new BadRequestException('Bản ghi chi tiết không có thông tin chương trình đào tạo');
     }
 
-    if (dto.monHocId && dto.monHocId !== chiTiet.monHoc.id) {
-      const monHoc = await this.monHocRepo.findOneBy({ id: dto.monHocId });
-      if (!monHoc) throw new NotFoundException('Môn học không tồn tại');
-
-      // Kiểm tra trùng môn trong cùng chương trình
-      const exist = await this.chiTietRepo.findOneBy({
-        chuongTrinh: { id: chiTiet.chuongTrinh.id },
-        monHoc: { id: dto.monHocId },
-      });
-      if (exist && exist.id !== id) {
-        throw new BadRequestException('Môn học này đã tồn tại trong chương trình');
-      }
-
-      chiTiet.monHoc = monHoc;
-    }
-
     if (dto.thuTuHocKy !== undefined) chiTiet.thuTuHocKy = dto.thuTuHocKy;
     if (dto.ghiChu !== undefined) chiTiet.ghiChu = dto.ghiChu;
 
@@ -682,6 +671,7 @@ export class DaoTaoService {
       chuongTrinh: {
         id: ct.id,
         tenChuongTrinh: ct.tenChuongTrinh,
+        maChuongTrinh: ct.maChuongTrinh,
         thoiGianDaoTao: ct.thoiGianDaoTao,
         nganh: ct.nganh,
       },
@@ -691,6 +681,7 @@ export class DaoTaoService {
         ghiChu: ap.ghiChu,
       })),
       monHocs: ct.chiTietMonHocs.map(ct => ({
+        id: ct.id,
         thuTuHocKy: ct.thuTuHocKy,
         monHoc: ct.monHoc,
         ghiChu: ct.ghiChu,
