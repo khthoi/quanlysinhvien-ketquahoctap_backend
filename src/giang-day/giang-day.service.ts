@@ -2,6 +2,7 @@ import {
     Injectable,
     NotFoundException,
     BadRequestException,
+    ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -27,6 +28,7 @@ import { PaginationQueryDto } from './dtos/pagination-query.dto';
 import { GetMyLopHocPhanQueryDto } from './dtos/get-my-lop-hoc-phan-query.dto';
 import { ApDungChuongTrinhDT } from 'src/dao-tao/entity/ap-dung-chuong-trinh-dt.entity';
 import { ChiTietChuongTrinhDaoTao } from 'src/dao-tao/entity/chi-tiet-chuong-trinh-dao-tao.entity';
+import { VaiTroNguoiDungEnum } from 'src/auth/enums/vai-tro-nguoi-dung.enum';
 
 @Injectable()
 export class GiangDayService {
@@ -65,6 +67,37 @@ export class GiangDayService {
             where: { lopHocPhan: { id: lopHocPhanId } },
         });
         return count;
+    }
+
+    // Tính điểm trung bình cộng học phần (thang 10)
+    private tinhTBCHP(kq: KetQuaHocTap): number | null {
+        if (kq.diemQuaTrinh == null || kq.diemThanhPhan == null || kq.diemThi == null) {
+            return null;
+        }
+        return Number(
+            (
+                kq.diemQuaTrinh * 0.1 +
+                kq.diemThanhPhan * 0.3 +
+                kq.diemThi * 0.6
+            ).toFixed(2),
+        );
+    }
+
+    private tinhDiemChu(diemTB: number): string {
+        if (diemTB >= 9.5) return 'A+';
+        if (diemTB >= 8.5) return 'A';
+        if (diemTB >= 8.0) return 'B+';
+        if (diemTB >= 7.0) return 'B';
+        if (diemTB >= 6.5) return 'C+';
+        if (diemTB >= 5.5) return 'C';
+        if (diemTB >= 5.0) return 'D+';
+        if (diemTB >= 4.0) return 'D';
+        return 'F';
+    }
+
+    private tinhDiemSo(diemTB: number | null): number | null {
+        if (diemTB === null) return null;
+        return Number((diemTB / 10 * 4).toFixed(2));
     }
 
     async create(dto: CreateLopHocPhanDto) {
@@ -589,17 +622,69 @@ export class GiangDayService {
         await this.lopHocPhanRepo.save(lhp);
     }
 
-    async getDanhSachSinhVien(lopHocPhanId: number, query: GetSinhVienTrongLopQueryDto) {
-        const { page = 1, limit = 10, search } = query;
+    async getDanhSachSinhVien(
+        lopHocPhanId: number,
+        userId: number,
+        vaiTro: VaiTroNguoiDungEnum,
+        query: GetSinhVienTrongLopQueryDto,
+    ) {
+        const { page = 1, limit = 10, search, maSinhVienSearch } = query;
 
+        // Load lớp học phần + giảng viên phụ trách (giữ nguyên như cũ)
+        const lhp = await this.lopHocPhanRepo.findOne({
+            where: { id: lopHocPhanId },
+            relations: [
+                'giangVien',
+                'monHoc',
+                'hocKy',
+                'hocKy.namHoc',
+                'nienKhoa',
+                'nganh',
+            ],
+        });
+        if (!lhp) throw new NotFoundException('Lớp học phần không tồn tại');
+
+        // Kiểm tra quyền (giữ nguyên như cũ)
+        if (vaiTro === VaiTroNguoiDungEnum.GIANG_VIEN) {
+            const nguoiDung = await this.nguoiDungRepo.findOne({
+                where: { id: userId },
+                relations: ['giangVien'],
+            });
+
+            if (!nguoiDung || !nguoiDung.giangVien) {
+                throw new ForbiddenException('Bạn không phải giảng viên');
+            }
+
+            if (lhp.giangVien?.id !== nguoiDung.giangVien.id) {
+                throw new ForbiddenException('Bạn không được phân công phụ trách lớp này');
+            }
+        }
+
+        // 1) Tính sĩ số chuẩn (KHÔNG ÁP DỤNG SEARCH)
+        const siSo = await this.svLhpRepo.count({
+            where: { lopHocPhan: { id: lopHocPhanId } },
+        });
+
+        // Query builder
         const qb = this.svLhpRepo
             .createQueryBuilder('svlhp')
             .leftJoinAndSelect('svlhp.sinhVien', 'sinhVien')
             .leftJoinAndSelect('sinhVien.lop', 'lop')
             .leftJoinAndSelect('lop.nganh', 'nganh')
+            .leftJoinAndSelect('lop.nienKhoa', 'nienKhoa')
+            .leftJoinAndSelect('svlhp.lopHocPhan', 'lhp')
+            .leftJoinAndSelect('lhp.ketQuaHocTaps', 'kq') // Load điểm nếu có
+            .leftJoinAndSelect('kq.sinhVien', 'kq_sv')
             .where('svlhp.lop_hoc_phan_id = :lopHocPhanId', { lopHocPhanId });
 
-        if (search) {
+        // Tìm kiếm mở rộng
+        if (maSinhVienSearch) {
+            // Ưu tiên tìm chính xác theo mã SV
+            qb.andWhere('LOWER(sinhVien.maSinhVien) = LOWER(:maSinhVienSearch)', {
+                maSinhVienSearch,
+            });
+        } else if (search) {
+            // Tìm gần đúng theo mã SV hoặc tên SV
             qb.andWhere(
                 '(LOWER(sinhVien.maSinhVien) LIKE LOWER(:search) OR LOWER(sinhVien.hoTen) LIKE LOWER(:search))',
                 { search: `%${search}%` },
@@ -611,12 +696,74 @@ export class GiangDayService {
         const total = await qb.getCount();
         const items = await qb.skip((page - 1) * limit).take(limit).getMany();
 
+        // Xử lý dữ liệu trả về (giữ nguyên phần tính điểm như trước)
+        const data = items.map(item => {
+            const sv = item.sinhVien;
+
+            // Fix: Kiểm tra ketQuaHocTaps tồn tại và là mảng
+            const ketQuaHocTaps = item.lopHocPhan?.ketQuaHocTaps ?? [];
+
+            const kq = ketQuaHocTaps.find(k => k.sinhVien.id === sv.id);
+
+            let diemInfo: {
+                id: number;
+                diemQuaTrinh: number;
+                diemThanhPhan: number;
+                diemThi: number;
+                TBCHP: number | null;
+                DiemSo: number | null;
+                DiemChu: string | null;
+            } | null = null;
+            if (kq) {
+                const tbchp = this.tinhTBCHP(kq);
+                diemInfo = {
+                    id: kq.id,
+                    diemQuaTrinh: kq.diemQuaTrinh,
+                    diemThanhPhan: kq.diemThanhPhan,
+                    diemThi: kq.diemThi,
+                    TBCHP: tbchp,
+                    DiemSo: this.tinhDiemSo(tbchp),
+                    DiemChu: tbchp !== null ? this.tinhDiemChu(tbchp) : null,
+                };
+            }
+
+            return {
+                sinhVien: {
+                    id: sv.id,
+                    maSinhVien: sv.maSinhVien,
+                    hoTen: sv.hoTen,
+                    tenlop: sv.lop?.tenLop || 'N/A',
+                    malop: sv.lop?.maLop || 'N/A',
+                    nganh: sv.lop?.nganh?.tenNganh || 'N/A',
+                    manganh: sv.lop?.nganh?.maNganh || 'N/A',
+                    nienKhoa: sv.lop?.nienKhoa?.maNienKhoa || 'N/A',
+                },
+                loaiThamGia: item.loaiThamGia,
+                ngayDangKy: item.ngayDangKy,
+                diem: diemInfo,
+                chuaCoDiem: !diemInfo,
+            };
+        });
         return {
-            data: items.map(i => ({
-                ...i.sinhVien,
-                loaiThamGia: i.loaiThamGia,
-                ngayDangKy: i.ngayDangKy,
-            })),
+            lopHocPhan: {
+                id: lhp.id,
+                maLopHocPhan: lhp.maLopHocPhan,
+                monHoc: lhp.monHoc.tenMonHoc,
+                mamonHoc: lhp.monHoc.maMonHoc,
+                hocKy: lhp.hocKy.hocKy,
+                ngayBatDau: lhp.hocKy.ngayBatDau,
+                ngayKetThuc: lhp.hocKy.ngayKetThuc,
+                maNienKhoa: lhp.nienKhoa.maNienKhoa,
+                tenNienKhoa: lhp.nienKhoa.tenNienKhoa,
+                maNganh: lhp.nganh.maNganh,
+                tenNganh: lhp.nganh.tenNganh,
+                namhoc: lhp.hocKy.namHoc.maNamHoc,
+                giangVien: lhp.giangVien?.hoTen || 'Chưa phân công',
+                maGiangVien: lhp.giangVien?.maGiangVien || 'Chưa phân công',
+                siSo: siSo,
+                khoaDiem: lhp.khoaDiem,
+            },
+            data,
             pagination: {
                 total,
                 page,
@@ -658,6 +805,7 @@ export class GiangDayService {
             .leftJoinAndSelect('lhp.nienKhoa', 'nienKhoa')
             .leftJoinAndSelect('lhp.nganh', 'nganh')
             .leftJoinAndSelect('nganh.khoa', 'khoa')
+            .loadRelationCountAndMap('lhp.siSo', 'lhp.sinhVienLopHocPhans')
             .where('lhp.giang_vien_id = :giangVienId', { giangVienId });
 
         if (hocKyId) qb.andWhere('lhp.hoc_ky_id = :hocKyId', { hocKyId });
@@ -666,7 +814,7 @@ export class GiangDayService {
         if (nienKhoaId) qb.andWhere('lhp.nien_khoa_id = :nienKhoaId', { nienKhoaId });
 
         qb.orderBy('namHoc.namBatDau', 'DESC')
-            .addOrderBy('hocKy.hoc_ky', 'ASC')
+            .addOrderBy('hocKy.hocKy', 'ASC')
             .addOrderBy('monHoc.tenMonHoc', 'ASC');
 
         const total = await qb.getCount();

@@ -34,6 +34,7 @@ export class CreateLopHocPhanDto {
 
   @ApiPropertyOptional({ description: 'Ghi chú', example: 'Lớp học phần buổi tối' })
   @IsString()
+  @IsOptional()
   ghiChu?: string;
 
   @ApiPropertyOptional({ description: 'Có khóa điểm hay không', example: false })

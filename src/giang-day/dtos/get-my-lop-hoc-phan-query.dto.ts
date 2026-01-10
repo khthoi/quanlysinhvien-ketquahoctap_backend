@@ -18,7 +18,7 @@ export class GetMyLopHocPhanQueryDto {
   @Min(1)
   limit?: number = 10;
 
-  @ApiPropertyOptional({ description: 'ID giảng viên', example: 5 })
+  @ApiPropertyOptional({ description: 'ID học kỳ', example: 5 })
   @IsOptional()
   @Transform(({ value }) => parseInt(value, 10))
   @IsInt()
@@ -30,6 +30,7 @@ export class GetMyLopHocPhanQueryDto {
   @IsInt()
   monHocId?: number;
 
+  @ApiPropertyOptional({ description: 'ID ngành', example: 3 })
   @IsOptional()
   @Transform(({ value }) => parseInt(value, 10))
   @IsInt()

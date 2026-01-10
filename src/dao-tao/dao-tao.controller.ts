@@ -100,6 +100,7 @@ export class DaoTaoController {
   @ApiQuery({ name: 'namHocId', required: false, type: Number })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
+  @Roles(VaiTroNguoiDungEnum.GIANG_VIEN)
   @ApiResponse({ status: 200, description: 'Danh sách học kỳ' })
   @Get('hoc-ky')
   async getAllHocKy(@Query() query: GetHocKyQueryDto) {

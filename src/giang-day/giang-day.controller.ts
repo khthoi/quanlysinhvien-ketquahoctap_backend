@@ -44,7 +44,7 @@ import { GetMyLopHocPhanQueryDto } from './dtos/get-my-lop-hoc-phan-query.dto';
 @Controller('giang-day')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class GiangDayController {
-  constructor(private readonly giangDayService: GiangDayService) {}
+  constructor(private readonly giangDayService: GiangDayService) { }
 
   /* ==================== LỚP HỌC PHẦN (Chỉ cán bộ phòng Đào tạo) ==================== */
 
@@ -133,18 +133,25 @@ export class GiangDayController {
     await this.giangDayService.xoaSinhVienKhoiLop(lopHocPhanId, sinhVienId);
   }
 
-  @ApiOperation({ summary: 'Lấy danh sách sinh viên trong một lớp học phần (có phân trang)' })
+  // Không cần sửa nhiều, chỉ thêm mô tả query mới nếu muốn
+  @Get('lop-hoc-phan/danh-sach-sinh-vien/:lop_hoc_phan_id')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO, VaiTroNguoiDungEnum.GIANG_VIEN)
+  @ApiOperation({
+    summary: 'Lấy danh sách sinh viên trong một lớp học phần (có phân trang, điểm nếu có)',
+    description: 'Cán bộ phòng Đào tạo xem toàn bộ. Giảng viên chỉ xem nếu lớp thuộc mình.',
+  })
   @ApiParam({ name: 'lop_hoc_phan_id', type: Number })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiResponse({ status: 200, description: 'Danh sách sinh viên' })
-  @Get('lop-hoc-phan/danh-sach-sinh-vien/:lop_hoc_phan_id')
-  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Tìm theo mã SV hoặc tên SV' })
+  @ApiQuery({ name: 'maSinhVienSearch', required: false, type: String, description: 'Tìm chính xác theo mã sinh viên' })
   async getDanhSachSinhVien(
     @Param('lop_hoc_phan_id', ParseIntPipe) lopHocPhanId: number,
+    @GetUser('userId') userId: number,
+    @GetUser('vaiTro') vaiTro: VaiTroNguoiDungEnum,
     @Query() query: GetSinhVienTrongLopQueryDto,
   ) {
-    return this.giangDayService.getDanhSachSinhVien(lopHocPhanId, query);
+    return this.giangDayService.getDanhSachSinhVien(lopHocPhanId, userId, vaiTro, query);
   }
 
   /* ==================== GIẢNG VIÊN XEM LỚP ĐƯỢC PHÂN CÔNG ==================== */

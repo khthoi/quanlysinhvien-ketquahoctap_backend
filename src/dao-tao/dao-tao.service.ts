@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Not, Repository } from 'typeorm';
+import { In, Not, Repository } from 'typeorm';
 import { NamHoc } from './entity/nam-hoc.entity';
 import { HocKy } from './entity/hoc-ky.entity';
 import { CreateNamHocDto } from './dtos/create-nam-hoc.dto';
@@ -27,6 +27,7 @@ import { MonHoc } from 'src/danh-muc/entity/mon-hoc.entity';
 import { ChiTietChuongTrinhDaoTao } from './entity/chi-tiet-chuong-trinh-dao-tao.entity';
 import { CreateChiTietMonHocDto } from './dtos/create-chi-tiet-mon-hoc.dto';
 import { UpdateChiTietMonHocDto } from './dtos/update-chi-tiet-mon-hoc.dto';
+import { LopHocPhan } from 'src/giang-day/entity/lop-hoc-phan.entity';
 
 @Injectable()
 export class DaoTaoService {
@@ -47,6 +48,8 @@ export class DaoTaoService {
     private chiTietRepo: Repository<ChiTietChuongTrinhDaoTao>,
     @InjectRepository(MonHoc)
     private monHocRepo: Repository<MonHoc>,
+    @InjectRepository(LopHocPhan)
+    private lopHocPhanRepo: Repository<LopHocPhan>,
   ) { }
 
   // ==================== NĂM HỌC ====================
@@ -653,6 +656,16 @@ export class DaoTaoService {
     return chiTiet;
   }
 
+  private formatDateVN(date: Date | string): string {
+    if (!date) return '';
+    const d = new Date(date);
+    const day = d.getDate().toString().padStart(2, '0');
+    const month = (d.getMonth() + 1).toString().padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+  }
+
+
   // DS môn học trong 1 chương trình (kèm áp dụng)
   async getTatCaMonHocTrongChuongTrinh(chuongTrinhId: number) {
     const ct = await this.chuongTrinhRepo.findOne({
@@ -665,7 +678,42 @@ export class DaoTaoService {
         'chiTietMonHocs.monHoc',
       ],
     });
+
     if (!ct) throw new NotFoundException('Chương trình đào tạo không tồn tại');
+
+    // Lấy danh sách môn học trong CTDT
+    const monHocIds = ct.chiTietMonHocs.map(ct => ct.monHoc.id);
+
+    // Lấy tất cả lớp học phần thuộc các áp dụng CTDT của chương trình này
+    const lopHocPhans = await this.lopHocPhanRepo.find({
+      where: {
+        monHoc: { id: In(monHocIds) }, // chỉ môn trong CTDT
+        nganh: { id: ct.nganh.id },   // ngành của CTDT
+        nienKhoa: In(ct.apDungChuongTrinhs.map(ap => ap.nienKhoa.id)), // các niên khóa áp dụng
+      },
+      relations: [
+        'monHoc',
+        'hocKy',
+        'hocKy.namHoc',
+        'giangVien',
+        'nienKhoa',
+        'nganh',
+        'sinhVienLopHocPhans', // để tính sĩ số
+      ],
+      order: {
+        nienKhoa: { namBatDau: 'DESC' },
+        hocKy: { hocKy: 'ASC' },
+        maLopHocPhan: 'ASC',
+      },
+    });
+
+    // Tính sĩ số cho từng lớp (nếu cần)
+    const lopWithSiSo = await Promise.all(
+      lopHocPhans.map(async lhp => {
+        const siSo = lhp.sinhVienLopHocPhans.length;
+        return { ...lhp, siSo };
+      }),
+    );
 
     return {
       chuongTrinh: {
@@ -680,12 +728,24 @@ export class DaoTaoService {
         ngayApDung: ap.ngayApDung,
         ghiChu: ap.ghiChu,
       })),
-      monHocs: ct.chiTietMonHocs.map(ct => ({
-        id: ct.id,
-        thuTuHocKy: ct.thuTuHocKy,
-        monHoc: ct.monHoc,
-        ghiChu: ct.ghiChu,
-      })).sort((a, b) => a.thuTuHocKy - b.thuTuHocKy),
+      monHocs: ct.chiTietMonHocs
+        .map(ct => ({
+          id: ct.id,
+          thuTuHocKy: ct.thuTuHocKy,
+          monHoc: ct.monHoc,
+          ghiChu: ct.ghiChu,
+        }))
+        .sort((a, b) => a.thuTuHocKy - b.thuTuHocKy),
+      lopHocPhans: lopWithSiSo.map(lhp => ({
+        id: lhp.id,
+        maLopHocPhan: lhp.maLopHocPhan,
+        monHoc: lhp.monHoc.maMonHoc,
+        hocKy: `${lhp.hocKy.hocKy} (${this.formatDateVN(lhp.hocKy.ngayBatDau)} - ${this.formatDateVN(lhp.hocKy.ngayKetThuc)})`,
+        nienKhoa: lhp.nienKhoa.tenNienKhoa,
+        giangVien: lhp.giangVien?.hoTen || 'Chưa phân công',
+        siSo: lhp.siSo,
+        khoaDiem: lhp.khoaDiem,
+      })),
     };
   }
 }

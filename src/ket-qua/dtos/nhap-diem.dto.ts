@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsNumber, Min, Max } from 'class-validator';
+import { IsNotEmpty, IsNumber, Min, Max, IsOptional } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class NhapDiemDto {
@@ -33,4 +33,28 @@ export class NhapDiemDto {
   @Min(0)
   @Max(10)
   diemThi: number;
+}
+
+export class SuaDiemDto {
+
+  @ApiPropertyOptional({ description: 'Điểm quá trình', example: 8.5 })
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  @Max(10)
+  diemQuaTrinh?: number;
+
+  @ApiPropertyOptional({ description: 'Điểm thành phần', example: 7.0 })
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  @Max(10)
+  diemThanhPhan?: number;
+
+  @ApiPropertyOptional({ description: 'Điểm thi', example: 9.0 })
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  @Max(10)
+  diemThi?: number;
 }

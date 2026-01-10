@@ -9,11 +9,13 @@ import { Repository } from 'typeorm';
 import { KetQuaHocTap } from './entity/ket-qua-hoc-tap.entity';
 import { LopHocPhan } from 'src/giang-day/entity/lop-hoc-phan.entity';
 import { SinhVienLopHocPhan } from 'src/giang-day/entity/sinhvien-lophocphan.entity';
-import { NhapDiemDto } from './dtos/nhap-diem.dto';
+import { NhapDiemDto, SuaDiemDto } from './dtos/nhap-diem.dto';
 import { GetKetQuaLopQueryDto } from './dtos/get-ket-qua-lop-query.dto';
 import { NguoiDung } from 'src/auth/entity/nguoi-dung.entity';
 import { VaiTroNguoiDungEnum } from 'src/auth/enums/vai-tro-nguoi-dung.enum';
 import { SinhVien } from 'src/sinh-vien/entity/sinh-vien.entity';
+import * as ExcelJS from 'exceljs';
+import * as fs from 'fs';
 
 @Injectable()
 export class KetQuaService {
@@ -160,7 +162,7 @@ export class KetQuaService {
   }
 
   // Sửa điểm (PUT)
-  async suaDiem(id: number, dto: NhapDiemDto) {
+  async suaDiem(id: number, dto: SuaDiemDto) {
     const ketQua = await this.ketQuaRepo.findOne({
       where: { id },
       relations: ['lopHocPhan'],
@@ -171,9 +173,15 @@ export class KetQuaService {
       throw new ForbiddenException('Lớp học phần đã khóa điểm, không thể sửa');
     }
 
-    ketQua.diemQuaTrinh = dto.diemQuaTrinh;
-    ketQua.diemThanhPhan = dto.diemThanhPhan;
-    ketQua.diemThi = dto.diemThi;
+    if (dto.diemQuaTrinh !== undefined)
+      ketQua.diemQuaTrinh = dto.diemQuaTrinh;
+
+    if (dto.diemThanhPhan !== undefined)
+      ketQua.diemThanhPhan = dto.diemThanhPhan;
+
+    if (dto.diemThi !== undefined)
+      ketQua.diemThi = dto.diemThi;
+
 
     const saved = await this.ketQuaRepo.save(ketQua);
 
@@ -190,15 +198,44 @@ export class KetQuaService {
   }
 
   // DS điểm của lớp học phần
-  async getDanhSachDiemLop(lopHocPhanId: number, query: GetKetQuaLopQueryDto) {
+  async getDanhSachDiemLop(
+    lopHocPhanId: number,
+    userId: number,
+    vaiTro: VaiTroNguoiDungEnum,
+    query: GetKetQuaLopQueryDto,
+  ) {
     const { page = 1, limit = 10, search } = query;
 
+    // Load lớp học phần + giảng viên phụ trách
     const lhp = await this.lopHocPhanRepo.findOne({
       where: { id: lopHocPhanId },
       relations: ['monHoc', 'giangVien', 'hocKy', 'hocKy.namHoc', 'nienKhoa', 'nganh', 'nganh.khoa'],
     });
+
     if (!lhp) throw new NotFoundException('Lớp học phần không tồn tại');
 
+    // Kiểm tra quyền
+    if (vaiTro === VaiTroNguoiDungEnum.GIANG_VIEN) {
+      // Load giảng viên từ userId
+      const nguoiDung = await this.nguoiDungRepo.findOne({
+        where: { id: userId },
+        relations: ['giangVien'],
+      });
+
+      if (!nguoiDung || !nguoiDung.giangVien) {
+        throw new ForbiddenException('Bạn không phải giảng viên, không được xem điểm lớp này');
+      }
+
+      const giangVienId = nguoiDung.giangVien.id;
+
+      if (lhp.giangVien?.id !== giangVienId) {
+        throw new ForbiddenException('Bạn không được phân công phụ trách lớp học phần này');
+      }
+    }
+
+    // Nếu là cán bộ ĐT → cho qua (không kiểm tra giangVien)
+
+    // Query danh sách điểm
     const qb = this.ketQuaRepo
       .createQueryBuilder('kq')
       .leftJoinAndSelect('kq.sinhVien', 'sv')
@@ -228,9 +265,9 @@ export class KetQuaService {
           maSinhVien: kq.sinhVien.maSinhVien,
           hoTen: kq.sinhVien.hoTen,
           lop: {
-            tenLop: kq.sinhVien.lop.tenLop,
-            nganh: kq.sinhVien.lop.nganh,
-            nienKhoa: kq.sinhVien.lop.nienKhoa,
+            tenLop: kq.sinhVien.lop?.tenLop,
+            nganh: kq.sinhVien.lop?.nganh,
+            nienKhoa: kq.sinhVien.lop?.nienKhoa,
           },
         },
         diemQuaTrinh: kq.diemQuaTrinh,
@@ -242,6 +279,26 @@ export class KetQuaService {
       };
     });
 
+    // ===== BỔ SUNG: Sinh viên đã đăng ký nhưng chưa có điểm =====
+    const sinhVienDaDangKy = await this.svLhpRepo.find({
+      where: { lopHocPhan: { id: lopHocPhanId } },
+      relations: ['sinhVien', 'sinhVien.lop', 'sinhVien.lop.nganh', 'sinhVien.lop.nienKhoa'],
+    });
+
+    // Lấy danh sách sinh viên đã có điểm (để loại trừ)
+    const sinhVienCoDiemIds = new Set(items.map(item => item.sinhVien.id));
+    const sinhVienChuaCoDiem = sinhVienDaDangKy
+      .filter(reg => !sinhVienCoDiemIds.has(reg.sinhVien.id))
+      .map(reg => ({
+        id: reg.sinhVien.id,
+        maSinhVien: reg.sinhVien.maSinhVien,
+        hoTen: reg.sinhVien.hoTen,
+        lop: {
+          tenLop: reg.sinhVien.lop?.tenLop,
+          nganh: reg.sinhVien.lop?.nganh,
+          nienKhoa: reg.sinhVien.lop?.nienKhoa,
+        },
+      }));
     return {
       lopHocPhan: {
         id: lhp.id,
@@ -252,12 +309,13 @@ export class KetQuaService {
           hoTen: lhp.giangVien.hoTen,
         } : null,
         hocKy: lhp.hocKy,
-        namHoc: lhp.hocKy.namHoc,
+        namHoc: lhp.hocKy?.namHoc,
         nienKhoa: lhp.nienKhoa,
         nganh: lhp.nganh,
         khoaDiem: lhp.khoaDiem,
       },
       data,
+      sinhVienChuaCoDiem,
       pagination: {
         total,
         page,
@@ -266,7 +324,6 @@ export class KetQuaService {
       },
     };
   }
-
   // Sinh viên xem kết quả của mình
   async getKetQuaCuaToi(userId: number) {
     const nguoiDung = await this.nguoiDungRepo.findOne({
@@ -317,5 +374,131 @@ export class KetQuaService {
         DiemChu: tbchp !== null ? this.tinhDiemChu(tbchp) : null,
       };
     });
+  }
+
+  async nhapDiemExcel(lopHocPhanId: number, userId: number, filePath: string) {
+    // Load lớp học phần
+    const lhp = await this.lopHocPhanRepo.findOne({
+      where: { id: lopHocPhanId },
+      relations: ['giangVien'],
+    });
+    if (!lhp) throw new NotFoundException('Lớp học phần không tồn tại');
+
+    // Kiểm tra khóa điểm
+    if (lhp.khoaDiem) {
+      throw new ForbiddenException('Lớp học phần đã khóa điểm, không thể nhập');
+    }
+
+    // Kiểm tra quyền (tương tự nhapDiem)
+    const nguoiDung = await this.nguoiDungRepo.findOne({
+      where: { id: userId },
+      relations: ['giangVien'],
+    });
+
+    if (!nguoiDung) throw new ForbiddenException('Không tìm thấy thông tin tài khoản');
+
+    if (nguoiDung.vaiTro !== VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO) {
+      if (!nguoiDung.giangVien) {
+        throw new ForbiddenException('Tài khoản chưa liên kết với hồ sơ giảng viên');
+      }
+      if (lhp.giangVien?.id !== nguoiDung.giangVien.id) {
+        throw new ForbiddenException('Bạn không được phép nhập điểm cho lớp này');
+      }
+    }
+
+    // Load tất cả đăng ký SV trong lớp
+    const dangKyMap = new Map<string, SinhVienLopHocPhan>();
+    const dangKyList = await this.svLhpRepo.find({
+      where: { lopHocPhan: { id: lopHocPhanId } },
+      relations: ['sinhVien'],
+    });
+    dangKyList.forEach(dk => dangKyMap.set(dk.sinhVien.maSinhVien, dk));
+
+    // Load kết quả điểm hiện có để kiểm tra trùng
+    const existingKetQuaMap = new Map<string, KetQuaHocTap>();
+    const existingKetQua = await this.ketQuaRepo.find({
+      where: { lopHocPhan: { id: lopHocPhanId } },
+      relations: ['sinhVien'],
+    });
+    existingKetQua.forEach(kq => existingKetQuaMap.set(kq.sinhVien.maSinhVien, kq));
+
+    // Đọc file Excel
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.readFile(filePath);
+
+    const worksheet = workbook.getWorksheet(1);
+    if (!worksheet) throw new BadRequestException('File không có sheet dữ liệu');
+
+    const results = {
+      success: 0,
+      failed: 0,
+      errors: [] as { row: number; maSinhVien: string; error: string }[],
+    };
+
+    const rows = worksheet.getRows(2, worksheet.rowCount - 1) || [];
+
+    for (const row of rows) {
+      const rowNum = row.number;
+
+      const maSinhVien = row.getCell(2).value?.toString().trim(); // Cột 2: Mã sinh viên
+      const diemQuaTrinh = parseFloat(row.getCell(5).value?.toString() || 'NaN');
+      const diemThanhPhan = parseFloat(row.getCell(6).value?.toString() || 'NaN');
+      const diemThi = parseFloat(row.getCell(7).value?.toString() || 'NaN');
+
+      if (!maSinhVien) {
+        results.errors.push({ row: rowNum, maSinhVien: 'N/A', error: 'Thiếu mã sinh viên' });
+        results.failed++;
+        continue;
+      }
+
+      try {
+        // Validate SV tồn tại và đăng ký lớp
+        const dangKy = dangKyMap.get(maSinhVien);
+        if (!dangKy) {
+          throw new BadRequestException('Sinh viên không đăng ký lớp học phần này');
+        }
+
+        // Kiểm tra đã có điểm chưa
+        if (existingKetQuaMap.has(maSinhVien)) {
+          throw new BadRequestException('Sinh viên đã có điểm, không thể nhập lại');
+        }
+
+        // Validate điểm (0-10, không NaN)
+        if (isNaN(diemQuaTrinh) || diemQuaTrinh < 0 || diemQuaTrinh > 10) {
+          throw new BadRequestException('Điểm chuyên cần không hợp lệ (0-10)');
+        }
+        if (isNaN(diemThanhPhan) || diemThanhPhan < 0 || diemThanhPhan > 10) {
+          throw new BadRequestException('Điểm thành phần không hợp lệ (0-10)');
+        }
+        if (isNaN(diemThi) || diemThi < 0 || diemThi > 10) {
+          throw new BadRequestException('Điểm thi không hợp lệ (0-10)');
+        }
+
+        // Tạo kết quả điểm
+        const ketQua = this.ketQuaRepo.create({
+          lopHocPhan: lhp,
+          sinhVien: dangKy.sinhVien,
+          diemQuaTrinh,
+          diemThanhPhan,
+          diemThi,
+        });
+
+        await this.ketQuaRepo.save(ketQua);
+
+        results.success++;
+      } catch (error) {
+        results.failed++;
+        results.errors.push({
+          row: rowNum,
+          maSinhVien: maSinhVien || 'N/A',
+          error: error.message || 'Lỗi không xác định',
+        });
+      }
+    }
+
+    // Xóa file tạm
+    fs.unlinkSync(filePath);
+
+    return results;
   }
 }

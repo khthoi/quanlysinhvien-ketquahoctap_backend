@@ -160,7 +160,7 @@ export class DanhMucController {
   @ApiForbiddenResponse({ description: 'Không có quyền (chỉ cán bộ phòng ĐT)' })
   @Get('nganh')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO, VaiTroNguoiDungEnum.GIANG_VIEN)
   async getAllNganh(@Query() query: PaginationQueryDto & GetNganhQueryDto) {
     return this.danhMucService.getAllNganh(query);
   }
@@ -354,7 +354,7 @@ export class DanhMucController {
   @ApiBearerAuth()
   @Get('mon-hoc')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO, VaiTroNguoiDungEnum.GIANG_VIEN)
   async getAllMonHoc(@Query() query: GetAllMonHocQueryDto) {
     return this.danhMucService.getAllMonHoc(query);
   }
