@@ -26,3 +26,7 @@ export class Lop {
   @OneToMany(() => SinhVien, (sinhVien) => sinhVien.lop)
   sinhViens: SinhVien[];
 }
+
+export interface LopWithTongSinhVien extends Lop {
+  tongSinhVien: number; // ← Field động từ loadRelationCountAndMap
+}

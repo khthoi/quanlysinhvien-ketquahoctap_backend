@@ -29,6 +29,8 @@ import { GetMyLopHocPhanQueryDto } from './dtos/get-my-lop-hoc-phan-query.dto';
 import { ApDungChuongTrinhDT } from 'src/dao-tao/entity/ap-dung-chuong-trinh-dt.entity';
 import { ChiTietChuongTrinhDaoTao } from 'src/dao-tao/entity/chi-tiet-chuong-trinh-dao-tao.entity';
 import { VaiTroNguoiDungEnum } from 'src/auth/enums/vai-tro-nguoi-dung.enum';
+import * as ExcelJS from 'exceljs';
+import * as fs from 'fs/promises';
 
 @Injectable()
 export class GiangDayService {
@@ -340,6 +342,10 @@ export class GiangDayService {
 
         if (dto.ghiChu !== undefined) {
             lhp.ghiChu = dto.ghiChu;
+        }
+
+        if (dto.khoaDiem !== undefined) {
+            lhp.khoaDiem = dto.khoaDiem;
         }
 
         // 2. Cập nhật các relation nếu có thay đổi
@@ -1003,5 +1009,123 @@ export class GiangDayService {
         if (!lhp) throw new NotFoundException('Lớp học phần không tồn tại');
         lhp.khoaDiem = true;
         await this.lopHocPhanRepo.save(lhp);
+    }
+
+    async themSinhVienBangExcelTuFile(filePath: string) {
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.readFile(filePath);
+
+        const worksheet = workbook.getWorksheet(1);
+        if (!worksheet) throw new BadRequestException('File không có sheet dữ liệu');
+
+        const rows = worksheet.getRows(2, worksheet.rowCount - 1) || [];
+        if (rows.length === 0) throw new BadRequestException('File Excel không có dữ liệu từ dòng 2 trở đi');
+
+        // Nhóm dữ liệu theo maLopHocPhan
+        const groups: { [maLopHocPhan: string]: { rowNum: number; maSinhVien: string }[] } = {};
+
+        const overallResults = {
+            totalRows: rows.length,
+            success: 0,
+            failed: 0,
+            byClass: {} as Record<string, { success: number; failed: number; errors: { row: number; maSinhVien: string; error: string }[] }>,
+            errors: [] as { row: number; maSinhVien: string; maLopHocPhan: string; error: string }[],
+        };
+
+        for (const row of rows) {
+            const rowNum = row.number;
+
+            const maSinhVien = row.getCell(2)?.value?.toString().trim() || '';
+            const maLopHocPhan = row.getCell(7)?.value?.toString().trim() || '';
+
+            if (!maSinhVien || !maLopHocPhan) {
+                overallResults.failed++;
+                overallResults.errors.push({
+                    row: rowNum,
+                    maSinhVien: maSinhVien || 'N/A',
+                    maLopHocPhan: maLopHocPhan || 'N/A',
+                    error: !maSinhVien ? 'Thiếu mã sinh viên' : 'Thiếu mã lớp học phần',
+                });
+                continue;
+            }
+
+            if (!groups[maLopHocPhan]) {
+                groups[maLopHocPhan] = [];
+            }
+            groups[maLopHocPhan].push({ rowNum, maSinhVien });
+        }
+
+        // Xử lý từng lớp học phần
+        for (const [maLopHocPhan, students] of Object.entries(groups)) {
+            let lopHocPhan: LopHocPhan | null;
+
+            try {
+                lopHocPhan = await this.lopHocPhanRepo.findOne({
+                    where: { maLopHocPhan },
+                });
+
+                if (!lopHocPhan) {
+                    throw new BadRequestException(`Không tìm thấy lớp học phần với mã ${maLopHocPhan}`);
+                }
+            } catch (err) {
+                // Lớp không tồn tại → toàn bộ sinh viên của lớp này fail
+                overallResults.failed += students.length;
+                students.forEach(s => {
+                    overallResults.errors.push({
+                        row: s.rowNum,
+                        maSinhVien: s.maSinhVien,
+                        maLopHocPhan,
+                        error: `Không tìm thấy lớp học phần ${maLopHocPhan}`,
+                    });
+                });
+                continue;
+            }
+
+            const classResult = {
+                success: 0,
+                failed: 0,
+                errors: [] as { row: number; maSinhVien: string; error: string }[],
+            };
+
+            for (const { rowNum, maSinhVien } of students) {
+                try {
+                    const sinhVien = await this.sinhVienRepo.findOne({
+                        where: { maSinhVien },
+                    });
+
+                    if (!sinhVien) {
+                        throw new BadRequestException(`Mã sinh viên ${maSinhVien} không tồn tại`);
+                    }
+
+                    // Gọi hàm đăng ký hiện có (đã có validate đầy đủ)
+                    await this.dangKySinhVien(lopHocPhan.id, sinhVien.id);
+
+                    classResult.success++;
+                    overallResults.success++;
+                } catch (error) {
+                    classResult.failed++;
+                    overallResults.failed++;
+                    const errMsg = error instanceof BadRequestException ? error.message : 'Lỗi không xác định';
+                    classResult.errors.push({ row: rowNum, maSinhVien, error: errMsg });
+                    overallResults.errors.push({ row: rowNum, maSinhVien, maLopHocPhan, error: errMsg });
+                }
+            }
+
+            overallResults.byClass[maLopHocPhan] = classResult;
+        }
+
+        // Xóa file tạm
+        await fs.unlink(filePath).catch(() => { });
+
+        return {
+            message: `Đã xử lý ${overallResults.totalRows} dòng từ file Excel`,
+            summary: {
+                success: overallResults.success,
+                failed: overallResults.failed,
+                total: overallResults.totalRows,
+            },
+            detailByClass: overallResults.byClass,
+            errors: overallResults.errors.length > 0 ? overallResults.errors : undefined,
+        };
     }
 }

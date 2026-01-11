@@ -72,7 +72,6 @@ export class AuthService {
                 break;
 
             case VaiTroNguoiDungEnum.GIANG_VIEN:
-            case VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO:
                 if (!giangVienId) {
                     throw new BadRequestException(
                         `Tài khoản ${vaiTro} bắt buộc phải có giangVienId`,
@@ -84,7 +83,15 @@ export class AuthService {
                     );
                 }
                 break;
-
+            case VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO:
+                // Có thể không liên kết với giangVienId
+                if (sinhVienId) {
+                    throw new BadRequestException(
+                        `Tài khoản ${vaiTro} không được liên kết với sinhVienId`,
+                    );
+                }
+                break;
+                
             default:
                 throw new BadRequestException('Vai trò không hợp lệ');
         }
@@ -102,15 +109,17 @@ export class AuthService {
             }
         }
 
-        if (giangVienId) {
-            if (!await this.giangVienRepo.findOneBy({ id: giangVienId })) {
-                throw new BadRequestException('Giảng viên không tồn tại');
-            }
-            const existGiangVienAccount = await this.nguoiDungRepo.findOne({
-                where: { giangVien: { id: giangVienId } },
-            });
-            if (existGiangVienAccount) {
-                throw new BadRequestException('Giảng viên này đã có tài khoản rồi, không thể tạo thêm');
+        if (vaiTro !== VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO) {
+            if (giangVienId) {
+                if (!await this.giangVienRepo.findOneBy({ id: giangVienId })) {
+                    throw new BadRequestException('Giảng viên không tồn tại');
+                }
+                const existGiangVienAccount = await this.nguoiDungRepo.findOne({
+                    where: { giangVien: { id: giangVienId } },
+                });
+                if (existGiangVienAccount) {
+                    throw new BadRequestException('Giảng viên này đã có tài khoản rồi, không thể tạo thêm');
+                }
             }
         }
         // ===== Kết thúc validation mới =====

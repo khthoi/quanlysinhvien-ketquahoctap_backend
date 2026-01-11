@@ -12,6 +12,9 @@ import {
   HttpCode,
   HttpStatus,
   Patch,
+  BadRequestException,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -23,6 +26,7 @@ import {
   ApiResponse,
   ApiUnauthorizedResponse,
   ApiForbiddenResponse,
+  ApiConsumes,
 } from '@nestjs/swagger';
 import { GiangDayService } from './giang-day.service';
 import { CreateLopHocPhanDto } from './dtos/create-lop-hoc-phan.dto';
@@ -36,6 +40,9 @@ import { VaiTroNguoiDungEnum } from 'src/auth/enums/vai-tro-nguoi-dung.enum';
 import { GetUser } from 'src/auth/decorators/get-user.decorator';
 import { GetPhanCongQueryDto } from './dtos/get-phan-cong-query.dto';
 import { GetMyLopHocPhanQueryDto } from './dtos/get-my-lop-hoc-phan-query.dto';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
 
 @ApiTags('Giảng dạy')
 @ApiBearerAuth()
@@ -117,6 +124,57 @@ export class GiangDayController {
       message: 'Đăng ký sinh viên vào lớp học phần thành công',
       data: result,
     };
+  }
+
+  @Post('lop-hoc-phan/them-sv-bang-excel')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: './uploads/temp',
+        filename: (req, file, cb) => {
+          const randomName = Array(32)
+            .fill(null)
+            .map(() => Math.round(Math.random() * 16).toString(16))
+            .join('');
+          cb(null, `${randomName}${extname(file.originalname)}`);
+        },
+      }),
+      fileFilter: (req, file, cb) => {
+        if (!file.originalname.match(/\.(xlsx|xls)$/)) {
+          return cb(new BadRequestException('Chỉ chấp nhận file .xlsx hoặc .xls'), false);
+        }
+        cb(null, true);
+      },
+      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+    }),
+  )
+  @ApiOperation({
+    summary: 'Thêm danh sách sinh viên vào các lớp học phần bằng file Excel',
+    description: `File Excel cần có ít nhất 7 cột:
+  - Cột 2: Mã sinh viên (bắt buộc)
+  - Cột 7: Mã lớp học phần (maLopHocPhan - bắt buộc, ví dụ: XSTK2024A)
+  Các cột khác có thể bỏ qua. Hỗ trợ thêm nhiều lớp học phần trong cùng 1 file.`,
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'File Excel (.xlsx) chứa thông tin sinh viên và mã lớp học phần',
+    type: 'multipart/form-data',
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Kết quả thêm sinh viên từ Excel theo từng lớp học phần' })
+  async themSinhVienBangExcel(
+    @GetUser('userId') userId: number, // Nếu cần audit hoặc kiểm tra quyền
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('Không có file được tải lên');
+
+    return this.giangDayService.themSinhVienBangExcelTuFile(file.path);
   }
 
   @ApiOperation({ summary: 'Xóa sinh viên khỏi lớp học phần' })

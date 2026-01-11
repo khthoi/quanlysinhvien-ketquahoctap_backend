@@ -28,6 +28,8 @@ import { ChiTietChuongTrinhDaoTao } from './entity/chi-tiet-chuong-trinh-dao-tao
 import { CreateChiTietMonHocDto } from './dtos/create-chi-tiet-mon-hoc.dto';
 import { UpdateChiTietMonHocDto } from './dtos/update-chi-tiet-mon-hoc.dto';
 import { LopHocPhan } from 'src/giang-day/entity/lop-hoc-phan.entity';
+import { TinhTrangHocTapEnum } from 'src/sinh-vien/enums/tinh-trang-hoc-tap.enum';
+import { SinhVien } from 'src/sinh-vien/entity/sinh-vien.entity';
 
 @Injectable()
 export class DaoTaoService {
@@ -50,6 +52,8 @@ export class DaoTaoService {
     private monHocRepo: Repository<MonHoc>,
     @InjectRepository(LopHocPhan)
     private lopHocPhanRepo: Repository<LopHocPhan>,
+    @InjectRepository(SinhVien)
+    private sinhVienRepo: Repository<SinhVien>,
   ) { }
 
   // ==================== NĂM HỌC ====================
@@ -715,6 +719,36 @@ export class DaoTaoService {
       }),
     );
 
+    // ===== BỔ SUNG: Tổng số sinh viên theo từng niên khóa áp dụng CTDT =====
+    const tongSinhVienTheoNienKhoa: Array<{ nienKhoa: number; maNienKhoa: string; soLuong: number }> = [];
+    for (const ap of ct.apDungChuongTrinhs) {
+      const nienKhoaId = ap.nienKhoa.id;
+
+      // Đếm sinh viên đang học thuộc ngành + niên khóa này
+      const soSv = await this.sinhVienRepo.count({
+        where: {
+          lop: {
+            nganh: { id: ct.nganh.id },
+            nienKhoa: { id: nienKhoaId },
+          },
+          tinhTrang: TinhTrangHocTapEnum.DANG_HOC, // chỉ sinh viên đang học
+        },
+      });
+
+      tongSinhVienTheoNienKhoa.push({
+        maNienKhoa: ap.nienKhoa.maNienKhoa,
+        nienKhoa: ap.nienKhoa.id,
+        soLuong: soSv,
+      });
+    }
+    // Sắp xếp theo niên khóa mới nhất trước
+    tongSinhVienTheoNienKhoa.sort((a, b) =>
+      b.maNienKhoa.localeCompare(a.maNienKhoa)
+    );
+
+    // ===== TRƯỜNG MỚI: Tổng số sinh viên đang áp dụng CTDT (tổng hợp tất cả niên khóa) =====
+  const tongSinhVienApDung = tongSinhVienTheoNienKhoa.reduce((sum, item) => sum + item.soLuong, 0);
+
     return {
       chuongTrinh: {
         id: ct.id,
@@ -746,6 +780,8 @@ export class DaoTaoService {
         siSo: lhp.siSo,
         khoaDiem: lhp.khoaDiem,
       })),
+      tongSinhVienTheoNienKhoa,
+      tongSinhVienApDung,
     };
   }
 }

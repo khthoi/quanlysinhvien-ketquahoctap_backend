@@ -9,6 +9,7 @@ import {
   HttpStatus,
   Query,
   BadRequestException,
+  UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import {
@@ -32,6 +33,7 @@ import { DanhSachSinhVienReportDto } from './dtos/danh-sach-sinh-vien.dto';
 import { ThongKeTongQuanResponseDto } from './dtos/thong-ke-tong-quan.dto';
 import { VaiTroNguoiDungEnum } from 'src/auth/enums/vai-tro-nguoi-dung.enum';
 import { Roles } from 'src/auth/decorators/roles.decorator';
+import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 
 @ApiTags('Báo cáo')
 @ApiBearerAuth()
@@ -272,9 +274,11 @@ export class BaoCaoController {
   }
 
   @Get('thong-ke/tong-quan')
-  //@Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
-  @ApiOperation({ summary: 'Thống kê tổng quan: sinh viên, lớp học phần, kết quả học tập' })
+  @ApiOperation({ summary: 'Thống kê tổng quan cơ bản của hệ thống' })
   @ApiResponse({ status: 200, type: ThongKeTongQuanResponseDto })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
+  @UseGuards(JwtAuthGuard)
+  @Roles(VaiTroNguoiDungEnum.ADMIN, VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async thongKeTongQuan() {
     return this.baoCaoService.thongKeTongQuan();
   }

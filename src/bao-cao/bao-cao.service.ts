@@ -11,10 +11,15 @@ import { FilterHocLaiDto, FilterThongKeNganhDto, FilterThongKeLopHocPhanDto, Fil
 import { LoaiHinhThamGiaLopHocPhanEnum } from 'src/giang-day/enums/loai-hinh-tham-gia-lop-hoc-phan.enum';
 import { SinhVienLopHocPhan } from 'src/giang-day/entity/sinhvien-lophocphan.entity';
 import { DanhSachSinhVienReportDto } from './dtos/danh-sach-sinh-vien.dto';
-import { ThongKeTongQuanResponseDto, ThongKeKetQuaDto } from './dtos/thong-ke-tong-quan.dto';
 import { HocKy } from 'src/dao-tao/entity/hoc-ky.entity';
 import { TinhTrangHocTapEnum } from 'src/sinh-vien/enums/tinh-trang-hoc-tap.enum';
 import { NienKhoa } from 'src/danh-muc/entity/nien-khoa.entity';
+import { ThongKeTongQuanResponseDto } from './dtos/thong-ke-tong-quan.dto';
+import { MonHoc } from 'src/danh-muc/entity/mon-hoc.entity';
+import { Lop } from 'src/danh-muc/entity/lop.entity';
+import { ChuongTrinhDaoTao } from 'src/dao-tao/entity/chuong-trinh-dao-tao.entity';
+import { Nganh } from 'src/danh-muc/entity/nganh.entity';
+import { Khoa } from 'src/danh-muc/entity/khoa.entity';
 
 @Injectable()
 export class BaoCaoService {
@@ -29,10 +34,19 @@ export class BaoCaoService {
         private giangVienRepo: Repository<GiangVien>,
         @InjectRepository(SinhVienLopHocPhan)
         private svLhpRepo: Repository<SinhVienLopHocPhan>,
-        @InjectRepository(HocKy)
-        private hocKyRepo: Repository<HocKy>,
         @InjectRepository(NienKhoa)
         private nienKhoaRepo: Repository<NienKhoa>,
+        @InjectRepository(MonHoc)
+        private monHocRepo: Repository<MonHoc>,
+        @InjectRepository(Lop)
+        private lopRepo: Repository<Lop>,
+        @InjectRepository(ChuongTrinhDaoTao)
+        private chuongTrinhDaoTaoRepo: Repository<ChuongTrinhDaoTao>,
+        @InjectRepository(Nganh)
+        private nganhRepo: Repository<Nganh>,
+        @InjectRepository(Khoa)
+        private khoaRepo: Repository<Khoa>,
+
     ) { }
 
     // Hàm tính điểm
@@ -860,148 +874,47 @@ export class BaoCaoService {
         res.end();
     }
     async thongKeTongQuan(): Promise<ThongKeTongQuanResponseDto> {
-        const now = new Date();
-
-        // Học kỳ hiện tại
-        const hocKyHienTai = await this.hocKyRepo.findOne({
-            where: {
-                ngayBatDau: LessThanOrEqual(now),
-                ngayKetThuc: MoreThanOrEqual(now),
-            },
-            relations: ['namHoc'],
-        });
-
-        if (!hocKyHienTai) throw new BadRequestException('Không xác định được học kỳ hiện tại');
-
-        // Học kỳ trước (đã kết thúc gần nhất)
-        const hocKyTruoc = await this.hocKyRepo.findOne({
-            where: { ngayKetThuc: LessThan(now) },
-            order: { ngayKetThuc: 'DESC' },
-            relations: ['namHoc'],
-        });
-
-        // ================== 1. Thống kê sinh viên ==================
+        // 1. Sinh viên
         const theoTinhTrang = {
-            dangHoc: await this.sinhVienRepo.count({ where: { tinhTrang: TinhTrangHocTapEnum.DANG_HOC } }),
-            baoLuu: await this.sinhVienRepo.count({ where: { tinhTrang: TinhTrangHocTapEnum.BAO_LUU } }),
-            thoiHoc: await this.sinhVienRepo.count({ where: { tinhTrang: TinhTrangHocTapEnum.THOI_HOC } }),
-            daTotNghiep: await this.sinhVienRepo.count({ where: { tinhTrang: TinhTrangHocTapEnum.DA_TOT_NGHIEP } }),
+            dangHoc: await this.sinhVienRepo.count({
+                where: { tinhTrang: TinhTrangHocTapEnum.DANG_HOC },
+            }),
+            baoLuu: await this.sinhVienRepo.count({
+                where: { tinhTrang: TinhTrangHocTapEnum.BAO_LUU },
+            }),
+            thoiHoc: await this.sinhVienRepo.count({
+                where: { tinhTrang: TinhTrangHocTapEnum.THOI_HOC },
+            }),
+            daTotNghiep: await this.sinhVienRepo.count({
+                where: { tinhTrang: TinhTrangHocTapEnum.DA_TOT_NGHIEP },
+            }),
         };
 
         const tongSinhVien = Object.values(theoTinhTrang).reduce((a, b) => a + b, 0);
 
-        // Chi tiết theo niên khóa (chỉ sinh viên đang học)
-        const nienKhoas = await this.nienKhoaRepo.find({ order: { namBatDau: 'DESC' } });
-        // Chỉ lấy 5 niên khóa gần nhất (nếu có ít hơn thì lấy hết)
-        const top5NienKhoas = nienKhoas.slice(0, 5);
-
-        const theoNienKhoa: { nienKhoa: string; soLuong: number }[] = [];
-
-        for (const nk of top5NienKhoas) {
-            const soSv = await this.sinhVienRepo.count({
-                where: {
-                    lop: { nienKhoa: { id: nk.id } },
-                    tinhTrang: TinhTrangHocTapEnum.DANG_HOC, // chỉ sinh viên đang học
-                },
-            });
-
-            theoNienKhoa.push({
-                nienKhoa: nk.tenNienKhoa, // ví dụ: K2025, K2024,...
-                soLuong: soSv,
-            });
-        }
-        // ================== 2. Tổng giảng viên ==================
+        // 2. Các tổng cơ bản khác
         const tongGiangVien = await this.giangVienRepo.count();
+        const tongNganh = await this.nganhRepo.count();               // giả sử bạn có nganhRepo
+        const tongKhoa = await this.khoaRepo.count();                 // giả sử bạn có khoaRepo
+        const tongMonHoc = await this.monHocRepo.count();             // giả sử bạn có monHocRepo
+        const tongLop = await this.lopRepo.count();                   // lớp cố định (theo niên khóa + ngành)
+        const tongLopHocPhan = await this.lopHocPhanRepo.count();     // tất cả lớp học phần mọi thời điểm
+        const tongChuongTrinhDaoTao = await this.chuongTrinhDaoTaoRepo.count(); // giả sử có repo này
+        const tongNienKhoa = await this.nienKhoaRepo.count(); // giả sử có repo này
 
-        // ================== 3. Lớp học phần học kỳ hiện tại ==================
-        const tongLop = await this.lopHocPhanRepo.count({
-            where: { hocKy: { id: hocKyHienTai.id } },
-        });
-
-        const coGv = await this.lopHocPhanRepo.count({
-            where: {
-                hocKy: { id: hocKyHienTai.id },
-                giangVien: Not(IsNull()),
-            },
-        });
-
-        const chuaGv = tongLop - coGv;
-        // ================== 3. Kết quả học kỳ trước ==================
-        let ketQuaStats: ThongKeKetQuaDto | null = null;
-
-        if (hocKyTruoc) {
-            const ketQuaList = await this.ketQuaRepo.find({
-                where: { lopHocPhan: { hocKy: { id: hocKyTruoc.id } } },
-            });
-
-            // Lọc những kết quả có đủ 3 đầu điểm
-            const validKq = ketQuaList.filter(
-                kq =>
-                    kq.diemQuaTrinh != null &&
-                    kq.diemThanhPhan != null &&
-                    kq.diemThi != null,
-            );
-
-            const totalValid = validKq.length;
-
-            if (totalValid > 0) {
-                let sumTb = 0;
-                let dat = 0;     // TBCHP >= 4.0
-                let gioi = 0;    // > 8
-                let kha = 0;     // 6 - 8
-                let tb = 0;      // 4 - 6
-                let yeu = 0;     // < 4
-
-                validKq.forEach(kq => {
-                    const tbchp = this.tinhDiemTBCHP(kq.diemQuaTrinh, kq.diemThanhPhan, kq.diemThi);
-                    sumTb += tbchp;
-
-                    if (tbchp >= 4.0) dat++;
-                    if (tbchp > 8) gioi++;
-                    else if (tbchp >= 6) kha++;
-                    else if (tbchp >= 4) tb++;
-                    else yeu++;
-                });
-
-                const diemTbChung = sumTb / totalValid;
-                const ngayBD = new Date(hocKyTruoc.ngayBatDau).toLocaleDateString('vi-VN');
-                const ngayKT = new Date(hocKyTruoc.ngayKetThuc).toLocaleDateString('vi-VN');
-                const hocKyTruocWithDates = `Học kỳ ${hocKyTruoc.hocKy} (${ngayBD} - ${ngayKT})`;
-                ketQuaStats = {
-                    tieuDe: `Kết quả học kỳ ${hocKyTruocWithDates} - ${hocKyTruoc.namHoc.tenNamHoc}`,
-                    tyLeDat: (dat / totalValid) * 100,
-                    diemTbChung: diemTbChung,
-                    phanLoai: {
-                        gioi: (gioi / totalValid) * 100,
-                        kha: (kha / totalValid) * 100,
-                        trungBinh: (tb / totalValid) * 100,
-                        yeuKem: (yeu / totalValid) * 100,
-                    },
-                };
-            }
-        }
-
-        const ngayBD = new Date(hocKyHienTai.ngayBatDau).toLocaleDateString('vi-VN');
-        const ngayKT = new Date(hocKyHienTai.ngayKetThuc).toLocaleDateString('vi-VN');
-
-        const hocKyHienTaiWithDates = `${hocKyHienTai.hocKy} (${ngayBD} - ${ngayKT})`;
-
-        // Trả về (fallback nếu không có dữ liệu)
         return {
-            sinhVien: 
-            {   
+            sinhVien: {
                 tongSinhVien,
                 theoTinhTrang,
-                theoNienKhoa,
             },
             tongGiangVien,
-            lopHocPhan: {
-                tieuDe: `Lớp học phần học kỳ ${hocKyHienTaiWithDates} - ${hocKyHienTai.namHoc.tenNamHoc}`,
-                tongLop,
-                coGiangVien: coGv,
-                chuaCoGiangVien: chuaGv,
-            },
-            ketQuaHocTap: ketQuaStats || { tieuDe: 'Chưa có dữ liệu học kỳ trước' },
+            tongNienKhoa,
+            tongNganh,
+            tongKhoa,
+            tongMonHoc,
+            tongLop,
+            tongLopHocPhan,
+            tongChuongTrinhDaoTao,
         };
     }
 }

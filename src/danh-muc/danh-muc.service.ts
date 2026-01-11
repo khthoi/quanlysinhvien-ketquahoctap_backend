@@ -9,7 +9,7 @@ import { CreateNganhDto } from './dtos/tao-nganh.dto';
 import { UpdateNganhDto } from './dtos/cap-nhat-nganh.dto';
 import { UpdateLopDto } from './dtos/cap-nhat-lop-nien-che.dto';
 import { CreateLopDto } from './dtos/tao-lop-nien-che.dto';
-import { Lop } from './entity/lop.entity';
+import { Lop, LopWithTongSinhVien } from './entity/lop.entity';
 import { NienKhoa } from './entity/nien-khoa.entity';
 import { UpdateMonHocDto } from './dtos/cap-nhat-mon-hoc.dto';
 import { CreateMonHocDto } from './dtos/tao-mon-hoc.dto';
@@ -435,8 +435,21 @@ export class DanhMucService {
         await this.nienKhoaRepository.remove(nienKhoa);
     }
 
-    // getAllLop() - load khoa/ngành/niên khóa + phân trang + filter
-    async getAllLop(query: PaginationQueryDto & GetLopQueryDto) {
+    // getAllLop() - load khoa/ngành/niên khóa + phân trang + filter + tổng số sinh viên
+    async getAllLop(query: PaginationQueryDto & GetLopQueryDto): Promise<{
+        data: LopWithTongSinhVien[];
+        filters: {
+            khoa: Khoa[];
+            nganh: Nganh[];
+            nienKhoa: NienKhoa[];
+        };
+        pagination: {
+            total: number;
+            page: number;
+            limit: number;
+            totalPages: number;
+        };
+    }> {
         const { page = 1, limit = 10, search, nganhId, nienKhoaId } = query;
 
         // Lấy các danh sách filter (không phân trang)
@@ -453,7 +466,9 @@ export class DanhMucService {
         const qb = this.lopRepository.createQueryBuilder('lop')
             .leftJoinAndSelect('lop.nganh', 'nganh')
             .leftJoinAndSelect('nganh.khoa', 'khoa')
-            .leftJoinAndSelect('lop.nienKhoa', 'nienKhoa');
+            .leftJoinAndSelect('lop.nienKhoa', 'nienKhoa')
+            // Tính tổng số sinh viên trong lớp (field động)
+            .loadRelationCountAndMap('lop.tongSinhVien', 'lop.sinhViens', 'sv');
 
         if (nganhId) {
             qb.andWhere('lop.nganh_id = :nganhId', { nganhId });
@@ -474,7 +489,7 @@ export class DanhMucService {
         const items = await qb.getMany();
 
         return {
-            data: items,
+            data: items as LopWithTongSinhVien[], // Ép kiểu để TypeScript nhận diện tongSinhVien
             filters: {
                 khoa: allKhoa,
                 nganh: allNganh,
@@ -488,7 +503,6 @@ export class DanhMucService {
             },
         };
     }
-
     // Lấy chi tiết một lớp
     async getLopById(id: number): Promise<Lop> {
         const lop = await this.lopRepository.findOne({
@@ -737,7 +751,9 @@ export class DanhMucService {
         const qb = this.giangVienRepository
             .createQueryBuilder('gv')
             .leftJoinAndSelect('gv.monHocGiangViens', 'gvmh')
-            .leftJoinAndSelect('gvmh.monHoc', 'mh');
+            .leftJoinAndSelect('gvmh.monHoc', 'mh')
+            // ── THÊM QUAN HỆ VỚI TÀI KHOẢN (NguoiDung) ──
+            .leftJoinAndSelect('gv.nguoiDung', 'nd'); // Quan hệ OneToOne đã định nghĩa trong entity GiangVien
 
         // ----- PHẦN FILTER CHUẨN -----
         if (monHocId) {
@@ -756,18 +772,34 @@ export class DanhMucService {
 
         qb.orderBy('gv.hoTen', 'ASC');
 
-        // ---- FIX getCount() để không phá join ----
+        // ---- Xử lý phân trang ----
         let normalizedPage = Number(page) || 1;
         let normalizedLimit = Number(limit) || 10;
         if (normalizedPage < 1) normalizedPage = 1;
         if (normalizedLimit < 1) normalizedLimit = 10;
+
         const total = await qb.getCount();
 
         qb.skip((normalizedPage - 1) * normalizedLimit).take(normalizedLimit);
+
         const items = await qb.getMany();
 
+        // Transform data: thêm trường nguoiDung (hoặc null) vào mỗi giảng viên
+        const transformedData = items.map(gv => ({
+            ...gv,
+            nguoiDung: gv.nguoiDung
+                ? {
+                    id: gv.nguoiDung.id,
+                    tenDangNhap: gv.nguoiDung.tenDangNhap,
+                    vaiTro: gv.nguoiDung.vaiTro,
+                    ngayTao: gv.nguoiDung.ngayTao,
+                    // Thêm các trường khác nếu cần, nhưng tránh lộ thông tin nhạy cảm như matKhau
+                }
+                : null,
+        }));
+
         return {
-            data: items,
+            data: transformedData,
             pagination: {
                 total,
                 page: normalizedPage,

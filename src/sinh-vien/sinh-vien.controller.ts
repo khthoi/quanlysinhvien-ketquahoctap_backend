@@ -258,6 +258,22 @@ export class SinhVienController {
   }
 
   @ApiOperation({
+    summary: 'Xét tốt nghiệp theo niên khóa và trả về thống kê',
+    description: `Xét tất cả sinh viên đang học (DANG_HOC) thuộc niên khóa.
+  Cập nhật trạng thái thành DA_TOT_NGHIEP cho những sinh viên đủ điều kiện.
+  Trả về thống kê: tổng SV của niên khóa, số SV đạt TN, số SV không đạt TN.`,
+  })
+  @ApiParam({ name: 'nienKhoaId', type: Number })
+  @ApiResponse({ status: 200, description: 'Thống kê xét tốt nghiệp' })
+  @Get('xet-tot-nghiep/:nienKhoaId/thong-ke')
+  @Roles(VaiTroNguoiDungEnum.ADMIN, VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  async xetTotNghiepThongKe(
+    @Param('nienKhoaId', ParseIntPipe) nienKhoaId: number,
+  ) {
+    return this.sinhVienService.xetTotNghiepVaTraThongKe(nienKhoaId);
+  }
+
+  @ApiOperation({
     summary: 'Sinh viên xem lịch học cá nhân',
     description: 'Lịch các lớp học phần mà sinh viên đang đăng ký, có thể lọc theo học kỳ/năm học',
   })
