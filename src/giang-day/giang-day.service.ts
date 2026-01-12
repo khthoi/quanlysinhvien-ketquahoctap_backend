@@ -5,7 +5,7 @@ import {
     ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, Not, Repository } from 'typeorm';
 import { LopHocPhan } from './entity/lop-hoc-phan.entity';
 import { SinhVienLopHocPhan } from './entity/sinhvien-lophocphan.entity';
 import { CreateLopHocPhanDto } from './dtos/create-lop-hoc-phan.dto';
@@ -130,7 +130,7 @@ export class GiangDayService {
         }
         const tinChiMoi = monHoc.soTinChi;
 
-        // 4. Tính tổng tín chỉ giảng viên đã dạy trong học kỳ này (từ các lớp học phần hiện có)
+        // 4. Tính tổng tín chỉ giảng viên đã dạy trong học kỳ này
         const tongTinChiHienTai = await this.lopHocPhanRepo
             .createQueryBuilder('lhp')
             .innerJoin('lhp.monHoc', 'monHoc')
@@ -149,7 +149,7 @@ export class GiangDayService {
             );
         }
 
-        // === VALIDATION MỚI: Môn học phải có trong CTĐT áp dụng cho ngành + niên khóa ===
+        // === VALIDATION MỚI 1: Môn học phải có trong CTĐT áp dụng ===
         const apDung = await this.apDungRepo.findOne({
             where: {
                 nganh: { id: dto.nganhId },
@@ -173,7 +173,47 @@ export class GiangDayService {
                 'Môn học này không thuộc chương trình đào tạo được áp dụng cho ngành và niên khóa này',
             );
         }
-        // === Kết thúc validation mới ===
+
+        // === VALIDATION MỚI 2: Kiểm tra số lượng lớp học phần tối đa theo số sinh viên ===
+        const MAX_SV_MOT_LOP = 50;
+
+        // Tính tổng sinh viên thuộc ngành + niên khóa này (tất cả tình trạng)
+        const tongSinhVien = await this.sinhVienRepo.count({
+            where: {
+                lop: {
+                    nganh: { id: dto.nganhId },
+                    nienKhoa: { id: dto.nienKhoaId },
+                },
+            },
+        });
+
+        if (tongSinhVien === 0) {
+            throw new BadRequestException(
+                'Ngành và niên khóa này hiện chưa có sinh viên nào. Không thể mở lớp học phần.',
+            );
+        }
+
+        // Số lớp học phần tối đa có thể mở cho môn này
+        const soLopToiDa = Math.ceil(tongSinhVien / MAX_SV_MOT_LOP);
+
+        // Đếm số lớp học phần ĐÃ mở cho môn + ngành + niên khóa + học kỳ hiện tại
+        const soLopDaMo = await this.lopHocPhanRepo.count({
+            where: {
+                monHoc: { id: dto.monHocId },
+                nganh: { id: dto.nganhId },
+                nienKhoa: { id: dto.nienKhoaId },
+                hocKy: { id: dto.hocKyId },
+            },
+        });
+
+        // Kiểm tra nếu mở thêm lớp này thì có vượt quá không
+        if (soLopDaMo >= soLopToiDa) {
+            throw new BadRequestException(
+                `Ngành này (niên khóa ${dto.nienKhoaId}) chỉ có ${tongSinhVien} sinh viên. ` +
+                `Với quy định tối đa ${MAX_SV_MOT_LOP} SV/lớp, chỉ được mở tối đa ${soLopToiDa} lớp học phần cho môn này. ` +
+                `Hiện đã mở ${soLopDaMo} lớp. Không thể mở thêm.`,
+            );
+        }
 
         // 6. Tạo và lưu lớp học phần
         const lhp = this.lopHocPhanRepo.create({
@@ -350,11 +390,10 @@ export class GiangDayService {
 
         // 2. Cập nhật các relation nếu có thay đổi
         if (dto.giangVienId !== undefined && dto.giangVienId !== lhp.giangVien?.id) {
-            // Kiểm tra quyền dạy môn (tùy chọn, nếu muốn nghiêm ngặt)
             const phanCong = await this.giangVienMonHocRepo.findOne({
                 where: {
                     giangVien: { id: dto.giangVienId },
-                    monHoc: { id: lhp.monHoc.id }, // giữ nguyên môn cũ hoặc dto.monHocId nếu có
+                    monHoc: { id: lhp.monHoc.id },
                 },
             });
             if (!phanCong) {
@@ -368,7 +407,6 @@ export class GiangDayService {
             if (!monHoc) throw new BadRequestException('Môn học không tồn tại');
             lhp.monHoc = monHoc;
 
-            // Kiểm tra lại phân công GV nếu đổi môn
             if (!lhp.giangVien) {
                 throw new BadRequestException('Lớp học phần này chưa có giảng viên phụ trách');
             }
@@ -388,7 +426,6 @@ export class GiangDayService {
             if (!hocKy) throw new BadRequestException('Học kỳ không tồn tại');
             lhp.hocKy = hocKy;
 
-            // Kiểm tra lại giới hạn tín chỉ khi đổi học kỳ
             if (!lhp.giangVien) {
                 throw new BadRequestException('Lớp học phần này chưa có giảng viên phụ trách');
             }
@@ -398,13 +435,15 @@ export class GiangDayService {
                 .innerJoin('lhp2.monHoc', 'monHoc')
                 .where('lhp2.giang_vien_id = :giangVienId', { giangVienId: lhp.giangVien.id })
                 .andWhere('lhp2.hoc_ky_id = :hocKyId', { hocKyId: dto.hocKyId })
-                .andWhere('lhp2.id != :currentId', { currentId: id }) // loại trừ lớp hiện tại
+                .andWhere('lhp2.id != :currentId', { currentId: id })
                 .select('SUM(monHoc.so_tin_chi)', 'total')
                 .getRawOne();
 
             const tinChiKhac = Number(tongTinChiHienTai?.total || 0);
             if (tinChiKhac + tinChiMoi > 12) {
-                throw new BadRequestException(`Đổi sang học kỳ này sẽ vượt quá 12 tín chỉ (hiện tại: ${tinChiKhac} + ${tinChiMoi} = ${tinChiKhac + tinChiMoi})`);
+                throw new BadRequestException(
+                    `Đổi sang học kỳ này sẽ vượt quá 12 tín chỉ (hiện tại: ${tinChiKhac} + ${tinChiMoi})`,
+                );
             }
         }
 
@@ -420,7 +459,7 @@ export class GiangDayService {
             lhp.nganh = nganh;
         }
 
-        // === VALIDATION MỚI: Nếu thay đổi monHocId, nganhId hoặc nienKhoaId → kiểm tra lại CTĐT ===
+        // === VALIDATION MỚI 1: Kiểm tra CTĐT nếu thay đổi môn/ngành/niên khóa ===
         const finalNganhId = dto.nganhId ?? lhp.nganh.id;
         const finalNienKhoaId = dto.nienKhoaId ?? lhp.nienKhoa.id;
         const finalMonHocId = dto.monHocId ?? lhp.monHoc.id;
@@ -450,7 +489,51 @@ export class GiangDayService {
                 );
             }
         }
-        // === Kết thúc validation mới ===
+
+        // === VALIDATION MỚI 2: Kiểm tra giới hạn số lớp học phần theo số sinh viên ===
+        const MAX_SV_MOT_LOP = 50;
+
+        // Chỉ chạy validation nếu có thay đổi liên quan đến môn, ngành hoặc niên khóa
+        if (dto.monHocId || dto.nganhId || dto.nienKhoaId) {
+            // Tính tổng sinh viên thuộc ngành + niên khóa sau khi cập nhật
+            const tongSinhVien = await this.sinhVienRepo.count({
+                where: {
+                    lop: {
+                        nganh: { id: finalNganhId },
+                        nienKhoa: { id: finalNienKhoaId },
+                    },
+                },
+            });
+
+            if (tongSinhVien === 0) {
+                throw new BadRequestException(
+                    'Ngành và niên khóa này hiện chưa có sinh viên nào. Không thể cập nhật lớp học phần.',
+                );
+            }
+
+            // Số lớp tối đa cho phép
+            const soLopToiDa = Math.ceil(tongSinhVien / MAX_SV_MOT_LOP);
+
+            // Đếm số lớp học phần ĐÃ tồn tại (không tính lớp đang update)
+            const soLopDaMo = await this.lopHocPhanRepo.count({
+                where: {
+                    monHoc: { id: finalMonHocId },
+                    nganh: { id: finalNganhId },
+                    nienKhoa: { id: finalNienKhoaId },
+                    hocKy: { id: lhp.hocKy.id }, // giữ nguyên học kỳ hiện tại
+                    id: Not(id), // loại trừ chính lớp đang update
+                },
+            });
+
+            // Nếu số lớp đã mở >= số tối đa → không cho phép cập nhật
+            if (soLopDaMo >= soLopToiDa) {
+                throw new BadRequestException(
+                    `Ngành này (niên khóa ${finalNienKhoaId}) chỉ có ${tongSinhVien} sinh viên. ` +
+                    `Với quy định tối đa ${MAX_SV_MOT_LOP} SV/lớp, chỉ được mở tối đa ${soLopToiDa} lớp học phần cho môn này. ` +
+                    `Hiện đã mở ${soLopDaMo} lớp khác. Không thể cập nhật để giữ môn/ngành/niên khóa này.`,
+                );
+            }
+        }
 
         // 3. Lưu thay đổi
         return await this.lopHocPhanRepo.save(lhp);
