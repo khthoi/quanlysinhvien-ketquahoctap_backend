@@ -11,6 +11,9 @@ import {
   Delete,
   Query,
   UseGuards,
+  BadRequestException,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -22,6 +25,7 @@ import {
   ApiBody,
   ApiUnauthorizedResponse,
   ApiForbiddenResponse,
+  ApiConsumes,
 } from '@nestjs/swagger';
 import { DanhMucService } from './danh-muc.service';
 import { CreateKhoaDto } from './dtos/tao-khoa.dto';
@@ -53,6 +57,9 @@ import { PaginationQueryDto, GetNganhQueryDto, GetLopQueryDto, GetGiangVienQuery
 import { GetAllMonHocQueryDto, PhanCongMonHocResponseDto } from './dtos/phan-cong-mon-hoc-response.dto';
 import { GetAllKhoaResponseDto, GetKhoaByIdResponseDto } from './dtos/get-all-khoa-response.dto';
 import { GetAllNganhResponseDto, GetNganhByIdResponseDto } from './dtos/get-all-nganh-response.dto';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
 
 @ApiTags('Danh mục')
 @Controller('danh-muc')
@@ -309,6 +316,45 @@ export class DanhMucController {
     return this.danhMucService.getLopById(id);
   }
 
+  @Post('lop/import-excel')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: './uploads/temp',
+        filename: (req, file, cb) => {
+          const randomName = Array(32).fill(null).map(() => Math.round(Math.random() * 16).toString(16)).join('');
+          cb(null, `${randomName}${extname(file.originalname)}`);
+        },
+      }),
+      fileFilter: (req, file, cb) => {
+        if (!file.originalname.match(/\.(xlsx|xls)$/)) {
+          return cb(new BadRequestException('Chỉ chấp nhận file .xlsx hoặc .xls'), false);
+        }
+        cb(null, true);
+      },
+      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+    }),
+  )
+  @ApiOperation({
+    summary: 'Nhập danh sách lớp niên chế từ file Excel',
+    description: 'File cần có cột: STT (bỏ qua), Mã Lớp, Tên Lớp, Mã Ngành, Mã Niên Khóa',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  async importLopFromExcel(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('Không có file được tải lên');
+
+    return this.danhMucService.importLopFromExcel(file.path);
+  }
+
   @ApiOperation({ summary: 'Tạo lớp mới' })
   @ApiBody({ type: CreateLopDto })
   @ApiResponse({ status: 201, type: Lop })
@@ -378,6 +424,45 @@ export class DanhMucController {
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async getMonHocById(@Param('id', ParseIntPipe) id: number): Promise<MonHoc> {
     return this.danhMucService.getMonHocById(id);
+  }
+
+  @Post('mon-hoc/import-excel')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: './uploads/temp',
+        filename: (req, file, cb) => {
+          const randomName = Array(32).fill(null).map(() => Math.round(Math.random() * 16).toString(16)).join('');
+          cb(null, `${randomName}${extname(file.originalname)}`);
+        },
+      }),
+      fileFilter: (req, file, cb) => {
+        if (!file.originalname.match(/\.(xlsx|xls)$/)) {
+          return cb(new BadRequestException('Chỉ chấp nhận file .xlsx hoặc .xls'), false);
+        }
+        cb(null, true);
+      },
+      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+    }),
+  )
+  @ApiOperation({
+    summary: 'Nhập danh sách môn học từ file Excel',
+    description: 'File cần có cột: STT (bỏ qua), Mã Môn, Tên Môn, Loại Môn, Tín chỉ, Mô tả (tùy chọn)',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  async importMonHocFromExcel(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('Không có file được tải lên');
+
+    return this.danhMucService.importMonHocFromExcel(file.path);
   }
 
   @ApiOperation({ summary: 'Tạo môn học mới' })
@@ -469,6 +554,46 @@ export class DanhMucController {
   @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async getGiangVienById(@Param('id', ParseIntPipe) id: number): Promise<GiangVien> {
     return this.danhMucService.getGiangVienById(id);
+  }
+
+  @Post('giang-vien/import-excel')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: './uploads/temp',
+        filename: (req, file, cb) => {
+          const randomName = Array(32).fill(null).map(() => Math.round(Math.random() * 16).toString(16)).join('');
+          cb(null, `${randomName}${extname(file.originalname)}`);
+        },
+      }),
+      fileFilter: (req, file, cb) => {
+        if (!file.originalname.match(/\.(xlsx|xls)$/)) {
+          return cb(new BadRequestException('Chỉ chấp nhận file .xlsx hoặc .xls'), false);
+        }
+        cb(null, true);
+      },
+      limits: { fileSize: 5 * 1024 * 1024 },
+    }),
+  )
+  @ApiOperation({
+    summary: 'Nhập danh sách giảng viên từ file Excel',
+    description:
+      'Cột: STT (bỏ qua), Mã giảng viên, Họ tên, Ngày sinh (YYYY-MM-DD), Email, SĐT, Giới tính (NAM/NU/KHONG_XAC_DINH), Địa chỉ',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  async importGiangVienFromExcel(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('Không có file được tải lên');
+
+    return this.danhMucService.importGiangVienFromExcel(file.path);
   }
 
   @ApiOperation({ summary: 'Tạo giảng viên mới' })

@@ -244,6 +244,7 @@ export class GiangDayService {
                     nganh: { id: dto.nganhId },
                     nienKhoa: { id: dto.nienKhoaId },
                 },
+                tinhTrang: TinhTrangHocTapEnum.DANG_HOC,
             },
         });
 
@@ -541,6 +542,7 @@ export class GiangDayService {
                         nganh: { id: finalNganhId },
                         nienKhoa: { id: finalNienKhoaId },
                     },
+                    tinhTrang: TinhTrangHocTapEnum.DANG_HOC,
                 },
             });
 

@@ -27,6 +27,9 @@ import { UpdateNienKhoaDto } from './dtos/cap-nhat-nien-khoa.dto';
 import { PaginationQueryDto, GetNganhQueryDto, GetGiangVienQueryDto, GetLopQueryDto } from './dtos/pagination.dto';
 import { GioiTinh } from './enums/gioi-tinh.enum';
 import { GetAllMonHocQueryDto, PhanCongMonHocResponseDto } from './dtos/phan-cong-mon-hoc-response.dto';
+import * as ExcelJS from 'exceljs';
+import * as fs from 'fs/promises';
+import { LoaiMonEnum } from './enums/loai-mon.enum';
 
 @Injectable()
 export class DanhMucService {
@@ -517,6 +520,104 @@ export class DanhMucService {
         return lop;
     }
 
+    async importLopFromExcel(filePath: string): Promise<{
+        message: string;
+        totalRows: number;
+        success: number;
+        failed: number;
+        errors: { row: number; maLop: string; error: string }[];
+    }> {
+        const results = {
+            totalRows: 0,
+            success: 0,
+            failed: 0,
+            errors: [] as { row: number; maLop: string; error: string }[],
+        };
+
+        try {
+            // 1. Đọc file Excel
+            const workbook = new ExcelJS.Workbook();
+            await workbook.xlsx.readFile(filePath);
+            const worksheet = workbook.getWorksheet(1);
+
+            if (!worksheet) {
+                throw new BadRequestException('File Excel không có sheet dữ liệu');
+            }
+
+            const rows = worksheet.getRows(2, worksheet.rowCount - 1) || [];
+            if (rows.length === 0) {
+                throw new BadRequestException('File Excel không có dữ liệu từ dòng 2 trở đi');
+            }
+
+            results.totalRows = rows.length;
+
+            // 2. Duyệt từng dòng
+            for (const row of rows) {
+                const rowNum = row.number;
+
+                const maLop = row.getCell(2).value?.toString().trim() || '';
+                const tenLop = row.getCell(3).value?.toString().trim() || '';
+                const maNganh = row.getCell(4).value?.toString().trim() || '';
+                const maNienKhoa = row.getCell(5).value?.toString().trim() || '';
+
+                // Validate cơ bản
+                if (!maLop || !tenLop || !maNganh || !maNienKhoa) {
+                    results.failed++;
+                    results.errors.push({
+                        row: rowNum,
+                        maLop: maLop || 'N/A',
+                        error: 'Thiếu một hoặc nhiều trường bắt buộc (Mã lớp, Tên lớp, Mã ngành, Mã niên khóa)',
+                    });
+                    continue;
+                }
+
+                try {
+                    // 3. Tra cứu Ngành theo mã
+                    const nganh = await this.nganhRepository.findOne({ where: { maNganh } });
+                    if (!nganh) {
+                        throw new BadRequestException(`Mã ngành ${maNganh} không tồn tại`);
+                    }
+
+                    // 4. Tra cứu Niên khóa theo mã
+                    const nienKhoa = await this.nienKhoaRepository.findOne({ where: { maNienKhoa } });
+                    if (!nienKhoa) {
+                        throw new BadRequestException(`Mã niên khóa ${maNienKhoa} không tồn tại`);
+                    }
+
+                    // 5. Tạo DTO và gọi lại hàm createLop hiện có
+                    const createLopDto = {
+                        maLop,
+                        tenLop,
+                        nganhId: nganh.id,
+                        nienKhoaId: nienKhoa.id,
+                    };
+
+                    await this.createLop(createLopDto);
+
+                    results.success++;
+                } catch (error) {
+                    results.failed++;
+                    results.errors.push({
+                        row: rowNum,
+                        maLop,
+                        error: error.message || 'Lỗi không xác định khi tạo lớp',
+                    });
+                }
+            }
+
+            return {
+                message: `Đã xử lý ${results.totalRows} dòng từ file Excel`,
+                totalRows: results.totalRows,
+                success: results.success,
+                failed: results.failed,
+                errors: results.errors.length > 0 ? results.errors : [],
+            };
+        } finally {
+            // Xóa file tạm sau khi xử lý
+            await fs.unlink(filePath).catch(() => { });
+        }
+    }
+
     // Thêm lớp mới
     async createLop(createLopDto: CreateLopDto): Promise<Lop> {
         // Kiểm tra mã lớp đã tồn tại chưa
@@ -679,6 +780,146 @@ export class DanhMucService {
         return monHoc;
     }
 
+    async importMonHocFromExcel(filePath: string): Promise<{
+        message: string;
+        totalRows: number;
+        success: number;
+        failed: number;
+        errors: { row: number; maMonHoc: string; error: string }[];
+    }> {
+        const results = {
+            totalRows: 0,
+            success: 0,
+            failed: 0,
+            errors: [] as { row: number; maMonHoc: string; error: string }[],
+        };
+
+        try {
+            // 1. Đọc file Excel
+            const workbook = new ExcelJS.Workbook();
+            await workbook.xlsx.readFile(filePath);
+            const worksheet = workbook.getWorksheet(1);
+
+            if (!worksheet) {
+                throw new BadRequestException('File Excel không có sheet dữ liệu');
+            }
+
+            const rows = worksheet.getRows(2, worksheet.rowCount - 1) || [];
+            if (rows.length === 0) {
+                throw new BadRequestException('File Excel không có dữ liệu từ dòng 2 trở đi');
+            }
+
+            results.totalRows = rows.length;
+
+            // 2. Duyệt từng dòng
+            for (const row of rows) {
+                const rowNum = row.number;
+
+                const maMonHoc = row.getCell(2).value?.toString().trim() || '';
+                const tenMonHoc = row.getCell(3).value?.toString().trim() || '';
+                const loaiMonStr = row.getCell(4).value?.toString().trim() || '';
+                const soTinChiStr = row.getCell(5).value?.toString().trim() || '';
+                const moTa = row.getCell(6).value?.toString().trim() || undefined;
+                const maGiangVien = row.getCell(7).value?.toString().trim() || ''; // Cột 7 - tùy chọn
+
+                // Validate cơ bản (thiếu trường bắt buộc)
+                if (!maMonHoc || !tenMonHoc || !loaiMonStr || !soTinChiStr) {
+                    results.failed++;
+                    results.errors.push({
+                        row: rowNum,
+                        maMonHoc: maMonHoc || 'N/A',
+                        error: 'Thiếu một hoặc nhiều trường bắt buộc (Mã môn, Tên môn, Loại môn, Tín chỉ)',
+                    });
+                    continue;
+                }
+
+                // Validate loại môn
+                const loaiMon = LoaiMonEnum[loaiMonStr as keyof typeof LoaiMonEnum];
+                if (!loaiMon) {
+                    results.failed++;
+                    results.errors.push({
+                        row: rowNum,
+                        maMonHoc,
+                        error: `Loại môn "${loaiMonStr}" không hợp lệ. Giá trị cho phép: ${Object.values(LoaiMonEnum).join(', ')}`,
+                    });
+                    continue;
+                }
+
+                // Validate số tín chỉ
+                const soTinChi = parseInt(soTinChiStr, 10);
+                if (isNaN(soTinChi) || soTinChi < 1) {
+                    results.failed++;
+                    results.errors.push({
+                        row: rowNum,
+                        maMonHoc,
+                        error: 'Số tín chỉ phải là số nguyên lớn hơn hoặc bằng 1',
+                    });
+                    continue;
+                }
+
+                try {
+                    // 3. Tạo môn học trước
+                    const createDto: CreateMonHocDto = {
+                        maMonHoc,
+                        tenMonHoc,
+                        loaiMon,
+                        soTinChi,
+                        moTa,
+                    };
+
+                    const monHocMoi = await this.createMonHoc(createDto);
+
+                    // 4. Nếu có mã giảng viên ở cột 7 → phân công
+                    if (!maGiangVien) {
+                        results.failed++;
+                        results.errors.push({
+                            row: rowNum,
+                            maMonHoc,
+                            error: 'Thiếu mã giảng viên để phân công giảng viên cho môn học',
+                        });
+                    } else {
+                        // Tìm giảng viên theo mã
+                        const giangVien = await this.giangVienRepository.findOne({
+                            where: { maGiangVien },
+                        });
+
+                        if (!giangVien) {
+                            throw new BadRequestException(`Mã giảng viên ${maGiangVien} không tồn tại`);
+                        }
+
+                        // Gọi hàm phân công hiện có
+                        const phanCongDto = {
+                            giangVienId: giangVien.id,
+                            monHocId: monHocMoi.id,
+                        };
+
+                        await this.phanCongMonHoc(phanCongDto);
+                    }
+
+                    results.success++;
+                } catch (error) {
+                    results.failed++;
+                    results.errors.push({
+                        row: rowNum,
+                        maMonHoc,
+                        error: error.message || 'Lỗi không xác định khi tạo môn học hoặc phân công giảng viên',
+                    });
+                }
+            }
+
+            return {
+                message: `Đã xử lý ${results.totalRows} dòng từ file Excel`,
+                totalRows: results.totalRows,
+                success: results.success,
+                failed: results.failed,
+                errors: results.errors.length > 0 ? results.errors : [],
+            };
+        } finally {
+            // Xóa file tạm
+            await fs.unlink(filePath).catch(() => { });
+        }
+    }
+
     // Thêm môn học mới
     async createMonHoc(createMonHocDto: CreateMonHocDto): Promise<MonHoc> {
         // Kiểm tra mã môn học đã tồn tại chưa
@@ -834,6 +1075,140 @@ export class DanhMucService {
         }
 
         return giangVien;
+    }
+
+    async importGiangVienFromExcel(filePath: string): Promise<{
+        message: string;
+        totalRows: number;
+        success: number;
+        failed: number;
+        errors: { row: number; maGiangVien: string; error: string }[];
+    }> {
+        const results = {
+            totalRows: 0,
+            success: 0,
+            failed: 0,
+            errors: [] as { row: number; maGiangVien: string; error: string }[],
+        };
+
+        try {
+            // 1. Đọc file Excel
+            const workbook = new ExcelJS.Workbook();
+            await workbook.xlsx.readFile(filePath);
+            const worksheet = workbook.getWorksheet(1);
+
+            if (!worksheet) {
+                throw new BadRequestException('File Excel không có sheet dữ liệu');
+            }
+
+            const rows = worksheet.getRows(2, worksheet.rowCount - 1) || [];
+            if (rows.length === 0) {
+                throw new BadRequestException('File Excel không có dữ liệu từ dòng 2 trở đi');
+            }
+
+            results.totalRows = rows.length;
+
+            // 2. Duyệt từng dòng
+            for (const row of rows) {
+                const rowNum = row.number;
+
+                const maGiangVien = row.getCell(2).value?.toString().trim() || '';
+                const hoTen = row.getCell(3).value?.toString().trim() || '';
+                const ngaySinhStr = row.getCell(4).value?.toString().trim() || undefined;
+                const email = row.getCell(5).value?.toString().trim() || '';
+                const sdt = row.getCell(6).value?.toString().trim() || undefined;
+                const gioiTinhStr = row.getCell(7).value?.toString().trim() || undefined;
+                const diaChi = row.getCell(8).value?.toString().trim() || undefined;
+
+                // Validate bắt buộc
+                if (!maGiangVien || !hoTen || !email) {
+                    results.failed++;
+                    results.errors.push({
+                        row: rowNum,
+                        maGiangVien: maGiangVien || 'N/A',
+                        error: 'Thiếu trường bắt buộc: Mã giảng viên, Họ tên, Email',
+                    });
+                    continue;
+                }
+
+                // Validate email cơ bản (class-validator sẽ kiểm tra thêm khi tạo DTO)
+                if (!email.includes('@')) {
+                    results.failed++;
+                    results.errors.push({
+                        row: rowNum,
+                        maGiangVien,
+                        error: 'Email không hợp lệ',
+                    });
+                    continue;
+                }
+
+                // Validate giới tính (nếu có)
+                let gioiTinh: GioiTinh | undefined;
+                if (gioiTinhStr) {
+                    gioiTinh = GioiTinh[gioiTinhStr as keyof typeof GioiTinh];
+                    if (!gioiTinh) {
+                        results.failed++;
+                        results.errors.push({
+                            row: rowNum,
+                            maGiangVien,
+                            error: `Giới tính "${gioiTinhStr}" không hợp lệ. Giá trị cho phép: NAM, NU, KHONG_XAC_DINH`,
+                        });
+                        continue;
+                    }
+                }
+
+                // Validate ngày sinh (nếu có)
+                let ngaySinh: string | undefined;
+                if (ngaySinhStr) {
+                    // Kiểm tra định dạng YYYY-MM-DD đơn giản
+                    if (!/^\d{4}-\d{2}-\d{2}$/.test(ngaySinhStr)) {
+                        results.failed++;
+                        results.errors.push({
+                            row: rowNum,
+                            maGiangVien,
+                            error: 'Ngày sinh phải có định dạng YYYY-MM-DD',
+                        });
+                        continue;
+                    }
+                    ngaySinh = ngaySinhStr;
+                }
+
+                try {
+                    // 3. Tạo DTO và gọi hàm createGiangVien hiện có
+                    const createDto: CreateGiangVienDto = {
+                        maGiangVien,
+                        hoTen,
+                        ngaySinh,
+                        email,
+                        sdt,
+                        gioiTinh,
+                        diaChi,
+                    };
+
+                    await this.createGiangVien(createDto);
+
+                    results.success++;
+                } catch (error) {
+                    results.failed++;
+                    results.errors.push({
+                        row: rowNum,
+                        maGiangVien,
+                        error: error.message || 'Lỗi không xác định khi tạo giảng viên',
+                    });
+                }
+            }
+
+            return {
+                message: `Đã xử lý ${results.totalRows} dòng từ file Excel`,
+                totalRows: results.totalRows,
+                success: results.success,
+                failed: results.failed,
+                errors: results.errors.length > 0 ? results.errors : [],
+            };
+        } finally {
+            // Xóa file tạm
+            await fs.unlink(filePath).catch(() => { });
+        }
     }
 
     // Thêm giảng viên mới (admin)
