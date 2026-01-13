@@ -288,11 +288,12 @@ export class GiangDayController {
   @ApiParam({ name: 'lop_hoc_phan_id', type: Number })
   @ApiResponse({ status: 200, description: 'Khóa điểm thành công' })
   @Patch('lop-hoc-phan/khoa-diem/:lop_hoc_phan_id')
-  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO, VaiTroNguoiDungEnum.GIANG_VIEN)
   async khoaDiemLopHocPhan(
+    @GetUser('userId') userId: number,
     @Param('lop_hoc_phan_id', ParseIntPipe) lopHocPhanId: number,
   ) {
-    await this.giangDayService.khoaDiemLopHocPhan(lopHocPhanId);
+    await this.giangDayService.khoaDiemLopHocPhan(lopHocPhanId, userId);
     return {
       message: 'Khóa điểm lớp học phần thành công',
     };

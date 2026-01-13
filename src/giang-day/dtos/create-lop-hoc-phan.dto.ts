@@ -17,11 +17,6 @@ export class CreateLopHocPhanDto {
   @IsInt()
   monHocId: number;
 
-  @ApiProperty({ description: 'ID học kỳ', example: 2 })
-  @IsNotEmpty()
-  @IsInt()
-  hocKyId: number;
-
   @ApiProperty({ description: 'ID niên khóa', example: 2023 })
   @IsNotEmpty()
   @IsInt()
@@ -36,8 +31,4 @@ export class CreateLopHocPhanDto {
   @IsString()
   @IsOptional()
   ghiChu?: string;
-
-  @ApiPropertyOptional({ description: 'Có khóa điểm hay không', example: false })
-  @IsOptional()
-  khoaDiem?: boolean;
 }

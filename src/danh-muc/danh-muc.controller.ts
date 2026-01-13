@@ -228,7 +228,7 @@ export class DanhMucController {
   @ApiBearerAuth()
   @Get('nien-khoa')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO, VaiTroNguoiDungEnum.GIANG_VIEN)
   async getAllNienKhoa(@Query() query: PaginationQueryDto) {
     return this.danhMucService.getAllNienKhoa(query);
   }
