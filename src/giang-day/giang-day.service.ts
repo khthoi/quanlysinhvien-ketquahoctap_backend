@@ -5,7 +5,7 @@ import {
     ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, MoreThanOrEqual, Not, Repository } from 'typeorm';
+import { EntityManager, In, MoreThanOrEqual, Not, Repository } from 'typeorm';
 import { LopHocPhan } from './entity/lop-hoc-phan.entity';
 import { SinhVienLopHocPhan } from './entity/sinhvien-lophocphan.entity';
 import { CreateLopHocPhanDto } from './dtos/create-lop-hoc-phan.dto';
@@ -32,6 +32,7 @@ import { VaiTroNguoiDungEnum } from 'src/auth/enums/vai-tro-nguoi-dung.enum';
 import * as ExcelJS from 'exceljs';
 import * as fs from 'fs/promises';
 import { NamHoc } from 'src/dao-tao/entity/nam-hoc.entity';
+import { ChuongTrinhDaoTao } from 'src/dao-tao/entity/chuong-trinh-dao-tao.entity';
 
 @Injectable()
 export class GiangDayService {
@@ -103,6 +104,253 @@ export class GiangDayService {
     private tinhDiemSo(diemTB: number | null): number | null {
         if (diemTB === null) return null;
         return Number((diemTB / 10 * 4).toFixed(2));
+    }
+
+    // Helper: Lấy danh sách giảng viên được phân công cho môn học, sắp xếp theo ID tăng dần
+    private async layGiangVienPhanCongChoMon(monHocId: number, manager: EntityManager): Promise<GiangVien[]> {
+        return await manager.find(GiangVien, {
+            where: {
+                monHocGiangViens: {
+                    monHoc: { id: monHocId },
+                },
+            },
+            order: {
+                id: 'ASC', // Gán từ GV có ID nhỏ nhất trước
+            },
+        });
+    }
+
+    // Helper: Tìm HocKy phù hợp với thứ tự học kỳ từ năm bắt đầu của niên khóa
+    private async timHocKyTuThuTu(namBatDau: number, thuTuMongMuon: number, manager: EntityManager): Promise<HocKy | null> {
+        const namHocs = await manager.find(NamHoc, {
+            where: { namBatDau: MoreThanOrEqual(namBatDau) },
+            order: { namBatDau: 'ASC' },
+        });
+
+        let currentThuTu = 0;
+        for (const namHoc of namHocs) {
+            const hocKys = await manager.find(HocKy, {
+                where: { namHoc: { id: namHoc.id } },
+                order: { hocKy: 'ASC' },
+            });
+
+            for (const hk of hocKys) {
+                currentThuTu++;
+                if (currentThuTu === thuTuMongMuon) {
+                    return hk;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+ * Tự động tạo hàng loạt lớp học phần cho chương trình đào tạo
+ * @param chuongTrinhId ID chương trình đào tạo
+ * @param force Nếu true, cho phép tạo thêm lớp dù đã đủ số lượng
+ */
+    async autoCreateLopHocPhan(chuongTrinhId: number, force = false) {
+        return await this.lopHocPhanRepo.manager.transaction(async (manager) => {
+            // 1. Tìm chương trình đào tạo và ngành gắn với nó
+            const chuongTrinh = await manager.findOne(ChuongTrinhDaoTao, {
+                where: { id: chuongTrinhId },
+                relations: ['nganh'],
+            });
+            if (!chuongTrinh) {
+                throw new NotFoundException('Chương trình đào tạo không tồn tại');
+            }
+            const nganhId = chuongTrinh.nganh.id;
+
+            // 2. Tìm tất cả ApDung cho chương trình này (các niên khóa áp dụng)
+            const apDungs = await manager.find(ApDungChuongTrinhDT, {
+                where: { chuongTrinh: { id: chuongTrinhId } },
+                relations: ['nienKhoa'],
+            });
+            if (apDungs.length === 0) {
+                throw new BadRequestException('Chương trình đào tạo này chưa được áp dụng cho bất kỳ niên khóa nào');
+            }
+
+            const createdLopHocPhans: LopHocPhan[] = [];
+            const errors: string[] = [];
+            let totalCreated = 0;
+
+            // 3. Lấy tất cả chi tiết môn trong chương trình, group theo thứ tự học kỳ
+            const chiTiets = await manager.find(ChiTietChuongTrinhDaoTao, {
+                where: { chuongTrinh: { id: chuongTrinhId } },
+                relations: ['monHoc'],
+                order: { thuTuHocKy: 'ASC' },
+            });
+
+            const monByThuTu: { [thuTu: number]: ChiTietChuongTrinhDaoTao[] } = chiTiets.reduce((acc, ct) => {
+                if (!acc[ct.thuTuHocKy]) acc[ct.thuTuHocKy] = [];
+                acc[ct.thuTuHocKy].push(ct);
+                return acc;
+            }, {});
+
+            const maxThuTu = Math.max(...Object.keys(monByThuTu).map(Number));
+
+            // Duyệt từng niên khóa áp dụng
+            for (const apDung of apDungs) {
+                const nienKhoaId = apDung.nienKhoa.id;
+                const nienKhoa = apDung.nienKhoa;
+
+                // 4. Xác định thứ tự học kỳ đích cần tạo cho niên khóa này
+                let thuTuDest = 1;
+                for (let thuTu = 1; thuTu <= maxThuTu; thuTu++) {
+                    if (!monByThuTu[thuTu]) continue;
+
+                    const hocKyForThuTu = await this.timHocKyTuThuTu(nienKhoa.namBatDau, thuTu, manager);
+                    if (!hocKyForThuTu) {
+                        errors.push(`Niên khóa ${nienKhoa.maNienKhoa}: Không đủ học kỳ cho thứ tự ${thuTu}`);
+                        continue;
+                    }
+
+                    // Kiểm tra nếu tất cả môn ở thứ tự này đã có lớp học phần
+                    let tatCaMonDaCoLop = true;
+                    for (const ct of monByThuTu[thuTu]) {
+                        const soLop = await manager.count(LopHocPhan, {
+                            where: {
+                                monHoc: { id: ct.monHoc.id },
+                                nganh: { id: nganhId },
+                                nienKhoa: { id: nienKhoaId },
+                                hocKy: { id: hocKyForThuTu.id },
+                            },
+                        });
+                        if (soLop === 0) {
+                            tatCaMonDaCoLop = false;
+                            break;
+                        }
+                    }
+
+                    if (tatCaMonDaCoLop) {
+                        thuTuDest = thuTu + 1;
+                    } else {
+                        break;
+                    }
+                }
+
+                if (thuTuDest > maxThuTu) {
+                    errors.push(`Niên khóa ${nienKhoa.maNienKhoa}: Đã tạo đầy đủ lớp học phần cho tất cả thứ tự học kỳ`);
+                    continue;
+                }
+
+                // 5. Xác định HocKy đích cho thứ tự đích
+                const hocKyDest = await this.timHocKyTuThuTu(nienKhoa.namBatDau, thuTuDest, manager);
+                if (!hocKyDest) {
+                    errors.push(`Niên khóa ${nienKhoa.maNienKhoa}: Không tìm thấy học kỳ phù hợp cho thứ tự ${thuTuDest}`);
+                    continue;
+                }
+
+                // 6. Tính số sinh viên đang học trong niên khóa + ngành
+                const soSV = await manager.count(SinhVien, {
+                    where: {
+                        lop: {
+                            nganh: { id: nganhId },
+                            nienKhoa: { id: nienKhoaId },
+                        },
+                        tinhTrang: TinhTrangHocTapEnum.DANG_HOC,
+                    },
+                });
+
+                if (soSV === 0) {
+                    errors.push(`Niên khóa ${nienKhoa.maNienKhoa}: Không có sinh viên đang học`);
+                    continue;
+                }
+
+                // 7. Đối với mỗi môn ở thứ tự đích, tạo lớp học phần
+                const monHocs = monByThuTu[thuTuDest] || [];
+                for (const ct of monHocs) {
+                    const monHocId = ct.monHoc.id;
+                    const maMonHoc = ct.monHoc.maMonHoc;
+                    const soTinChi = ct.monHoc.soTinChi;
+
+                    // Gọi helper để lấy danh sách giảng viên phân công cho môn
+                    const giangViens = await this.layGiangVienPhanCongChoMon(monHocId, manager);
+
+                    if (giangViens.length === 0) {
+                        errors.push(`Môn ${maMonHoc} niên khóa ${nienKhoa.maNienKhoa}: Không có giảng viên nào được phân công dạy môn này`);
+                        continue;
+                    }
+
+                    const soLopCanTao = Math.ceil(soSV / 50);
+
+                    const soLopDaTao = await manager.count(LopHocPhan, {
+                        where: {
+                            monHoc: { id: monHocId },
+                            nganh: { id: nganhId },
+                            nienKhoa: { id: nienKhoaId },
+                            hocKy: { id: hocKyDest.id },
+                        },
+                    });
+
+                    if (soLopDaTao >= soLopCanTao && !force) {
+                        errors.push(`Môn ${maMonHoc} niên khóa ${nienKhoa.maNienKhoa}: Đã tạo đủ ${soLopDaTao}/${soLopCanTao} lớp`);
+                        continue;
+                    }
+
+                    // Gán GV cho từng lớp mới
+                    let giangVienIndex = 0;
+                    for (let i = 1; i <= soLopCanTao; i++) {
+                        const maLopHocPhan = `${maMonHoc}_${chuongTrinh.nganh.maNganh}_${nienKhoa.maNienKhoa.split('-')[0]}_${i}`;
+
+                        const existMa = await manager.findOne(LopHocPhan, { where: { maLopHocPhan } });
+                        if (existMa) {
+                            errors.push(`Mã lớp ${maLopHocPhan} đã tồn tại`);
+                            continue;
+                        }
+
+                        // Tìm GV phù hợp (không vượt 12 tín chỉ)
+                        let giangVienPhuHop: GiangVien | null = null;
+                        while (giangVienIndex < giangViens.length) {
+                            const gv = giangViens[giangVienIndex];
+                            giangVienIndex++;
+
+                            const tongTinChi = await manager.createQueryBuilder(LopHocPhan, 'lhp')
+                                .innerJoin('lhp.monHoc', 'mh')
+                                .where('lhp.giang_vien_id = :gvId', { gvId: gv.id })
+                                .andWhere('lhp.hoc_ky_id = :hocKyId', { hocKyId: hocKyDest.id })
+                                .select('SUM(mh.so_tin_chi)', 'total')
+                                .getRawOne();
+
+                            const tinChiHienTai = Number(tongTinChi?.total || 0);
+
+                            if (tinChiHienTai + soTinChi <= 12) {
+                                giangVienPhuHop = gv;
+                                break;
+                            }
+                        }
+
+                        if (!giangVienPhuHop) {
+                            errors.push(`Môn ${maMonHoc} niên khóa ${nienKhoa.maNienKhoa}: Không tìm thấy giảng viên phù hợp (tất cả đều vượt 12 tín chỉ hoặc không đủ GV)`);
+                            continue;
+                        }
+
+                        const ghiChu = `Tự động tạo - Học kỳ ${hocKyDest.hocKy} (${hocKyDest.namHoc.tenNamHoc})`;
+
+                        // Tạo lớp với GV được gán
+                        const newLhp = manager.create(LopHocPhan, {
+                            maLopHocPhan,
+                            ghiChu: ghiChu || '',
+                            giangVien: { id: giangVienPhuHop.id },
+                            monHoc: { id: monHocId },
+                            hocKy: { id: hocKyDest.id },
+                            nienKhoa: { id: nienKhoaId },
+                            nganh: { id: nganhId },
+                        });
+
+                        const savedLhp = await manager.save(newLhp);
+                        createdLopHocPhans.push(savedLhp);
+                        totalCreated++;
+                    }
+                }
+            }
+
+            return {
+                totalCreated,
+                createdLopHocPhans,
+                errors,
+            };
+        });
     }
 
     async create(dto: CreateLopHocPhanDto) {
