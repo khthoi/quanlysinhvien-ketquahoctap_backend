@@ -209,6 +209,101 @@ export class DanhMucService {
         return nganh;
     }
 
+    async importNganhFromExcel(filePath: string): Promise<{
+        message: string;
+        totalRows: number;
+        success: number;
+        failed: number;
+        errors: { row: number; maNganh: string; error: string }[];
+    }> {
+        const results = {
+            totalRows: 0,
+            success: 0,
+            failed: 0,
+            errors: [] as { row: number; maNganh: string; error: string }[],
+        };
+
+        try {
+            // 1. Đọc file Excel
+            const workbook = new ExcelJS.Workbook();
+            await workbook.xlsx.readFile(filePath);
+            const worksheet = workbook.getWorksheet(1);
+
+            if (!worksheet) {
+                throw new BadRequestException('File Excel không có sheet dữ liệu');
+            }
+
+            const rows = worksheet.getRows(2, worksheet.rowCount - 1) || [];
+            if (rows.length === 0) {
+                throw new BadRequestException('File Excel không có dữ liệu từ dòng 2 trở đi');
+            }
+
+            results.totalRows = rows.length;
+
+            // 2. Duyệt từng dòng
+            for (const row of rows) {
+                const rowNum = row.number;
+
+                const maNganh = row.getCell(2).value?.toString().trim() || '';
+                const tenNganh = row.getCell(3).value?.toString().trim() || '';
+                const moTa = row.getCell(4).value?.toString().trim() || undefined;
+                const maKhoa = row.getCell(5).value?.toString().trim() || '';
+
+                // Validate cơ bản (thiếu trường bắt buộc)
+                if (!maNganh || !tenNganh || !maKhoa) {
+                    results.failed++;
+                    results.errors.push({
+                        row: rowNum,
+                        maNganh: maNganh || 'N/A',
+                        error: 'Thiếu một hoặc nhiều trường bắt buộc (Mã ngành, Tên ngành, Mã khoa)',
+                    });
+                    continue;
+                }
+
+                try {
+                    // 3. Tra cứu khoa theo mã (maKhoa – nghiệp vụ)
+                    const khoa = await this.khoaRepository.findOne({
+                        where: { maKhoa },
+                    });
+
+                    if (!khoa) {
+                        throw new BadRequestException(`Mã khoa ${maKhoa} không tồn tại`);
+                    }
+
+                    // 4. Tạo DTO và gọi lại hàm createNganh hiện có
+                    const createDto: CreateNganhDto = {
+                        maNganh,
+                        tenNganh,
+                        moTa,
+                        khoaId: khoa.id, // Chuyển từ maKhoa sang khoaId
+                    };
+
+                    await this.createNganh(createDto);
+
+                    results.success++;
+                } catch (error) {
+                    results.failed++;
+                    results.errors.push({
+                        row: rowNum,
+                        maNganh,
+                        error: error.message || 'Lỗi không xác định khi tạo ngành',
+                    });
+                }
+            }
+
+            return {
+                message: `Đã xử lý ${results.totalRows} dòng từ file Excel`,
+                totalRows: results.totalRows,
+                success: results.success,
+                failed: results.failed,
+                errors: results.errors.length > 0 ? results.errors : [],
+            };
+        } finally {
+            // Xóa file tạm
+            await fs.unlink(filePath).catch(() => { });
+        }
+    }
+
     // Thêm ngành mới
     async createNganh(createNganhDto: CreateNganhDto): Promise<Nganh> {
         // Kiểm tra mã ngành đã tồn tại chưa
@@ -281,7 +376,7 @@ export class DanhMucService {
     async deleteNganh(id: number): Promise<void> {
         const nganh = await this.nganhRepository.findOne({
             where: { id },
-            relations: ['lops,', 'apDungChuongTrinhs', 'chuongTrinhs', 'lopHocPhans'],
+            relations: ['lops', 'apDungChuongTrinhs', 'chuongTrinhs', 'lopHocPhans'],
         });
 
         if (!nganh) {

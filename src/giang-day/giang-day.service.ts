@@ -33,6 +33,7 @@ import * as ExcelJS from 'exceljs';
 import * as fs from 'fs/promises';
 import { NamHoc } from 'src/dao-tao/entity/nam-hoc.entity';
 import { ChuongTrinhDaoTao } from 'src/dao-tao/entity/chuong-trinh-dao-tao.entity';
+import { Lop } from 'src/danh-muc/entity/lop.entity';
 
 @Injectable()
 export class GiangDayService {
@@ -65,6 +66,8 @@ export class GiangDayService {
         private chiTietCTDTRepo: Repository<ChiTietChuongTrinhDaoTao>,
         @InjectRepository(NamHoc)
         private namHocRepo: Repository<NamHoc>,
+        @InjectRepository(Lop)
+        private lopRepo: Repository<Lop>,
     ) { }
 
     // Tính sĩ số của lớp học phần bằng cách đếm số sinh viên đăng ký
@@ -137,7 +140,11 @@ export class GiangDayService {
             for (const hk of hocKys) {
                 currentThuTu++;
                 if (currentThuTu === thuTuMongMuon) {
-                    return hk;
+                    // 🔥 Khi trả về phải load relation namHoc
+                    return await manager.findOne(HocKy, {
+                        where: { id: hk.id },
+                        relations: ['namHoc'],   // ⬅️ Load quan hệ
+                    });
                 }
             }
         }
@@ -1659,5 +1666,278 @@ export class GiangDayService {
             detailByClass: overallResults.byClass,
             errors: overallResults.errors.length > 0 ? overallResults.errors : undefined,
         };
+    }
+
+    async lenKeHoachTaoLhp(maNamHoc: string, hocKy: number): Promise<Buffer> {
+        // 1. Tìm năm học by maNamHoc
+        const namHoc = await this.namHocRepo.findOne({ where: { maNamHoc } });
+        if (!namHoc) {
+            throw new NotFoundException(`Năm học với mã ${maNamHoc} không tồn tại`);
+        }
+        const namBatDauHoc = namHoc.namBatDau;
+
+        // 2. Lấy 4 niên khóa gần nhất
+        const nienKhoas = await this.nienKhoaRepo.find({
+            where: { namBatDau: In([namBatDauHoc - 3, namBatDauHoc - 2, namBatDauHoc - 1, namBatDauHoc]) },
+            order: { namBatDau: 'DESC' },
+        });
+        if (nienKhoas.length === 0) {
+            throw new BadRequestException('Không tìm thấy niên khóa nào phù hợp');
+        }
+
+        const planRows: Array<{
+            stt: number;
+            maLopHocPhan: string;
+            ghiChu: string;
+            maNganh: string;
+            maNienKhoa: string;
+            maMonHoc: string;
+            maNamHoc: string;
+            hocKy: number;
+            maGiangVien: string;
+            soSinhVienThamGia: number;
+        }> = [];
+        let stt = 1;
+
+        for (const nk of nienKhoas) {
+            const namBatDauNK = nk.namBatDau;
+
+            // Tính tổng học kỳ đã qua
+            let tongHocKyDaQua = 0;
+            for (let year = namBatDauNK; year < namBatDauHoc; year++) {
+                const nh = await this.namHocRepo.findOne({ where: { namBatDau: year } });
+                if (nh) {
+                    const soHK = await this.hocKyRepo.count({ where: { namHoc: { id: nh.id } } });
+                    tongHocKyDaQua += soHK;
+                }
+            }
+
+            const thuTuHocKyCanXet = tongHocKyDaQua + hocKy;
+
+            // Lấy ngành thuộc niên khóa
+            const lops = await this.lopRepo.find({ where: { nienKhoa: { id: nk.id } }, relations: ['nganh'] });
+            // ✅ SỬA LỖI:  Lấy unique ngành theo ID thay vì dùng Set với object reference
+            const nganhMap = new Map<number, typeof lops[0]['nganh']>();
+            for (const lop of lops) {
+                if (lop.nganh && !nganhMap.has(lop.nganh.id)) {
+                    nganhMap.set(lop.nganh.id, lop.nganh);
+                }
+            }
+            const nganhs = Array.from(nganhMap.values());
+
+
+            for (const nganh of nganhs) {
+                // Lấy CTDT áp dụng
+                const apDung = await this.apDungRepo.findOne({
+                    where: { nganh: { id: nganh.id }, nienKhoa: { id: nk.id } },
+                    relations: ['chuongTrinh'],
+                });
+                if (!apDung) continue;
+
+                // Lấy chi tiết môn
+                const chiTiets = await this.chiTietCTDTRepo.find({
+                    where: { chuongTrinh: { id: apDung.chuongTrinh.id }, thuTuHocKy: thuTuHocKyCanXet },
+                    relations: ['monHoc'],
+                });
+                if (chiTiets.length === 0) continue;
+
+                // Tìm học kỳ thực tế
+                const hocKyThucTe = await this.timHocKyTuThuTu(namBatDauNK, thuTuHocKyCanXet, this.lopHocPhanRepo.manager);
+                if (!hocKyThucTe) continue;
+
+                // ✅ Load relation namHoc nếu chưa có
+                if (!hocKyThucTe.namHoc) {
+                    const hocKyWithNamHoc = await this.hocKyRepo.findOne({
+                        where: { id: hocKyThucTe.id },
+                        relations: ['namHoc']
+                    });
+                    if (!hocKyWithNamHoc || !hocKyWithNamHoc.namHoc) continue;
+                    hocKyThucTe.namHoc = hocKyWithNamHoc.namHoc;
+                }
+
+                for (const ct of chiTiets) {
+                    const monHoc = ct.monHoc;
+
+                    // ✅ SỬA LỖI:  Query đúng sinh viên CHƯA từng tham gia LHP của môn này
+                    // Sử dụng bảng sinh_vien_lop_hoc_phan (entity SinhVienLopHocPhan)
+                    const svChuaHoc = await this.sinhVienRepo.createQueryBuilder('sv')
+                        .leftJoin('sv.lop', 'lop')
+                        .leftJoin('lop.nganh', 'nganh')
+                        .leftJoin('lop.nienKhoa', 'nienKhoa')
+                        .where('nganh.id = :nganhId', { nganhId: nganh.id })
+                        .andWhere('nienKhoa.id = :nienKhoaId', { nienKhoaId: nk.id })
+                        .andWhere('sv.tinhTrang = :dangHoc', { dangHoc: TinhTrangHocTapEnum.DANG_HOC })
+                        // ✅ Loại trừ SV đã từng tham gia LHP của môn này
+                        .andWhere(qb => {
+                            const subQuery = qb.subQuery()
+                                .select('svlhp.sinhVien.id')
+                                .from('SinhVienLopHocPhan', 'svlhp')
+                                .leftJoin('svlhp.lopHocPhan', 'lhp')
+                                .where('lhp.monHoc.id = :monHocId')
+                                .getQuery();
+                            return 'sv.id NOT IN ' + subQuery;
+                        })
+                        .setParameter('monHocId', monHoc.id)
+                        .getMany();
+
+                    const soSVChuaHoc = svChuaHoc.length;
+                    if (soSVChuaHoc === 0) continue;
+
+                    // ✅ Tính số lớp cần tạo (mỗi lớp tối đa 50 SV)
+                    const soLop = Math.ceil(soSVChuaHoc / 50);
+
+                    // Lấy GV phân công cho môn
+                    const giangViens = await this.layGiangVienPhanCongChoMon(monHoc.id, this.lopHocPhanRepo.manager);
+
+                    let giangVienIndex = 0;
+
+                    // ✅ Tạo từng lớp học phần
+                    for (let sttLop = 1; sttLop <= soLop; sttLop++) {
+                        // ✅ Tính số SV thực tế cho lớp này
+                        const viTriBatDau = (sttLop - 1) * 50;
+                        const viTriKetThuc = Math.min(sttLop * 50, soSVChuaHoc);
+                        const soSVTrongLop = viTriKetThuc - viTriBatDau;
+                        const ghiChu = `Đề xuất tạo Lớp học phần ${sttLop} của môn ${monHoc.tenMonHoc} - NK ${nk.maNienKhoa} - Ngành ${nganh.tenNganh}`;
+
+                        // ✅ Tạo mã lớp học phần UNIQUE
+                        const maLopHocPhan = `${monHoc.maMonHoc}_${nk.maNienKhoa}_${nganh.maNganh}_${sttLop}`;
+
+                        let maGiangVien = '';
+                        if (giangViens.length > 0) {
+                            let gvPhuHop: GiangVien | null = null;
+
+                            // Tìm GV phù hợp (chưa quá tải)
+                            while (giangVienIndex < giangViens.length) {
+                                const gv = giangViens[giangVienIndex];
+
+                                const tinChiHienTai = await this.tinhTinChiHienTaiCuaGV(gv.id, hocKyThucTe.id);
+                                if (tinChiHienTai + monHoc.soTinChi <= 12) {
+                                    gvPhuHop = gv;
+                                    giangVienIndex++;
+                                    break;
+                                }
+                                giangVienIndex++;
+                            }
+
+                            if (gvPhuHop) {
+                                maGiangVien = gvPhuHop.maGiangVien;
+                            }
+                        }
+
+                        planRows.push({
+                            stt: stt++,
+                            maLopHocPhan,
+                            ghiChu: ghiChu,
+                            maNganh: nganh.maNganh,
+                            maNienKhoa: nk.maNienKhoa,
+                            maMonHoc: monHoc.maMonHoc,
+                            maNamHoc: hocKyThucTe.namHoc.maNamHoc,
+                            hocKy: hocKyThucTe.hocKy,
+                            maGiangVien,
+                            soSinhVienThamGia: soSVTrongLop,
+                        });
+                    }
+                }
+            }
+        }
+
+        // Tạo file Excel (giữ nguyên phần này)
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Kế Hoạch Tạo LHP');
+
+        const headerRow = worksheet.addRow([
+            'STT',
+            'Mã Lớp Học Phần',
+            'Ghi chú',
+            'Mã Ngành',
+            'Mã Niên Khóa',
+            'Mã Môn Học',
+            'Mã Năm học',
+            'Học kỳ',
+            'Mã Giảng viên',
+            'Số sinh viên sẽ tham gia'
+        ]);
+
+        headerRow.height = 25;
+        headerRow.font = {
+            name: 'Arial',
+            size: 11,
+            bold: true,
+            color: { argb: 'FFFFFFFF' }
+        };
+        headerRow.alignment = {
+            vertical: 'middle',
+            horizontal: 'center',
+            wrapText: true
+        };
+        headerRow.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF4472C4' }
+        };
+
+        headerRow.eachCell((cell) => {
+            cell.border = {
+                top: { style: 'thin', color: { argb: 'FF000000' } },
+                left: { style: 'thin', color: { argb: 'FF000000' } },
+                bottom: { style: 'thin', color: { argb: 'FF000000' } },
+                right: { style: 'thin', color: { argb: 'FF000000' } }
+            };
+        });
+
+        planRows.forEach((row, index) => {
+            const dataRow = worksheet.addRow(Object.values(row));
+            dataRow.height = 20;
+
+            dataRow.font = { name: 'Arial', size: 10 };
+            dataRow.alignment = { vertical: 'middle', horizontal: 'center' };
+
+            if (index % 2 === 0) {
+                dataRow.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFE7E6E6' }
+                };
+            }
+
+            dataRow.eachCell((cell) => {
+                cell.border = {
+                    top: { style: 'thin', color: { argb: 'FFD3D3D3' } },
+                    left: { style: 'thin', color: { argb: 'FFD3D3D3' } },
+                    bottom: { style: 'thin', color: { argb: 'FFD3D3D3' } },
+                    right: { style: 'thin', color: { argb: 'FFD3D3D3' } }
+                };
+            });
+        });
+
+        worksheet.columns = [
+            { key: 'stt', width: 8 },
+            { key: 'maLopHocPhan', width: 40 },
+            { key: 'ghiChu', width: 70 },
+            { key: 'maNganh', width: 23 },
+            { key: 'maNienKhoa', width: 23 },
+            { key: 'maMonHoc', width: 23 },
+            { key: 'maNamHoc', width: 20 },
+            { key: 'hocKy', width: 12 },
+            { key: 'maGiangVien', width: 22 },
+            { key: 'soSinhVienThamGia', width: 35 },
+        ];
+
+        worksheet.views = [
+            { state: 'frozen', ySplit: 1 }
+        ];
+
+        return Buffer.from(await workbook.xlsx.writeBuffer()) as Buffer;
+    }
+    // Helper tính tinChi hiện tại của GV trong học kỳ
+    private async tinhTinChiHienTaiCuaGV(gvId: number, hocKyId: number) {
+        const tong = await this.lopHocPhanRepo.createQueryBuilder('lhp')
+            .innerJoin('lhp.monHoc', 'mh')
+            .where('lhp.giang_vien_id = :gvId', { gvId })
+            .andWhere('lhp.hoc_ky_id = :hocKyId', { hocKyId })
+            .select('SUM(mh.so_tin_chi)', 'total')
+            .getRawOne();
+
+        return Number(tong?.total || 0);
     }
 }

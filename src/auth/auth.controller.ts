@@ -35,6 +35,7 @@ import { Roles } from './decorators/roles.decorator';
 import { GetUser } from './decorators/get-user.decorator';
 import { VaiTroNguoiDungEnum } from './enums/vai-tro-nguoi-dung.enum';
 import { GetAllUsersResponseDto, GetUserResponseDto } from './dtos/get-all-users-response.dto';
+import { AutoCreateAccountsResponseDto } from './dtos/auto-create-accounts.response.dto';
 
 @ApiTags('Xác thực & Quản lý người dùng')
 @ApiBearerAuth() // Áp dụng JWT cho tất cả API cần auth
@@ -147,6 +148,39 @@ export class AuthController {
   @ApiBody({ type: ResetPasswordDto })
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
+  }
+
+  @Post('users/sinh-vien/auto-create-accounts')
+  @ApiOperation({
+    summary: 'Tự động tạo tài khoản cho tất cả sinh viên chưa có tài khoản',
+    description:
+      'API sẽ quét toàn bộ sinh viên, tạo tài khoản với tên đăng nhập = mã sinh viên, ' +
+      'mật khẩu mặc định, vai trò SINH_VIEN. Chỉ tạo cho sinh viên chưa có tài khoản và có email hợp lệ.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Kết quả tạo tài khoản hàng loạt',
+    type: AutoCreateAccountsResponseDto, // ← Thêm dòng này
+  })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO, VaiTroNguoiDungEnum.ADMIN)
+  @HttpCode(HttpStatus.OK)
+  async autoCreateAccountsForAllSinhVien() {
+    return this.authService.autoCreateAccountsForAllSinhVien();
+  }
+  @Post('users/giang-vien/auto-create-accounts')
+  @ApiOperation({
+    summary: 'Tự động tạo tài khoản cho tất cả giảng viên chưa có tài khoản',
+    description:
+      'API quét toàn bộ giảng viên, tạo tài khoản với tên đăng nhập = mã giảng viên, ' +
+      'mật khẩu mặc định, vai trò GIANG_VIEN. Chỉ tạo cho giảng viên chưa có tài khoản và có email hợp lệ.',
+  })
+  @ApiResponse({ status: 200, description: 'Kết quả tạo tài khoản hàng loạt cho giảng viên' })
+  @ApiBearerAuth()
+  @Roles(VaiTroNguoiDungEnum.ADMIN, VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  @HttpCode(HttpStatus.OK)
+  async autoCreateAccountsForAllGiangVien() {
+    return this.authService.autoCreateAccountsForAllGiangVien();
   }
 
   @Post('users/sinh-vien/:id')

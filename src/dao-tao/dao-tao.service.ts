@@ -66,7 +66,8 @@ export class DaoTaoService {
     const qb = this.namHocRepo
       .createQueryBuilder('namHoc')
       .leftJoinAndSelect('namHoc.hocKys', 'hocKy')
-      .orderBy('namHoc.namBatDau', 'DESC'); // ❗ bỏ orderBy liên quan hocKy
+      .orderBy('namHoc.namBatDau', 'DESC')
+      .addOrderBy('hocKy.hocKy', 'ASC');
 
     if (search) {
       qb.andWhere(

@@ -15,7 +15,9 @@ import {
   BadRequestException,
   UploadedFile,
   UseInterceptors,
+  Res,
 } from '@nestjs/common';
+import express from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -43,6 +45,7 @@ import { GetMyLopHocPhanQueryDto } from './dtos/get-my-lop-hoc-phan-query.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
+import { LenKeHoachTaoLhpDto } from './dtos/len-ke-hoach-tao-lhp.dto';
 
 @ApiTags('Giảng dạy')
 @ApiBearerAuth()
@@ -298,4 +301,27 @@ export class GiangDayController {
       message: 'Khóa điểm lớp học phần thành công',
     };
   }
+
+  @Post('len-ke-hoach-tao-lhp')
+  @ApiBearerAuth()
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  @ApiOperation({ summary: 'Lên kế hoạch tạo lớp học phần' })
+  async lenKeHoachTaoLhp(
+    @Body() dto: LenKeHoachTaoLhpDto,
+    @Res() res: express.Response,
+  ) {
+    const buffer = await this.giangDayService.lenKeHoachTaoLhp(
+      dto.maNamHoc,
+      dto.hocKy,
+    );
+
+    res.set({
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': 'attachment; filename="ke-hoach-tao-lhp.xlsx"',
+    });
+
+    return res.send(buffer);
+  }
+
 }

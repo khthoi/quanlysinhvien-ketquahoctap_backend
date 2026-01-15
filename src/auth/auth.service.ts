@@ -16,6 +16,7 @@ import { ResetPasswordDto } from './dtos/reset-password.dto';
 import { VerifyChangePasswordOtpDto } from './dtos/verify-change-password-otp.dto';
 import { GetUsersQueryDto } from './dtos/get-user-query.dto';
 import { VaiTroNguoiDungEnum } from './enums/vai-tro-nguoi-dung.enum';
+import { AutoCreateAccountsResponseDto } from './dtos/auto-create-accounts.response.dto';
 
 @Injectable()
 export class AuthService {
@@ -91,7 +92,7 @@ export class AuthService {
                     );
                 }
                 break;
-                
+
             default:
                 throw new BadRequestException('Vai trò không hợp lệ');
         }
@@ -784,6 +785,58 @@ export class AuthService {
     }
 
     /**
+     * Tự động tạo tài khoản cho tất cả sinh viên chưa có tài khoản
+     * @returns Kết quả chi tiết: tổng số SV, số tạo thành công, số thất bại, danh sách lỗi
+     */
+    async autoCreateAccountsForAllSinhVien(): Promise<AutoCreateAccountsResponseDto> {
+        const results: AutoCreateAccountsResponseDto = {
+            message: '',
+            totalSinhVien: 0,
+            success: 0,
+            failed: 0,
+            errors: [],
+        };
+
+        try {
+            // 1. Tìm tất cả sinh viên chưa có tài khoản và có email + mã SV
+            const sinhViens = await this.sinhVienRepo
+                .createQueryBuilder('sv')
+                .leftJoin('sv.nguoiDung', 'nd')
+                .where('nd.id IS NULL')
+                .andWhere('sv.email IS NOT NULL')
+                .andWhere('sv.maSinhVien IS NOT NULL')
+                .getMany();
+
+            results.totalSinhVien = sinhViens.length;
+
+            if (sinhViens.length === 0) {
+                results.message = 'Không tìm thấy sinh viên nào chưa có tài khoản và có email/mã SV hợp lệ';
+                return results;
+            }
+
+            // 2. Tạo tài khoản hàng loạt
+            for (const sv of sinhViens) {
+                try {
+                    await this.createAccountForSinhVienBasic(sv.id);
+                    results.success++;
+                } catch (error) {
+                    results.failed++;
+                    results.errors.push({
+                        sinhVienId: sv.id,
+                        maSinhVien: sv.maSinhVien,
+                        error: error.message || 'Lỗi không xác định khi tạo tài khoản',
+                    });
+                }
+            }
+
+            results.message = `Đã xử lý ${results.totalSinhVien} sinh viên. Thành công: ${results.success}, Thất bại: ${results.failed}`;
+            return results;
+        } catch (error) {
+            throw new BadRequestException(`Lỗi hệ thống khi tự động tạo tài khoản: ${error.message}`);
+        }
+    }
+
+    /**
  * Tạo tài khoản cho sinh viên (đăng nhập = mã sinh viên)
  */
     async createAccountForSinhVienBasic(sinhVienId: number) {
@@ -935,6 +988,62 @@ export class AuthService {
                 email: giangVien.email,
             },
         };
+    }
+
+    /**
+   * Tự động tạo tài khoản cho tất cả giảng viên chưa có tài khoản
+   * @returns Kết quả chi tiết: tổng số GV, số tạo thành công, số thất bại, danh sách lỗi
+   */
+    async autoCreateAccountsForAllGiangVien() {
+        const results = {
+            totalGiangVien: 0,
+            success: 0,
+            failed: 0,
+            errors: [] as { giangVienId: number; maGiangVien: string; error: string }[],
+        };
+
+        try {
+            // 1. Tìm tất cả giảng viên chưa có tài khoản (left join với NguoiDung)
+            const giangViens = await this.giangVienRepo
+                .createQueryBuilder('gv')
+                .leftJoin('gv.nguoiDung', 'nd')
+                .where('nd.id IS NULL')
+                .andWhere('gv.email IS NOT NULL')
+                .andWhere('gv.maGiangVien IS NOT NULL')
+                .getMany();
+
+            results.totalGiangVien = giangViens.length;
+
+            if (giangViens.length === 0) {
+                return {
+                    message: 'Không tìm thấy giảng viên nào chưa có tài khoản và có email/mã GV hợp lệ',
+                    ...results,
+                };
+            }
+
+            // 2. Tạo tài khoản hàng loạt
+            for (const gv of giangViens) {
+                try {
+                    // Gọi lại hàm hiện có để tái sử dụng toàn bộ logic validate & tạo
+                    await this.createAccountForGiangVienBasic(gv.id);
+                    results.success++;
+                } catch (error) {
+                    results.failed++;
+                    results.errors.push({
+                        giangVienId: gv.id,
+                        maGiangVien: gv.maGiangVien,
+                        error: error.message || 'Lỗi không xác định khi tạo tài khoản',
+                    });
+                }
+            }
+
+            return {
+                message: `Đã xử lý ${results.totalGiangVien} giảng viên. Thành công: ${results.success}, Thất bại: ${results.failed}`,
+                ...results,
+            };
+        } catch (error) {
+            throw new BadRequestException(`Lỗi hệ thống khi tự động tạo tài khoản giảng viên: ${error.message}`);
+        }
     }
 
     /**

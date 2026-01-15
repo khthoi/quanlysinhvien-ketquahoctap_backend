@@ -190,6 +190,50 @@ export class DanhMucController {
     return this.danhMucService.getNganhById(id);
   }
 
+  @Post('nganh/import-excel')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: './uploads/temp',
+        filename: (req, file, cb) => {
+          const randomName = Array(32)
+            .fill(null)
+            .map(() => Math.round(Math.random() * 16).toString(16))
+            .join('');
+          cb(null, `${randomName}${extname(file.originalname)}`);
+        },
+      }),
+      fileFilter: (req, file, cb) => {
+        if (!file.originalname.match(/\.(xlsx|xls)$/)) {
+          return cb(new BadRequestException('Chỉ chấp nhận file .xlsx hoặc .xls'), false);
+        }
+        cb(null, true);
+      },
+      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+    }),
+  )
+  @ApiOperation({
+    summary: 'Nhập danh sách ngành từ file Excel',
+    description:
+      'File cần có cột: STT (bỏ qua), Mã ngành, Tên ngành, Mô tả (tùy chọn), Mã khoa (dùng để tra cứu khoa). ' +
+      'Mã khoa là mã nghiệp vụ (maKhoa), không phải ID.',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  async importNganhFromExcel(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('Không có file được tải lên');
+
+    return this.danhMucService.importNganhFromExcel(file.path);
+  }
+
   @ApiOperation({ summary: 'Tạo ngành mới' })
   @ApiBody({ type: CreateNganhDto })
   @ApiResponse({ status: 201, type: Nganh })
