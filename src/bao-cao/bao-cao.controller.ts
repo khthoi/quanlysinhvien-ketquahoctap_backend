@@ -10,6 +10,7 @@ import {
   Query,
   BadRequestException,
   UseGuards,
+  NotFoundException,
 } from '@nestjs/common';
 import type { Response } from 'express';
 import {
@@ -281,5 +282,67 @@ export class BaoCaoController {
   @Roles(VaiTroNguoiDungEnum.ADMIN, VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async thongKeTongQuan() {
     return this.baoCaoService.thongKeTongQuan();
+  }
+
+  @ApiOperation({
+    summary: 'Xuất danh sách sinh viên trượt và đề xuất lớp học lại (Excel)',
+    description: `Lấy danh sách sinh viên có điểm TBCHP <= 4.0 trong học kỳ được chỉ định. 
+Tự động tìm các lớp học phần cùng môn học, cùng ngành ở niên khóa cao hơn chưa khóa điểm để đề xuất cho sinh viên học lại.`,
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        maNamHoc: { type: 'string', example: 'NH2024', description: 'Mã năm học' },
+        hocKy: { type: 'number', example: 1, description: 'Số học kỳ (1, 2, ...)' },
+      },
+      required: ['maNamHoc', 'hocKy'],
+    },
+  })
+  @ApiProduces('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @ApiResponse({ status: 200, description: 'File Excel danh sách sinh viên trượt và đề xuất học lại' })
+  @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ hoặc không có sinh viên trượt' })
+  @ApiResponse({ status: 404, description: 'Năm học hoặc học kỳ không tồn tại' })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
+  @Post('de-xuat-hoc-lai')
+  @UseGuards(JwtAuthGuard)
+  @Roles(VaiTroNguoiDungEnum.ADMIN, VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  async xuatDeXuatHocLai(
+    @Body() body: { maNamHoc: string; hocKy: number },
+    @Res() res: Response,
+  ) {
+    try {
+      if (!body.maNamHoc || !body.hocKy) {
+        throw new BadRequestException('Vui lòng cung cấp mã năm học và học kỳ');
+      }
+
+      const buffer = await this.baoCaoService.xuatDeXuatHocLai(body.maNamHoc, body.hocKy);
+
+      const filename = `DeXuatHocLai_HK${body.hocKy}_${body.maNamHoc}.xlsx`;
+      const encodedFilename = encodeURIComponent(filename);
+
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename*=UTF-8''${encodedFilename}`,
+      );
+
+      res.status(HttpStatus.OK).send(buffer);
+    } catch (error) {
+      if (error instanceof NotFoundException || error instanceof BadRequestException) {
+        res.status(error.getStatus()).json({
+          statusCode: error.getStatus(),
+          message: error.message,
+        });
+      } else {
+        res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+          statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+          message: error.message || 'Lỗi khi xuất báo cáo đề xuất học lại',
+        });
+      }
+    }
   }
 }

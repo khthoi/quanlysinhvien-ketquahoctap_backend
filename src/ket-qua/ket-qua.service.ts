@@ -99,8 +99,7 @@ export class KetQuaService {
     }
 
     if (
-      (!lhp.giangVien || lhp.giangVien.id !== nguoiDung.giangVien.id) &&
-      nguoiDung.vaiTro !== VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO
+      (!lhp.giangVien || lhp.giangVien.id !== nguoiDung.giangVien.id)
     ) {
       throw new ForbiddenException('Bạn không được phép nhập điểm cho lớp học phần này');
     }
@@ -161,31 +160,62 @@ export class KetQuaService {
     }
   }
 
-  // Sửa điểm (PUT)
-  async suaDiem(id: number, dto: SuaDiemDto) {
+  async suaDiem(id: number, dto: SuaDiemDto, userId: number) {
+    // 1. Tìm bản ghi kết quả học tập
     const ketQua = await this.ketQuaRepo.findOne({
       where: { id },
-      relations: ['lopHocPhan'],
+      relations: ['lopHocPhan', 'lopHocPhan.giangVien'],
     });
-    if (!ketQua) throw new NotFoundException('Kết quả học tập không tồn tại');
 
+    if (!ketQua) {
+      throw new NotFoundException('Kết quả học tập không tồn tại');
+    }
+
+    // 2. Kiểm tra lớp đã khóa điểm
     if (ketQua.lopHocPhan.khoaDiem) {
       throw new ForbiddenException('Lớp học phần đã khóa điểm, không thể sửa');
     }
 
-    if (dto.diemQuaTrinh !== undefined)
+    // 3. KIỂM TRA QUYỀN SỬA ĐIỂM (MỚI)
+    const nguoiDung = await this.nguoiDungRepo.findOne({
+      where: { id: userId },
+      relations: ['giangVien'],
+    });
+
+    if (!nguoiDung) {
+      throw new ForbiddenException('Không tìm thấy thông tin người dùng');
+    }
+
+    // Phải là giảng viên phụ trách lớp học phần
+    const giangVien = nguoiDung.giangVien;
+
+    if (!giangVien) {
+      throw new ForbiddenException('Tài khoản của bạn không liên kết với giảng viên nào');
+    }
+
+    if (!ketQua.lopHocPhan.giangVien || ketQua.lopHocPhan.giangVien.id !== giangVien.id) {
+      throw new ForbiddenException(
+        'Bạn không phải là giảng viên phụ trách lớp học phần này. Chỉ giảng viên phụ trách mới được phép sửa điểm.',
+      );
+    }
+    // 4. Cập nhật điểm
+    if (dto.diemQuaTrinh !== undefined) {
       ketQua.diemQuaTrinh = dto.diemQuaTrinh;
+    }
 
-    if (dto.diemThanhPhan !== undefined)
+    if (dto.diemThanhPhan !== undefined) {
       ketQua.diemThanhPhan = dto.diemThanhPhan;
+    }
 
-    if (dto.diemThi !== undefined)
+    if (dto.diemThi !== undefined) {
       ketQua.diemThi = dto.diemThi;
-
+    }
 
     const saved = await this.ketQuaRepo.save(ketQua);
 
+    // 5. Tính toán lại các giá trị tổng hợp
     const tbchp = this.tinhTBCHP(saved);
+
     return {
       id: saved.id,
       diemQuaTrinh: saved.diemQuaTrinh,
@@ -196,7 +226,6 @@ export class KetQuaService {
       DiemChu: tbchp !== null ? this.tinhDiemChu(tbchp) : null,
     };
   }
-
   // DS điểm của lớp học phần
   async getDanhSachDiemLop(
     lopHocPhanId: number,
@@ -397,14 +426,13 @@ export class KetQuaService {
 
     if (!nguoiDung) throw new ForbiddenException('Không tìm thấy thông tin tài khoản');
 
-    if (nguoiDung.vaiTro !== VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO) {
-      if (!nguoiDung.giangVien) {
-        throw new ForbiddenException('Tài khoản chưa liên kết với hồ sơ giảng viên');
-      }
-      if (lhp.giangVien?.id !== nguoiDung.giangVien.id) {
-        throw new ForbiddenException('Bạn không được phép nhập điểm cho lớp này');
-      }
+    if (!nguoiDung.giangVien) {
+      throw new ForbiddenException('Tài khoản chưa liên kết với hồ sơ giảng viên');
     }
+    if (lhp.giangVien?.id !== nguoiDung.giangVien.id) {
+      throw new ForbiddenException('Bạn không được phép nhập điểm cho lớp này');
+    }
+
 
     // Load tất cả đăng ký SV trong lớp
     const dangKyMap = new Map<string, SinhVienLopHocPhan>();

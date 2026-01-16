@@ -75,17 +75,21 @@ export class KetQuaController {
     return this.ketQuaService.nhapDiem(userId, dto);
   }
 
+  @Put(':id')
   @ApiOperation({
     summary: 'Sửa điểm của một bản ghi kết quả',
-    description: 'Chỉ cán bộ phòng Đào tạo được phép sửa điểm đã nhập',
+    description: 'Chỉ giảng viên phụ trách lớp học phần đó được phép sửa điểm đã nhập. Cán bộ phòng đào tạo cũng có quyền sửa.',
   })
   @ApiParam({ name: 'id', type: Number, description: 'ID của bản ghi kết quả học tập' })
   @ApiBody({ type: SuaDiemDto, description: 'Các trường điểm cần sửa' })
   @ApiResponse({ status: 200, description: 'Điểm đã được cập nhật thành công' })
-  @Put(':id')
-  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
-  async suaDiem(@Param('id', ParseIntPipe) id: number, @Body() dto: SuaDiemDto) {
-    return this.ketQuaService.suaDiem(id, dto);
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO, VaiTroNguoiDungEnum.GIANG_VIEN)
+  async suaDiem(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: SuaDiemDto,
+    @GetUser('userId') userId: number, // ← Lấy userId từ token JWT
+  ) {
+    return this.ketQuaService.suaDiem(id, dto, userId);
   }
 
   @ApiOperation({

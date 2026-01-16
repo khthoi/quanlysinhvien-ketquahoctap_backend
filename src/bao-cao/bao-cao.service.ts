@@ -20,6 +20,7 @@ import { Lop } from 'src/danh-muc/entity/lop.entity';
 import { ChuongTrinhDaoTao } from 'src/dao-tao/entity/chuong-trinh-dao-tao.entity';
 import { Nganh } from 'src/danh-muc/entity/nganh.entity';
 import { Khoa } from 'src/danh-muc/entity/khoa.entity';
+import { NamHoc } from 'src/dao-tao/entity/nam-hoc.entity';
 
 @Injectable()
 export class BaoCaoService {
@@ -133,7 +134,7 @@ export class BaoCaoService {
                 sv.maSinhVien,
                 sv.hoTen,
                 sv.ngaySinh ? new Date(sv.ngaySinh).toLocaleDateString('vi-VN') : '',
-                sv.lop?.tenLop || '',
+                sv.lop?.maLop || '',
                 kq?.diemQuaTrinh || '',
                 kq?.diemThanhPhan || '',
                 kq?.diemThi || '',
@@ -174,11 +175,10 @@ export class BaoCaoService {
         worksheet.getCell('A1').value = 'PHIẾU ĐIỂM CÁ NHÂN';
         worksheet.getCell('A1').font = { size: 16, bold: true };
         worksheet.getCell('A1').alignment = { horizontal: 'center' };
-
         worksheet.getCell('A3').value = `Họ tên: ${sv.hoTen}`;
         worksheet.getCell('A4').value = `MSSV: ${sv.maSinhVien}`;
         worksheet.getCell('E3').value = `Ngày sinh: ${sv.ngaySinh ? new Date(sv.ngaySinh).toLocaleDateString('vi-VN') : ''}`;
-        worksheet.getCell('E4').value = `Lớp: ${sv.lop.tenLop}`;
+        worksheet.getCell('E4').value = `Lớp: ${sv.lop.maLop}`;
         worksheet.getCell('A5').value = `Ngành: ${sv.lop.nganh.tenNganh}`;
         worksheet.getCell('E5').value = `Niên khóa: ${sv.lop.nienKhoa.tenNienKhoa}`;
 
@@ -894,13 +894,13 @@ export class BaoCaoService {
 
         // 2. Các tổng cơ bản khác
         const tongGiangVien = await this.giangVienRepo.count();
-        const tongNganh = await this.nganhRepo.count();               // giả sử bạn có nganhRepo
-        const tongKhoa = await this.khoaRepo.count();                 // giả sử bạn có khoaRepo
-        const tongMonHoc = await this.monHocRepo.count();             // giả sử bạn có monHocRepo
-        const tongLop = await this.lopRepo.count();                   // lớp cố định (theo niên khóa + ngành)
-        const tongLopHocPhan = await this.lopHocPhanRepo.count();     // tất cả lớp học phần mọi thời điểm
-        const tongChuongTrinhDaoTao = await this.chuongTrinhDaoTaoRepo.count(); // giả sử có repo này
-        const tongNienKhoa = await this.nienKhoaRepo.count(); // giả sử có repo này
+        const tongNganh = await this.nganhRepo.count();
+        const tongKhoa = await this.khoaRepo.count();
+        const tongMonHoc = await this.monHocRepo.count();
+        const tongLop = await this.lopRepo.count();
+        const tongLopHocPhan = await this.lopHocPhanRepo.count();
+        const tongChuongTrinhDaoTao = await this.chuongTrinhDaoTaoRepo.count();
+        const tongNienKhoa = await this.nienKhoaRepo.count();
 
         return {
             sinhVien: {
@@ -916,6 +916,413 @@ export class BaoCaoService {
             tongLopHocPhan,
             tongChuongTrinhDaoTao,
         };
+    }
+
+    async xuatDeXuatHocLai(maNamHoc: string, hocKy: number): Promise<Buffer> {
+        // 1. Validate năm học
+        const namHoc = await this.lopHocPhanRepo.manager.findOne(NamHoc, {
+            where: { maNamHoc },
+        });
+        if (!namHoc) {
+            throw new NotFoundException(`Năm học với mã "${maNamHoc}" không tồn tại`);
+        }
+
+        // 2. Validate học kỳ
+        const hocKyEntity = await this.lopHocPhanRepo.manager.findOne(HocKy, {
+            where: { namHoc: { id: namHoc.id }, hocKy },
+            relations: ['namHoc'],
+        });
+        if (!hocKyEntity) {
+            throw new NotFoundException(`Học kỳ ${hocKy} của năm học "${maNamHoc}" không tồn tại`);
+        }
+
+        // 3. Lấy tất cả lớp học phần thuộc năm học và học kỳ đó
+        const lopHocPhans = await this.lopHocPhanRepo.find({
+            where: { hocKy: { id: hocKyEntity.id } },
+            relations: [
+                'monHoc',
+                'nganh',
+                'nienKhoa',
+                'ketQuaHocTaps',
+                'ketQuaHocTaps.sinhVien',
+                'ketQuaHocTaps.sinhVien.lop',
+                'ketQuaHocTaps.sinhVien.lop.nganh',
+                'ketQuaHocTaps.sinhVien.lop.nienKhoa',
+            ],
+        });
+
+        if (lopHocPhans.length === 0) {
+            throw new BadRequestException(`Không có lớp học phần nào trong học kỳ ${hocKy} năm học "${maNamHoc}"`);
+        }
+
+        // 4. Lấy danh sách sinh viên trượt (TBCHP <= 4.0)
+        const danhSachTruotTamThoi: Array<{
+            sinhVien: SinhVien;
+            lopHocPhanTruot: LopHocPhan;
+            ketQua: KetQuaHocTap;
+            diemTBCHP: number;
+            diemSo: number;
+            diemChu: string;
+        }> = [];
+
+        for (const lhp of lopHocPhans) {
+            for (const kq of lhp.ketQuaHocTaps) {
+                // Kiểm tra có đủ điểm không
+                if (kq.diemQuaTrinh === null || kq.diemThanhPhan === null || kq.diemThi === null) {
+                    continue;
+                }
+
+                const diemTBCHP = this.tinhDiemTBCHP(kq.diemQuaTrinh, kq.diemThanhPhan, kq.diemThi);
+
+                // Sinh viên trượt nếu TBCHP <= 4.0
+                if (diemTBCHP <= 4.0) {
+                    const diemSo = Math.round(diemTBCHP * 10) / 10;
+                    const diemChu = this.diemSoToDiemChu(diemSo);
+
+                    danhSachTruotTamThoi.push({
+                        sinhVien: kq.sinhVien,
+                        lopHocPhanTruot: lhp,
+                        ketQua: kq,
+                        diemTBCHP,
+                        diemSo,
+                        diemChu,
+                    });
+                }
+            }
+        }
+
+        if (danhSachTruotTamThoi.length === 0) {
+            throw new BadRequestException(`Không có sinh viên nào trượt trong học kỳ ${hocKy} năm học "${maNamHoc}"`);
+        }
+
+        // ✅ 5. VALIDATION MỚI: Lọc ra những sinh viên thực sự cần học lại
+        // Loại bỏ sinh viên đã học lại thành công hoặc đang học lại môn đó
+        const danhSachTruot: typeof danhSachTruotTamThoi = [];
+
+        for (const item of danhSachTruotTamThoi) {
+            const sv = item.sinhVien;
+            const monHocId = item.lopHocPhanTruot.monHoc.id;
+            const lopHocPhanTruotId = item.lopHocPhanTruot.id;
+
+            // Tìm tất cả các lớp học phần KHÁC (cùng môn học) mà sinh viên đã/đang tham gia
+            const cacLopKhacCungMon = await this.svLhpRepo.find({
+                where: {
+                    sinhVien: { id: sv.id },
+                    lopHocPhan: {
+                        monHoc: { id: monHocId },
+                        id: Not(lopHocPhanTruotId), // Loại trừ lớp đã trượt
+                    },
+                },
+                relations: ['lopHocPhan', 'lopHocPhan. monHoc', 'lopHocPhan. hocKy', 'lopHocPhan. hocKy.namHoc'],
+            });
+
+            let daHocLaiThanhCongHoacDangHoc = false;
+
+            for (const svlhp of cacLopKhacCungMon) {
+                const lopKhac = svlhp.lopHocPhan;
+
+                // Kiểm tra kết quả học tập ở lớp khác này
+                const kqLopKhac = await this.ketQuaRepo.findOne({
+                    where: {
+                        sinhVien: { id: sv.id },
+                        lopHocPhan: { id: lopKhac.id },
+                    },
+                });
+
+                if (!kqLopKhac) {
+                    // Trường hợp 1: Sinh viên đang tham gia lớp khác nhưng CHƯA CÓ kết quả
+                    // → Đang học lại → Không cần đề xuất thêm
+                    daHocLaiThanhCongHoacDangHoc = true;
+                    break;
+                }
+
+                // Trường hợp 2: Có kết quả rồi → Kiểm tra điểm
+                if (kqLopKhac.diemQuaTrinh !== null && kqLopKhac.diemThanhPhan !== null && kqLopKhac.diemThi !== null) {
+                    const diemTBCHPLopKhac = this.tinhDiemTBCHP(
+                        kqLopKhac.diemQuaTrinh,
+                        kqLopKhac.diemThanhPhan,
+                        kqLopKhac.diemThi
+                    );
+
+                    if (diemTBCHPLopKhac > 4.0) {
+                        // Đã học lại thành công (đậu) → Không cần đề xuất
+                        daHocLaiThanhCongHoacDangHoc = true;
+                        break;
+                    }
+                }
+                // Nếu có kết quả nhưng điểm vẫn <= 4.0 → Vẫn trượt → Tiếp tục xét
+            }
+
+            // Chỉ thêm vào danh sách nếu sinh viên THỰC SỰ cần học lại
+            if (!daHocLaiThanhCongHoacDangHoc) {
+                danhSachTruot.push(item);
+            }
+        }
+
+        if (danhSachTruot.length === 0) {
+            throw new BadRequestException(
+                `Tất cả sinh viên trượt trong học kỳ ${hocKy} năm học "${maNamHoc}" đã đăng ký học lại hoặc đã học lại thành công`
+            );
+        }
+
+        // 6. Tìm lớp học phần đề xuất cho mỗi sinh viên trượt
+        const ketQuaDeXuat: Array<{
+            stt: number;
+            maSinhVien: string;
+            hoTen: string;
+            gioiTinh: string;
+            sdt: string;
+            maLopHocPhanTruot: string;
+            diemQuaTrinh: number;
+            diemThanhPhan: number;
+            diemThi: number;
+            diemTBCHP: string;
+            diemSo: string;
+            diemChu: string;
+            danhGia: string;
+            maLopHocPhanDeXuat: string;
+        }> = [];
+
+        let stt = 1;
+
+        for (const item of danhSachTruot) {
+            const sv = item.sinhVien;
+            const lhpTruot = item.lopHocPhanTruot;
+            const monHocId = lhpTruot.monHoc.id;
+            const nganhId = sv.lop?.nganh?.id;
+            const nienKhoaSV = sv.lop?.nienKhoa;
+
+            if (!nganhId || !nienKhoaSV) {
+                // Không có thông tin ngành/niên khóa -> không đề xuất được
+                ketQuaDeXuat.push({
+                    stt: stt++,
+                    maSinhVien: sv.maSinhVien,
+                    hoTen: sv.hoTen,
+                    gioiTinh: sv.gioiTinh || '',
+                    sdt: sv.sdt || '',
+                    maLopHocPhanTruot: lhpTruot.maLopHocPhan,
+                    diemQuaTrinh: item.ketQua.diemQuaTrinh,
+                    diemThanhPhan: item.ketQua.diemThanhPhan,
+                    diemThi: item.ketQua.diemThi,
+                    diemTBCHP: item.diemTBCHP.toFixed(2),
+                    diemSo: item.diemSo.toFixed(1),
+                    diemChu: item.diemChu,
+                    danhGia: 'TRƯỢT MÔN',
+                    maLopHocPhanDeXuat: 'Không tìm được lớp phù hợp',
+                });
+                continue;
+            }
+
+            // Tìm các niên khóa cao hơn niên khóa của sinh viên
+            const nienKhoasCaoHon = await this.nienKhoaRepo.find({
+                where: { namBatDau: MoreThanOrEqual(nienKhoaSV.namBatDau + 1) },
+                order: { namBatDau: 'ASC' },
+            });
+
+            // Tìm lớp học phần đề xuất: 
+            // - Cùng môn học
+            // - Cùng ngành
+            // - Niên khóa cao hơn
+            // - Chưa khóa điểm
+            let lopDeXuat: LopHocPhan | null = null;
+
+            for (const nkCaoHon of nienKhoasCaoHon) {
+                const lhpDeXuat = await this.lopHocPhanRepo.findOne({
+                    where: {
+                        monHoc: { id: monHocId },
+                        nganh: { id: nganhId },
+                        nienKhoa: { id: nkCaoHon.id },
+                        khoaDiem: false,
+                    },
+                    relations: ['monHoc', 'nganh', 'nienKhoa', 'hocKy', 'hocKy.namHoc'],
+                    order: { ngayTao: 'DESC' },
+                });
+
+                if (lhpDeXuat) {
+                    lopDeXuat = lhpDeXuat;
+                    break;
+                }
+            }
+
+            // Nếu không tìm được ở niên khóa cao hơn, tìm ở cùng niên khóa nhưng khác lớp học phần
+            if (!lopDeXuat) {
+                lopDeXuat = await this.lopHocPhanRepo.findOne({
+                    where: {
+                        monHoc: { id: monHocId },
+                        nganh: { id: nganhId },
+                        nienKhoa: { id: nienKhoaSV.id },
+                        khoaDiem: false,
+                        id: Not(lhpTruot.id), // Khác lớp đã trượt
+                    },
+                    relations: ['monHoc', 'nganh', 'nienKhoa', 'hocKy', 'hocKy.namHoc'],
+                    order: { ngayTao: 'DESC' },
+                });
+            }
+
+            ketQuaDeXuat.push({
+                stt: stt++,
+                maSinhVien: sv.maSinhVien,
+                hoTen: sv.hoTen,
+                gioiTinh: sv.gioiTinh || '',
+                sdt: sv.sdt || '',
+                maLopHocPhanTruot: lhpTruot.maLopHocPhan,
+                diemQuaTrinh: item.ketQua.diemQuaTrinh,
+                diemThanhPhan: item.ketQua.diemThanhPhan,
+                diemThi: item.ketQua.diemThi,
+                diemTBCHP: item.diemTBCHP.toFixed(2),
+                diemSo: item.diemSo.toFixed(1),
+                diemChu: item.diemChu,
+                danhGia: 'TRƯỢT MÔN',
+                maLopHocPhanDeXuat: lopDeXuat ? lopDeXuat.maLopHocPhan : 'Chưa có lớp mở',
+            });
+        }
+
+        // 7. Tạo file Excel
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Đề xuất học lại');
+
+        // === HEADER TITLE ===
+        worksheet.mergeCells('A1:N1');
+        const titleCell = worksheet.getCell('A1');
+        titleCell.value = `DANH SÁCH SINH VIÊN TRƯỢT VÀ ĐỀ XUẤT LỚP HỌC LẠI`;
+        titleCell.font = { size: 18, bold: true, color: { argb: 'FF003366' } };
+        titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+        worksheet.getRow(1).height = 35;
+
+        // === SUBTITLE ===
+        worksheet.mergeCells('A2:N2');
+        const subtitleCell = worksheet.getCell('A2');
+        subtitleCell.value = `Học kỳ ${hocKy} - Năm học ${namHoc.tenNamHoc}`;
+        subtitleCell.font = { size: 12, italic: true, color: { argb: 'FF666666' } };
+        subtitleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+        worksheet.getRow(2).height = 25;
+
+        // === TABLE HEADER ===
+        const headerRow = worksheet.getRow(4);
+        headerRow.values = [
+            'STT',
+            'Mã sinh viên',
+            'Họ và tên',
+            'Giới tính',
+            'Số điện thoại',
+            'Mã LHP trượt',
+            'Điểm QT (10%)',
+            'Điểm TP (30%)',
+            'Điểm thi (60%)',
+            'TBCHP',
+            'Điểm số',
+            'Điểm chữ',
+            'Đánh giá',
+            'Mã LHP đề xuất học lại',
+        ];
+        headerRow.height = 30;
+        headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        headerRow.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+
+        headerRow.eachCell((cell, colNumber) => {
+            cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FF4472C4' },
+            };
+            cell.border = {
+                top: { style: 'thin', color: { argb: 'FF000000' } },
+                left: { style: 'thin', color: { argb: 'FF000000' } },
+                bottom: { style: 'thin', color: { argb: 'FF000000' } },
+                right: { style: 'thin', color: { argb: 'FF000000' } },
+            };
+        });
+
+        // === DATA ROWS ===
+        ketQuaDeXuat.forEach((item, index) => {
+            const row = worksheet.getRow(5 + index);
+            row.values = [
+                item.stt,
+                item.maSinhVien,
+                item.hoTen,
+                item.gioiTinh,
+                item.sdt,
+                item.maLopHocPhanTruot,
+                item.diemQuaTrinh,
+                item.diemThanhPhan,
+                item.diemThi,
+                item.diemTBCHP,
+                item.diemSo,
+                item.diemChu,
+                item.danhGia,
+                item.maLopHocPhanDeXuat,
+            ];
+
+            row.height = 22;
+            row.alignment = { horizontal: 'center', vertical: 'middle' };
+            row.font = { size: 11 };
+
+            // Màu nền xen kẽ
+            const bgColor = index % 2 === 0 ? 'FFF2F2F2' : 'FFFFFFFF';
+            row.eachCell((cell, colNumber) => {
+                cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: bgColor },
+                };
+                cell.border = {
+                    top: { style: 'thin', color: { argb: 'FFD3D3D3' } },
+                    left: { style: 'thin', color: { argb: 'FFD3D3D3' } },
+                    bottom: { style: 'thin', color: { argb: 'FFD3D3D3' } },
+                    right: { style: 'thin', color: { argb: 'FFD3D3D3' } },
+                };
+
+                // Highlight cột đánh giá (TRƯỢT MÔN) màu đỏ
+                if (colNumber === 13) {
+                    cell.font = { bold: true, color: { argb: 'FFFF0000' } };
+                }
+
+                // Highlight cột đề xuất
+                if (colNumber === 14) {
+                    if (item.maLopHocPhanDeXuat === 'Chưa có lớp mở' || item.maLopHocPhanDeXuat === 'Không tìm được lớp phù hợp') {
+                        cell.font = { italic: true, color: { argb: 'FF999999' } };
+                    } else {
+                        cell.font = { bold: true, color: { argb: 'FF008000' } };
+                    }
+                }
+
+                // Căn trái cho họ tên
+                if (colNumber === 3) {
+                    cell.alignment = { horizontal: 'left', vertical: 'middle' };
+                }
+            });
+        });
+
+        // === COLUMN WIDTHS ===
+        worksheet.columns = [
+            { key: 'stt', width: 6 },
+            { key: 'maSinhVien', width: 15 },
+            { key: 'hoTen', width: 25 },
+            { key: 'gioiTinh', width: 12 },
+            { key: 'sdt', width: 15 },
+            { key: 'maLopHocPhanTruot', width: 25 },
+            { key: 'diemQuaTrinh', width: 14 },
+            { key: 'diemThanhPhan', width: 14 },
+            { key: 'diemThi', width: 14 },
+            { key: 'diemTBCHP', width: 10 },
+            { key: 'diemSo', width: 10 },
+            { key: 'diemChu', width: 10 },
+            { key: 'danhGia', width: 15 },
+            { key: 'maLopHocPhanDeXuat', width: 30 },
+        ];
+
+        // === FOOTER SUMMARY ===
+        const footerRowIndex = 5 + ketQuaDeXuat.length + 1;
+        worksheet.mergeCells(`A${footerRowIndex}:N${footerRowIndex}`);
+        const footerCell = worksheet.getCell(`A${footerRowIndex}`);
+        footerCell.value = `Tổng số sinh viên cần học lại: ${ketQuaDeXuat.length} | Ngày xuất: ${new Date().toLocaleDateString('vi-VN')}`;
+        footerCell.font = { italic: true, size: 11 };
+        footerCell.alignment = { horizontal: 'right' };
+
+        // === FREEZE HEADER ===
+        worksheet.views = [{ state: 'frozen', ySplit: 4 }];
+
+        return await workbook.xlsx.writeBuffer() as unknown as Buffer;
     }
 }
 
