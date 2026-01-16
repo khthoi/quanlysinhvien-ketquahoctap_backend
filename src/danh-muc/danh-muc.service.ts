@@ -242,6 +242,9 @@ export class DanhMucService {
 
             // 2. Duyệt từng dòng
             for (const row of rows) {
+
+                if (!row || row.actualCellCount === 0) continue;
+
                 const rowNum = row.number;
 
                 const maNganh = row.getCell(2).value?.toString().trim() || '';
@@ -648,6 +651,9 @@ export class DanhMucService {
 
             // 2. Duyệt từng dòng
             for (const row of rows) {
+
+                if (!row || row.actualCellCount === 0) continue;
+
                 const rowNum = row.number;
 
                 const maLop = row.getCell(2).value?.toString().trim() || '';
@@ -908,6 +914,9 @@ export class DanhMucService {
 
             // 2. Duyệt từng dòng
             for (const row of rows) {
+
+                if (!row || row.actualCellCount === 0) continue;
+
                 const rowNum = row.number;
 
                 const maMonHoc = row.getCell(2).value?.toString().trim() || '';
@@ -1205,6 +1214,9 @@ export class DanhMucService {
 
             // 2. Duyệt từng dòng
             for (const row of rows) {
+
+                if (!row || row.actualCellCount === 0) continue;
+
                 const rowNum = row.number;
 
                 const maGiangVien = row.getCell(2).value?.toString().trim() || '';

@@ -80,6 +80,9 @@ export class SinhVienService {
         allLops.forEach(lop => maLopToLop.set(lop.maLop, lop));
 
         for (const row of rows) {
+
+            if (!row || row.actualCellCount === 0) continue;
+
             const rowNum = row.number;
 
             const maSinhVien = row.getCell(2).value?.toString().trim(); // Mã sinh viên

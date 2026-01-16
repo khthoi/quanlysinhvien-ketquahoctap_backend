@@ -438,6 +438,9 @@ export class KetQuaService {
     const rows = worksheet.getRows(2, worksheet.rowCount - 1) || [];
 
     for (const row of rows) {
+
+      if (!row || row.actualCellCount === 0) continue;
+
       const rowNum = row.number;
 
       const maSinhVien = row.getCell(2).value?.toString().trim(); // Cột 2: Mã sinh viên

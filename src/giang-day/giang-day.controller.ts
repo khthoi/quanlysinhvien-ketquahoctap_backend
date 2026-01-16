@@ -324,4 +324,66 @@ export class GiangDayController {
     return res.send(buffer);
   }
 
+  @Post('lop-hoc-phan/import-tu-excel')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: './uploads/temp',
+        filename: (req, file, cb) => {
+          const randomName = Array(32)
+            .fill(null)
+            .map(() => Math.round(Math.random() * 16).toString(16))
+            .join('');
+          cb(null, `${randomName}${extname(file.originalname)}`);
+        },
+      }),
+      fileFilter: (req, file, cb) => {
+        if (!file.originalname.match(/\.(xlsx|xls)$/)) {
+          return cb(new BadRequestException('Chỉ chấp nhận file . xlsx hoặc .xls'), false);
+        }
+        cb(null, true);
+      },
+      limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+    }),
+  )
+  @ApiOperation({
+    summary: 'Import hàng loạt lớp học phần từ file Excel',
+    description: `File Excel cần có các cột theo thứ tự: 
+- Cột 1: STT (bỏ qua)
+- Cột 2: Mã Lớp Học Phần (bắt buộc)
+- Cột 3: Ghi chú
+- Cột 4: Mã Ngành (bắt buộc)
+- Cột 5: Mã Niên Khóa (bắt buộc)
+- Cột 6: Mã Môn Học (bắt buộc)
+- Cột 7: Mã Năm Học (bắt buộc)
+- Cột 8: Học kỳ (bắt buộc, số)
+- Cột 9: Số tín chỉ (bỏ qua)
+- Cột 10: Mã Giảng Viên
+
+Hệ thống sẽ tự động: 
+1. Validate dữ liệu (mã lớp trùng, giảng viên được phân công, môn học trong CTDT, giới hạn tín chỉ GV...)
+2. Tạo lớp học phần
+3. Thêm tối đa 50 sinh viên chưa học môn này vào lớp`,
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'File Excel (.xlsx) chứa danh sách lớp học phần cần tạo',
+    type: 'multipart/form-data',
+    schema: {
+      type: 'object',
+      properties: {
+        file: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Kết quả import lớp học phần từ Excel' })
+  async importLopHocPhanTuExcel(
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('Không có file được tải lên');
+
+    return this.giangDayService.importLopHocPhanTuExcel(file.path);
+  }
+
 }

@@ -633,12 +633,15 @@ export class DaoTaoService {
 
       // 2. Duyệt từng dòng
       for (const row of rows) {
+
+        if (!row || row.actualCellCount === 0) continue;
+
         const rowNum = row.number;
 
-        const maMonHoc = row.getCell(2).value?.toString().trim() || '';
-        const thuTuHocKyStr = row.getCell(3).value?.toString().trim() || '';
-        const ghiChu = row.getCell(4).value?.toString().trim() || undefined;
-        const maChuongTrinh = row.getCell(5).value?.toString().trim() || '';
+        const maMonHoc = row.getCell(2).value?.toString().trim() || ''; // Cột thứ 3 sẽ là tên môn học
+        const thuTuHocKyStr = row.getCell(4).value?.toString().trim() || '';
+        const ghiChu = row.getCell(5).value?.toString().trim() || undefined;
+        const maChuongTrinh = row.getCell(6).value?.toString().trim() || '';
 
         // Validate bắt buộc
         if (!maMonHoc || !thuTuHocKyStr || !maChuongTrinh) {
