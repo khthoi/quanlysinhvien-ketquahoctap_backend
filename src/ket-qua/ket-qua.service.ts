@@ -5,7 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { KetQuaHocTap } from './entity/ket-qua-hoc-tap.entity';
 import { LopHocPhan } from 'src/giang-day/entity/lop-hoc-phan.entity';
 import { SinhVienLopHocPhan } from 'src/giang-day/entity/sinhvien-lophocphan.entity';
@@ -16,6 +16,7 @@ import { VaiTroNguoiDungEnum } from 'src/auth/enums/vai-tro-nguoi-dung.enum';
 import { SinhVien } from 'src/sinh-vien/entity/sinh-vien.entity';
 import * as ExcelJS from 'exceljs';
 import * as fs from 'fs';
+import { KhenThuongKyLuat } from 'src/sinh-vien/entity/khenthuong-kyluat.entity';
 
 @Injectable()
 export class KetQuaService {
@@ -28,6 +29,8 @@ export class KetQuaService {
     private svLhpRepo: Repository<SinhVienLopHocPhan>,
     @InjectRepository(NguoiDung)
     private nguoiDungRepo: Repository<NguoiDung>,
+    @InjectRepository(KhenThuongKyLuat)
+    private khenThuongKyLuatRepo: Repository<KhenThuongKyLuat>,
   ) { }
 
   // Tính điểm trung bình cộng học phần (thang 10)
@@ -353,18 +356,21 @@ export class KetQuaService {
       },
     };
   }
-  // Sinh viên xem kết quả của mình
   async getKetQuaCuaToi(userId: number) {
+    // Lấy sinh viên từ userId
     const nguoiDung = await this.nguoiDungRepo.findOne({
       where: { id: userId },
       relations: ['sinhVien'],
     });
     if (!nguoiDung || !nguoiDung.sinhVien) {
-      throw new NotFoundException('Không tìm thấy thông tin sinh viên');
+      throw new ForbiddenException('Tài khoản không phải sinh viên');
     }
 
+    const sinhVienId = nguoiDung.sinhVien.id;
+
+    // Lấy tất cả kết quả của sinh viên
     const ketQua = await this.ketQuaRepo.find({
-      where: { sinhVien: { id: nguoiDung.sinhVien.id } },
+      where: { sinhVien: { id: sinhVienId } },
       relations: [
         'lopHocPhan',
         'lopHocPhan.monHoc',
@@ -373,17 +379,20 @@ export class KetQuaService {
         'lopHocPhan.hocKy.namHoc',
         'lopHocPhan.nienKhoa',
         'lopHocPhan.nganh',
-        'lopHocPhan.nganh.khoa',
       ],
-      order: { lopHocPhan: { hocKy: { namHoc: { namBatDau: 'DESC' } } } },
     });
 
-    return ketQua.map(kq => {
+    // Lấy thông tin khen thưởng kỷ luật của sinh viên
+    const khenThuongKyLuats = await this.khenThuongKyLuatRepo.find({
+      where: { sinhVien: { id: sinhVienId } },
+    });
+
+    // Map kết quả học tập
+    const mappedKetQua = ketQua.map(kq => {
       const tbchp = this.tinhTBCHP(kq);
       return {
         id: kq.id,
         lopHocPhan: {
-          id: kq.lopHocPhan.id,
           maLopHocPhan: kq.lopHocPhan.maLopHocPhan,
           monHoc: kq.lopHocPhan.monHoc,
           giangVien: kq.lopHocPhan.giangVien ? {
@@ -403,6 +412,19 @@ export class KetQuaService {
         DiemChu: tbchp !== null ? this.tinhDiemChu(tbchp) : null,
       };
     });
+
+    // Map khen thưởng kỷ luật (lấy các trường cần thiết)
+    const mappedKhenThuongKyLuat = khenThuongKyLuats.map(ktkl => ({
+      id: ktkl.id,
+      loai: ktkl.loai,
+      noiDung: ktkl.noiDung,
+      ngayQuyetDinh: ktkl.ngayQuyetDinh,
+    }));
+
+    return {
+      ketQuaHocTap: mappedKetQua,
+      khenThuongKyLuat: mappedKhenThuongKyLuat,
+    };
   }
 
   async nhapDiemExcel(lopHocPhanId: number, userId: number, filePath: string) {

@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Not, Repository } from 'typeorm';
@@ -32,6 +33,7 @@ import { TinhTrangHocTapEnum } from 'src/sinh-vien/enums/tinh-trang-hoc-tap.enum
 import { SinhVien } from 'src/sinh-vien/entity/sinh-vien.entity';
 import * as ExcelJS from 'exceljs';
 import * as fs from 'fs/promises';
+import { NguoiDung } from 'src/auth/entity/nguoi-dung.entity';
 
 @Injectable()
 export class DaoTaoService {
@@ -56,6 +58,8 @@ export class DaoTaoService {
     private lopHocPhanRepo: Repository<LopHocPhan>,
     @InjectRepository(SinhVien)
     private sinhVienRepo: Repository<SinhVien>,
+    @InjectRepository(NguoiDung)
+    private nguoiDungRepo: Repository<NguoiDung>,
   ) { }
 
   // ==================== NĂM HỌC ====================
@@ -902,4 +906,132 @@ export class DaoTaoService {
       tongSinhVienApDung,
     };
   }
+
+  async getTatCaMonHocTrongChuongTrinhCuaSinhVien(userId: number) {
+    // 1. Lấy thông tin người dùng và sinh viên
+    const nguoiDung = await this.nguoiDungRepo.findOne({
+      where: { id: userId },
+      relations: ['sinhVien', 'sinhVien.lop', 'sinhVien.lop.nganh', 'sinhVien.lop.nienKhoa'],
+    });
+
+    if (!nguoiDung || !nguoiDung.sinhVien) {
+      throw new ForbiddenException('Tài khoản không phải sinh viên hoặc chưa liên kết hồ sơ sinh viên');
+    }
+
+    const sinhVien = nguoiDung.sinhVien;
+
+    // Kiểm tra tình trạng học tập
+    if (sinhVien.tinhTrang !== TinhTrangHocTapEnum.DANG_HOC) {
+      throw new BadRequestException(`Sinh viên đang ở trạng thái ${sinhVien.tinhTrang}, không thể truy xuất chương trình đào tạo`);
+    }
+
+    const nganhId = sinhVien.lop.nganh.id;
+    const nienKhoaId = sinhVien.lop.nienKhoa.id;
+
+    // 2. Tìm chương trình đào tạo áp dụng cho ngành + niên khóa của sinh viên
+    const chuongTrinh = await this.chuongTrinhRepo.findOne({
+      where: {
+        nganh: { id: nganhId },
+        apDungChuongTrinhs: {
+          nienKhoa: { id: nienKhoaId },
+        },
+      },
+      relations: [
+        'nganh',
+        'apDungChuongTrinhs',
+        'apDungChuongTrinhs.nienKhoa',
+        'chiTietMonHocs',
+        'chiTietMonHocs.monHoc',
+      ],
+    });
+
+    if (!chuongTrinh) {
+      throw new NotFoundException(
+        `Không tìm thấy chương trình đào tạo áp dụng cho ngành ${sinhVien.lop.nganh.tenNganh} niên khóa ${sinhVien.lop.nienKhoa.maNienKhoa}`
+      );
+    }
+
+    // 3. Lấy danh sách mã môn học trong CTDT
+    const monHocIds = chuongTrinh.chiTietMonHocs.map(ct => ct.monHoc.id);
+
+    // 4. Lấy các lớp học phần liên quan (có thể đã học hoặc đang học)
+    // Chỉ lấy lớp thuộc các môn trong CTDT, cùng ngành, cùng niên khóa của SV
+    const lopHocPhans = await this.lopHocPhanRepo.find({
+      where: {
+        monHoc: { id: In(monHocIds) },
+        nganh: { id: nganhId },
+        nienKhoa: { id: nienKhoaId },
+      },
+      relations: [
+        'monHoc',
+        'hocKy',
+        'hocKy.namHoc',
+        'giangVien',
+        'nienKhoa',
+        'nganh',
+        'sinhVienLopHocPhans',
+        'sinhVienLopHocPhans.sinhVien',
+      ],
+      order: {
+        hocKy: { hocKy: 'ASC' },
+        maLopHocPhan: 'ASC',
+      },
+    });
+
+    // 5. Xác định lớp nào sinh viên đã đăng ký / đã học
+    const lopDaDangKyIds = new Set(
+      lopHocPhans
+        .filter(lhp => (lhp.sinhVienLopHocPhans ?? []).some(svlhp => svlhp.sinhVien.id === sinhVien.id))
+        .map(lhp => lhp.id)
+    );
+
+    // 6. Chuẩn bị dữ liệu trả về
+    const monHocs = chuongTrinh.chiTietMonHocs
+      .map(ct => ({
+        id: ct.id,
+        thuTuHocKy: ct.thuTuHocKy,
+        monHoc: {
+          id: ct.monHoc.id,
+          maMonHoc: ct.monHoc.maMonHoc,
+          tenMonHoc: ct.monHoc.tenMonHoc,
+          soTinChi: ct.monHoc.soTinChi,
+          // có thể thêm các trường khác nếu entity MonHoc có
+        },
+        ghiChu: ct.ghiChu,
+      }))
+      .sort((a, b) => a.thuTuHocKy - b.thuTuHocKy);
+
+    const lopHocPhansMapped = lopHocPhans.map(lhp => ({
+      id: lhp.id,
+      maLopHocPhan: lhp.maLopHocPhan,
+      monHoc: {
+        maMonHoc: lhp.monHoc.maMonHoc,
+        tenMonHoc: lhp.monHoc.tenMonHoc,
+      },
+      hocKy: `${lhp.hocKy.hocKy} (${this.formatDateVN(lhp.hocKy.ngayBatDau)} - ${this.formatDateVN(lhp.hocKy.ngayKetThuc)})`,
+      nienKhoa: lhp.nienKhoa.tenNienKhoa,
+      giangVien: lhp.giangVien?.hoTen || 'Chưa phân công',
+      siSo: lhp.sinhVienLopHocPhans.length,
+      daDangKy: lopDaDangKyIds.has(lhp.id),
+      khoaDiem: lhp.khoaDiem,
+    }));
+
+    return {
+      chuongTrinh: {
+        id: chuongTrinh.id,
+        tenChuongTrinh: chuongTrinh.tenChuongTrinh,
+        maChuongTrinh: chuongTrinh.maChuongTrinh,
+        thoiGianDaoTao: chuongTrinh.thoiGianDaoTao,
+        nganh: chuongTrinh.nganh,
+        nienKhoaApDung: chuongTrinh.apDungChuongTrinhs.find(
+          ap => ap.nienKhoa.id === nienKhoaId
+        )?.nienKhoa,
+      },
+      monHocs,
+      lopHocPhans: lopHocPhansMapped,
+      tongSoMon: monHocs.length,
+      tongSoLopTrongCTDT: lopHocPhans.length,
+    };
+  }
+
 }

@@ -13,9 +13,10 @@ import { NienKhoa } from 'src/danh-muc/entity/nien-khoa.entity';
 import { MonHoc } from 'src/danh-muc/entity/mon-hoc.entity';
 import { LopHocPhan } from 'src/giang-day/entity/lop-hoc-phan.entity';
 import { SinhVien } from 'src/sinh-vien/entity/sinh-vien.entity';
+import { NguoiDung } from 'src/auth/entity/nguoi-dung.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([ChiTietChuongTrinhDaoTao, ChuongTrinhDaoTao, HocKy, NamHoc, QuyDinhDaoTao, ApDungChuongTrinhDT, Nganh, NienKhoa, MonHoc, LopHocPhan, SinhVien])],
+  imports: [TypeOrmModule.forFeature([ChiTietChuongTrinhDaoTao, ChuongTrinhDaoTao, HocKy, NamHoc, QuyDinhDaoTao, ApDungChuongTrinhDT, Nganh, NienKhoa, MonHoc, LopHocPhan, SinhVien, NguoiDung])],
   controllers: [DaoTaoController],
   providers: [DaoTaoService],
 })

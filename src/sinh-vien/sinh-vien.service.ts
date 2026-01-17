@@ -435,7 +435,7 @@ export class SinhVienService {
     // src/sinh-vien/sinh-vien.service.ts
 
     async getLichHocMe(userId: number, query: GetLichHocMeQueryDto) {
-        const { page = 1, limit = 10, hocKyId } = query;
+        const { hocKyId } = query;
 
         // Tìm sinh viên từ userId
         const nguoiDung = await this.nguoiDungRepo.findOne({
@@ -449,7 +449,7 @@ export class SinhVienService {
 
         const sinhVienId = nguoiDung.sinhVien.id;
 
-        // Query builder với lọc học kỳ và phân trang
+        // Query builder (không phân trang)
         const qb = this.svLhpRepo
             .createQueryBuilder('svlhp')
             .leftJoinAndSelect('svlhp.lopHocPhan', 'lhp')
@@ -467,24 +467,20 @@ export class SinhVienService {
         }
 
         qb.orderBy('namHoc.namBatDau', 'DESC')
-            .addOrderBy('hocKy.hoc_ky', 'ASC')
+            .addOrderBy('hocKy.hocKy', 'ASC')
             .addOrderBy('monHoc.tenMonHoc', 'ASC');
 
-        const total = await qb.getCount();
+        // Không phân trang → lấy toàn bộ
+        const items = await qb.getMany();
 
-        const items = await qb
-            .skip((page - 1) * limit)
-            .take(limit)
-            .getMany();
-
+        // Map lại dữ liệu trả về
         const data = items.map(d => ({
             id: d.lopHocPhan.id,
             maLopHocPhan: d.lopHocPhan.maLopHocPhan,
             monHoc: d.lopHocPhan.monHoc,
-            giangVien: d.lopHocPhan.giangVien ? {
-                id: d.lopHocPhan.giangVien.id,
-                hoTen: d.lopHocPhan.giangVien.hoTen,
-            } : null,
+            giangVien: d.lopHocPhan.giangVien
+                ? { hoTen: d.lopHocPhan.giangVien.hoTen }
+                : null,
             hocKy: d.lopHocPhan.hocKy,
             nienKhoa: d.lopHocPhan.nienKhoa,
             nganh: d.lopHocPhan.nganh,
@@ -492,16 +488,9 @@ export class SinhVienService {
             loaiThamGia: d.loaiThamGia,
         }));
 
-        return {
-            data,
-            pagination: {
-                total,
-                page,
-                limit,
-                totalPages: Math.ceil(total / limit),
-            },
-        };
+        return { data };
     }
+
 
     async xetTotNghiepVaTraThongKe(nienKhoaId: number) {
 

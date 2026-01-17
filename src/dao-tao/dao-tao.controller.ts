@@ -49,6 +49,7 @@ import { UpdateChiTietMonHocDto } from './dtos/update-chi-tiet-mon-hoc.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
+import { GetUser } from 'src/auth/decorators/get-user.decorator';
 
 @ApiTags('Đào tạo')
 @ApiBearerAuth()
@@ -67,6 +68,7 @@ export class DaoTaoController {
   @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Số bản ghi mỗi trang' })
   @ApiQuery({ name: 'namBatDau', required: false, type: Number, description: 'Lọc theo năm bắt đầu' })
   @ApiResponse({ status: 200, description: 'Danh sách năm học' })
+  @Roles(VaiTroNguoiDungEnum.GIANG_VIEN, VaiTroNguoiDungEnum.SINH_VIEN)
   @Get('nam-hoc')
   async getAllNamHoc(@Query() query: GetNamHocQueryDto) {
     return this.daoTaoService.getAllNamHoc(query);
@@ -107,7 +109,7 @@ export class DaoTaoController {
   @ApiQuery({ name: 'namHocId', required: false, type: Number })
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
-  @Roles(VaiTroNguoiDungEnum.GIANG_VIEN)
+  @Roles(VaiTroNguoiDungEnum.GIANG_VIEN, VaiTroNguoiDungEnum.SINH_VIEN)
   @ApiResponse({ status: 200, description: 'Danh sách học kỳ' })
   @Get('hoc-ky')
   async getAllHocKy(@Query() query: GetHocKyQueryDto) {
@@ -335,6 +337,17 @@ export class DaoTaoController {
   async getChiTietMonHoc(@Param('chi_tiet_chuong_trinh_dt_id', ParseIntPipe) id: number) {
     return this.daoTaoService.getChiTietMonHoc(id);
   }
+
+  @ApiOperation({ summary: 'Lấy tất cả môn học thuộc một chương trình đào tạo của sinh viên hiện tại' })
+  @ApiParam({ name: 'userId', type: Number, description: 'ID người dùng hiện tại' })
+  @ApiResponse({ status: 200, description: 'Danh sách môn học trong chương trình' })
+  @Roles(VaiTroNguoiDungEnum.SINH_VIEN)
+  @Get('chuong-trinh/tat-ca-mon-hoc/me')
+  async getTatCaMonHocTrongChuongTrinhCuaSinhVien(
+    @GetUser("userId") userId: number,
+  ) {
+    return this.daoTaoService.getTatCaMonHocTrongChuongTrinhCuaSinhVien(userId);
+  }  
 
   @ApiOperation({ summary: 'Lấy tất cả môn học thuộc một chương trình đào tạo' })
   @ApiParam({ name: 'chuong_trinh_id', type: Number, description: 'ID chương trình đào tạo' })

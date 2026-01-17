@@ -81,7 +81,7 @@ export class DanhMucController {
   @ApiForbiddenResponse({ description: 'Không có quyền (chỉ cán bộ phòng ĐT)' })
   @Get('khoa')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO, VaiTroNguoiDungEnum.GIANG_VIEN)
   async getAllKhoa(@Query() query: PaginationQueryDto) {
     return this.danhMucService.getAllKhoa(query);
   }

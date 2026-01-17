@@ -35,6 +35,7 @@ import { ThongKeTongQuanResponseDto } from './dtos/thong-ke-tong-quan.dto';
 import { VaiTroNguoiDungEnum } from 'src/auth/enums/vai-tro-nguoi-dung.enum';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
+import { RolesGuard } from 'src/auth/guards/roles.guard';
 
 @ApiTags('Báo cáo')
 @ApiBearerAuth()
@@ -51,6 +52,8 @@ export class BaoCaoController {
   @ApiResponse({ status: 200, description: 'File Excel bảng điểm lớp học phần' })
   @ApiResponse({ status: 404, description: 'Lớp học phần không tồn tại' })
   @ApiResponse({ status: 500, description: 'Lỗi khi xuất báo cáo' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   @Get('bang-diem-lop-hoc-phan/:id')
   async xuatBangDiemLopHocPhan(
     @Param('id', ParseIntPipe) id: number,
@@ -79,6 +82,8 @@ export class BaoCaoController {
   @ApiResponse({ status: 200, description: 'File Excel phiếu điểm cá nhân' })
   @ApiResponse({ status: 404, description: 'Sinh viên không tồn tại' })
   @ApiResponse({ status: 500, description: 'Lỗi khi xuất phiếu điểm' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   @Get('phieu-diem/:sinh_vien_id')
   async xuatPhieuDiem(
     @Param('sinh_vien_id', ParseIntPipe) sinhVienId: number,
@@ -108,6 +113,8 @@ export class BaoCaoController {
   @ApiResponse({ status: 200, description: 'File Excel báo cáo giảng dạy' })
   @ApiResponse({ status: 404, description: 'Giảng viên không tồn tại' })
   @ApiResponse({ status: 500, description: 'Lỗi khi xuất báo cáo giảng viên' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   @Get('giang-vien/:giang_vien_id')
   async xuatBaoCaoGiangVien(
     @Param('giang_vien_id', ParseIntPipe) giangVienId: number,
@@ -143,6 +150,8 @@ export class BaoCaoController {
   @ApiProduces('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
   @ApiResponse({ status: 200, description: 'File Excel danh sách học lại' })
   @ApiResponse({ status: 500, description: 'Lỗi khi xuất danh sách học lại' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   @Get('sinh-vien/hoc-lai')
   async xuatDanhSachHocLai(
     @Query() filterDto: FilterHocLaiDto,
@@ -178,6 +187,8 @@ export class BaoCaoController {
   @ApiResponse({ status: 200, description: 'File Excel thống kê ngành - học kỳ' })
   @ApiResponse({ status: 400, description: 'Thiếu tham số bắt buộc' })
   @ApiResponse({ status: 500, description: 'Lỗi khi xuất thống kê ngành' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   @Post('thong-ke/nganh-hoc-ky')
   async xuatThongKeNganh(
     @Body() filterDto: FilterThongKeNganhDto,
@@ -206,6 +217,8 @@ export class BaoCaoController {
   @ApiProduces('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
   @ApiResponse({ status: 200, description: 'File Excel thống kê lớp học phần' })
   @ApiResponse({ status: 500, description: 'Lỗi khi xuất thống kê lớp học phần' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   @Post('thong-ke/lop-hoc-phan')
   async xuatThongKeLopHocPhan(
     @Body() filterDto: FilterThongKeLopHocPhanDto,
@@ -251,6 +264,8 @@ export class BaoCaoController {
   @ApiResponse({ status: 200, description: 'File Excel danh sách sinh viên' })
   @ApiResponse({ status: 400, description: 'Loại báo cáo không hợp lệ' })
   @ApiResponse({ status: 500, description: 'Lỗi server' })
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   @Post('danh-sach-sinh-vien/:query')
   async xuatDanhSachSinhVien(
     @Param('query') queryType: string,
@@ -279,7 +294,7 @@ export class BaoCaoController {
   @ApiResponse({ status: 200, type: ThongKeTongQuanResponseDto })
   @ApiResponse({ status: 500, description: 'Lỗi server' })
   @UseGuards(JwtAuthGuard)
-  @Roles(VaiTroNguoiDungEnum.ADMIN, VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  @Roles(VaiTroNguoiDungEnum.ADMIN, VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO, VaiTroNguoiDungEnum.GIANG_VIEN, VaiTroNguoiDungEnum.SINH_VIEN)
   async thongKeTongQuan() {
     return this.baoCaoService.thongKeTongQuan();
   }
