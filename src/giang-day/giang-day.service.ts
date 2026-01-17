@@ -1829,10 +1829,14 @@ export class GiangDayService {
                         .getMany();
 
                     const soSVChuaHoc = svChuaHoc.length;
-                    if (soSVChuaHoc === 0) continue;
+                    if (soSVChuaHoc < 25) {
+                        // Không đủ sĩ số để mở bất kỳ lớp nào
+                        continue;
+                    }
 
-                    // Tính số lớp cần tạo (mỗi lớp tối đa 50 SV)
+                    // Đủ điều kiện (>= 25 SV) thì tính số lớp
                     const soLop = Math.ceil(soSVChuaHoc / 50);
+
 
                     // ✅ Lấy TẤT CẢ GV có thể dạy môn này (không reset index)
                     const giangViens = await this.layGiangVienPhanCongChoMon(monHoc.id, this.lopHocPhanRepo.manager);
