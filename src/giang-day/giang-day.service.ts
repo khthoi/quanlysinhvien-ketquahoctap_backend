@@ -1829,46 +1829,77 @@ export class GiangDayService {
                         .getMany();
 
                     const soSVChuaHoc = svChuaHoc.length;
+
+                    // Bỏ qua nếu không đủ mở ít nhất 1 lớp
                     if (soSVChuaHoc < 25) {
-                        // Không đủ sĩ số để mở bất kỳ lớp nào
                         continue;
                     }
 
-                    // Đủ điều kiện (>= 25 SV) thì tính số lớp
-                    const soLop = Math.ceil(soSVChuaHoc / 50);
+                    const giangViens = await this.layGiangVienPhanCongChoMon(
+                        monHoc.id,
+                        this.lopHocPhanRepo.manager
+                    );
 
+                    // ────────────────────────────────────────────────
+                    // Logic phân bổ mới
+                    // ────────────────────────────────────────────────
 
-                    // ✅ Lấy TẤT CẢ GV có thể dạy môn này (không reset index)
-                    const giangViens = await this.layGiangVienPhanCongChoMon(monHoc.id, this.lopHocPhanRepo.manager);
+                    let soLop: number;
+                    let danhSachSiSo: number[] = [];
 
-                    // Tạo từng lớp học phần
+                    // Trường hợp 1: Chỉ đủ mở 1 lớp (25–49 SV)
+                    if (soSVChuaHoc < 50) {
+                        soLop = 1;
+                        danhSachSiSo = [soSVChuaHoc];
+                    }
+                    // Trường hợp 2: Có thể mở từ 2 lớp trở lên
+                    else {
+                        // Cách 1 - chia đều (khuyến nghị - đơn giản & công bằng)
+                        soLop = Math.ceil(soSVChuaHoc / 50);
+
+                        // hoặc Cách 2 - ưu tiên mở ít lớp hơn một chút nếu chia đẹp
+                        // soLop = Math.max(2, Math.floor(soSVChuaHoc / 55)); // thử nghiệm nếu muốn
+
+                        const base = Math.floor(soSVChuaHoc / soLop);
+                        const du = soSVChuaHoc % soLop;
+
+                        danhSachSiSo = new Array(soLop).fill(base);
+
+                        // Phân bổ phần dư cho các lớp đầu tiên
+                        for (let i = 0; i < du; i++) {
+                            danhSachSiSo[i]++;
+                        }
+
+                        // Kiểm tra an toàn: có lớp nào < 25 không?
+                        // (thường không xảy ra nếu dùng Math.ceil / 50)
+                        if (danhSachSiSo.some(siso => siso < 25)) {
+                            // Trường hợp hiếm: điều chỉnh về 1 lớp ít hơn (nếu cần)
+                            // Nhưng với công thức trên hầu như không cần
+                            console.warn(`Cảnh báo: Có lớp < 25 sau khi chia - SV=${soSVChuaHoc}, soLop=${soLop}`);
+                        }
+                    }
+
+                    // Bây giờ tạo từng lớp học phần
                     for (let sttLop = 1; sttLop <= soLop; sttLop++) {
-                        // Tính số SV thực tế cho lớp này
-                        const viTriBatDau = (sttLop - 1) * 50;
-                        const viTriKetThuc = Math.min(sttLop * 50, soSVChuaHoc);
-                        const soSVTrongLop = viTriKetThuc - viTriBatDau;
+                        const soSVTrongLop = danhSachSiSo[sttLop - 1];
 
-                        // Tạo mã lớp học phần UNIQUE
+                        // Tạo mã lớp học phần
                         const maLopHocPhan = `${monHoc.maMonHoc}_${nk.maNienKhoa}_${nganh.maNganh}_${sttLop}`;
 
+                        // ─── phần tìm giảng viên giữ nguyên ───
                         let maGiangVien = '';
-
-                        // ✅ SỬA LỖI: Duyệt TẤT CẢ GV để tìm người phù hợp (không dùng index)
                         if (giangViens.length > 0) {
                             for (const gv of giangViens) {
                                 const tinChiHienTai = await getTinChiHienTaiCuaGV(gv.id, hocKyThucTe.id);
-
-                                // Kiểm tra GV có thể nhận thêm môn này không
                                 if (tinChiHienTai + monHoc.soTinChi <= 12) {
                                     maGiangVien = gv.maGiangVien;
-                                    // ✅ Cập nhật tín chỉ đã phân công cho GV này
                                     capNhatTinChiGV(gv.id, hocKyThucTe.id, monHoc.soTinChi);
-                                    break; // Đã tìm được GV phù hợp
+                                    break;
                                 }
                             }
                         }
 
-                        const ghiChu = `Đề xuất tạo lớp học phần ${maLopHocPhan} cho niên khoá ${nk.maNienKhoa} và ngành ${nganh.maNganh} trong năm học ${hocKyThucTe.namHoc.maNamHoc} tại học kỳ ${hocKyThucTe.hocKy} tự động`;
+                        const ghiChu = `Đề xuất tạo lớp ${maLopHocPhan} - ${soSVTrongLop} SV - niên khoá ${nk.maNienKhoa} - ngành ${nganh.maNganh}`;
 
                         planRows.push({
                             stt: stt++,
@@ -1879,7 +1910,7 @@ export class GiangDayService {
                             maMonHoc: monHoc.maMonHoc,
                             maNamHoc: hocKyThucTe.namHoc.maNamHoc,
                             hocKy: hocKyThucTe.hocKy,
-                            soTinChi: monHoc.soTinChi, // ✅ THÊM SỐ TÍN CHỈ
+                            soTinChi: monHoc.soTinChi,
                             maGiangVien,
                             soSinhVienThamGia: soSVTrongLop,
                         });
@@ -2035,15 +2066,35 @@ export class GiangDayService {
 
         // Map theo dõi số lớp đã tạo cho mỗi môn + ngành + niên khóa + học kỳ
         const soLopDaTaoMap = new Map<string, number>();
+        // Map theo dõi tổng số SV tham gia của từng nhóm ngành + khóa + môn trong excel
+        const excelSinhVienCountMap = new Map<string, number>();
+
+        // ----- TỔNG HỢP SỐ SV THEO NGÀNH-NK-MÔN TRONG FILE EXCEL
+        for (const row of rows) {
+            if (!row || row.actualCellCount === 0) continue;
+
+            const maNganh = row.getCell(4)?.value?.toString().trim() || '';
+            const maNienKhoa = row.getCell(5)?.value?.toString().trim() || '';
+            const maMonHoc = row.getCell(6)?.value?.toString().trim() || '';
+            const svExcel = Number(row.getCell(11)?.value || 0);
+
+            if (maNganh && maNienKhoa && maMonHoc && svExcel > 0) {
+                const key = `${maNganh}__${maNienKhoa}__${maMonHoc}`;
+                excelSinhVienCountMap.set(key, (excelSinhVienCountMap.get(key) || 0) + svExcel);
+            }
+        }
+
+        // ----- VALIDATE VỀ SAU: ĐẾN LƯỢT XỬ LÝ DÒNG NÀO SẼ CHECK GROUP --------
+        // Map lưu ý khi đã validate group nào rồi sẽ khỏi báo lại (tránh lặp)
+        const checkedMap = new Map<string, boolean>();
 
         for (const row of rows) {
-            // Bỏ qua các dòng không có data
             if (!row || row.actualCellCount === 0) continue;
 
             const rowNum = row.number;
             results.total++;
 
-            // Đọc dữ liệu từ các cột
+            // Đọc dữ liệu từ file
             const maLopHocPhan = row.getCell(2)?.value?.toString().trim() || '';
             const ghiChu = row.getCell(3)?.value?.toString().trim() || '';
             const maNganh = row.getCell(4)?.value?.toString().trim() || '';
@@ -2051,8 +2102,9 @@ export class GiangDayService {
             const maMonHoc = row.getCell(6)?.value?.toString().trim() || '';
             const maNamHoc = row.getCell(7)?.value?.toString().trim() || '';
             const hocKyValue = Number(row.getCell(8)?.value) || 0;
-            // Cột 9 là số tín chỉ - bỏ qua
+            // c9: số tín chỉ (bỏ qua)
             const maGiangVien = row.getCell(10)?.value?.toString().trim() || '';
+            const soSinhVienSeThamGia = Number(row.getCell(11)?.value) || 0;
 
             // Validate dữ liệu cơ bản
             if (!maLopHocPhan || !maNganh || !maNienKhoa || !maMonHoc || !maNamHoc || !hocKyValue) {
@@ -2071,7 +2123,33 @@ export class GiangDayService {
                 continue;
             }
 
+            const groupKey = `${maNganh}__${maNienKhoa}__${maMonHoc}`;
+
             try {
+                // ----- VALIDATE SỐ SV GROUP -----
+                if (!checkedMap.has(groupKey)) {
+                    // Tính tổng số SV đang DANG_HOC của ngành, niên khóa, môn này
+                    const nganh = await this.nganhRepo.findOneBy({ maNganh });
+                    const nienKhoa = await this.nienKhoaRepo.findOneBy({ maNienKhoa });
+                    const monHoc = await this.monHocRepo.findOneBy({ maMonHoc });
+                    if (!nganh || !nienKhoa || !monHoc) throw new BadRequestException('Mã ngành, niên khóa hoặc môn học không tồn tại để kiểm tra tổng SV');
+                    const tongSVHeThong = await this.sinhVienRepo.count({
+                        where: {
+                            lop: {
+                                nganh: { id: nganh.id },
+                                nienKhoa: { id: nienKhoa.id },
+                            },
+                            tinhTrang: TinhTrangHocTapEnum.DANG_HOC,
+                        },
+                    });
+                    const tongSVExcel = excelSinhVienCountMap.get(groupKey) || 0;
+                    if (tongSVHeThong !== tongSVExcel) {
+                        throw new BadRequestException(
+                            `Tổng số sinh viên ngành "${maNganh}", niên khóa "${maNienKhoa}", môn "${maMonHoc}" trong hệ thống là ${tongSVHeThong} nhưng trong file Excel là ${tongSVExcel}`
+                        );
+                    }
+                    checkedMap.set(groupKey, true);
+                }
                 // 1. Kiểm tra mã lớp học phần trùng
                 const existMa = await this.lopHocPhanRepo.findOneBy({ maLopHocPhan });
                 if (existMa) {
@@ -2111,7 +2189,7 @@ export class GiangDayService {
                 }
 
                 // 6. Kiểm tra giảng viên (nếu có)
-                let giangVien: GiangVien | null = null;
+                let giangVien: any = null;
                 if (maGiangVien) {
                     giangVien = await this.giangVienRepo.findOneBy({ maGiangVien });
                     if (!giangVien) {
@@ -2150,7 +2228,6 @@ export class GiangDayService {
                 // 8. Tính thứ tự học kỳ và kiểm tra môn học có trong CTDT không
                 const namBatDauNK = nienKhoa.namBatDau;
                 const namBatDauNamHoc = namHoc.namBatDau;
-
                 // Tính tổng học kỳ đã qua từ năm bắt đầu niên khóa đến năm học hiện tại
                 let tongHocKyDaQua = 0;
                 for (let year = namBatDauNK; year < namBatDauNamHoc; year++) {
@@ -2163,7 +2240,6 @@ export class GiangDayService {
 
                 const thuTuHocKyCanXet = tongHocKyDaQua + hocKyValue;
 
-                // Kiểm tra môn học có trong CTDT với thứ tự học kỳ đó không
                 const chiTietMon = apDung.chuongTrinh.chiTietMonHocs.find(
                     ct => ct.monHoc.id === monHoc.id && ct.thuTuHocKy === thuTuHocKyCanXet
                 );
@@ -2247,7 +2323,7 @@ export class GiangDayService {
                     capNhatTinChiGV(giangVien.id, hocKyEntity.id, monHoc.soTinChi);
                 }
 
-                // 12. Lấy sinh viên chưa học môn này và thêm vào lớp (tối đa 50)
+                // 12. Lấy đúng số sinh viên sẽ tham gia lớp để thêm (theo cột 11 trong excel)
                 const svChuaHoc = await this.sinhVienRepo.createQueryBuilder('sv')
                     .leftJoin('sv.lop', 'lop')
                     .leftJoin('lop.nganh', 'nganhSV')
@@ -2266,7 +2342,7 @@ export class GiangDayService {
                     })
                     .setParameter('monHocId', monHoc.id)
                     .orderBy('sv.maSinhVien', 'ASC')
-                    .take(MAX_SV_MOT_LOP) // Tối đa 50 sinh viên
+                    .take(soSinhVienSeThamGia > 0 ? soSinhVienSeThamGia : 50)
                     .getMany();
 
                 let soSinhVienDaDangKy = 0;
