@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Not, Repository } from 'typeorm';
+import { Any, Not, Repository } from 'typeorm';
 import { Khoa } from './entity/khoa.entity';
 import { CreateKhoaDto } from './dtos/tao-khoa.dto';
 import { UpdateKhoaDto } from './dtos/cap-nhat-khoa.dto';
@@ -1222,7 +1222,7 @@ export class DanhMucService {
 
                 const maGiangVien = row.getCell(2).value?.toString().trim() || '';
                 const hoTen = row.getCell(3).value?.toString().trim() || '';
-                const ngaySinhStr = row.getCell(4).value?.toString().trim() || undefined;
+                const ngaySinhStr = row.getCell(4).value?.toString().trim() || Any;
                 const email = row.getCell(5).value?.toString().trim() || '';
                 const sdt = row.getCell(6).value?.toString().trim() || undefined;
                 const gioiTinhStr = row.getCell(7).value?.toString().trim() || undefined;
@@ -1265,20 +1265,55 @@ export class DanhMucService {
                     }
                 }
 
-                // Validate ngày sinh (nếu có)
+                // Validate và chuẩn hóa ngày sinh (nếu có)
                 let ngaySinh: string | undefined;
+
                 if (ngaySinhStr) {
-                    // Kiểm tra định dạng YYYY-MM-DD đơn giản
-                    if (!/^\d{4}-\d{2}-\d{2}$/.test(ngaySinhStr)) {
+                    let parsedDate: Date | null = null;
+
+                    // Trường hợp 1: Nếu là đối tượng Date (từ Excel hoặc dữ liệu đã parse)
+                    if (ngaySinhStr instanceof Date && !isNaN(ngaySinhStr.getTime())) {
+                        parsedDate = ngaySinhStr;
+                    }
+                    // Trường hợp 2: Nếu là chuỗi
+                    else if (typeof ngaySinhStr === 'string' && ngaySinhStr.trim()) {
+                        const str = ngaySinhStr.trim();
+
+                        // Thử các định dạng phổ biến bằng cách dùng Date constructor + regex hỗ trợ
+                        // 1. YYYY-MM-DD (ISO chuẩn)
+                        if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+                            parsedDate = new Date(str);
+                        }
+                        // 2. DD-MM-YYYY hoặc D-M-YYYY (phổ biến ở Việt Nam)
+                        else if (/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/.test(str)) {
+                            const [, day, month, year] = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/)!;
+                            parsedDate = new Date(Number(year), Number(month) - 1, Number(day));
+                        }
+                        // 3. MM/DD/YYYY (định dạng Mỹ, hay gặp khi import từ Excel)
+                        else if (/^(\d{1,2})[/](\d{1,2})[/](\d{4})$/.test(str)) {
+                            const [, month, day, year] = str.match(/^(\d{1,2})[/](\d{1,2})[/](\d{4})$/)!;
+                            parsedDate = new Date(Number(year), Number(month) - 1, Number(day));
+                        }
+                        // Có thể thêm định dạng khác nếu cần (ví dụ: DD.MM.YYYY, v.v.)
+                    }
+
+                    // Kiểm tra kết quả parse có hợp lệ không
+                    if (parsedDate && !isNaN(parsedDate.getTime())) {
+                        // Ép về định dạng dd-mm-yyyy (luôn 2 chữ số cho ngày/tháng)
+                        const day = String(parsedDate.getDate()).padStart(2, '0');
+                        const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
+                        const year = parsedDate.getFullYear();
+
+                        ngaySinh = `${day}-${month}-${year}`;
+                    } else {
                         results.failed++;
                         results.errors.push({
                             row: rowNum,
                             maGiangVien,
-                            error: 'Ngày sinh phải có định dạng YYYY-MM-DD',
+                            error: 'Ngày sinh không hợp lệ hoặc định dạng không được hỗ trợ. Hỗ trợ: YYYY-MM-DD, DD-MM-YYYY, DD/MM/YYYY, MM/DD/YYYY',
                         });
                         continue;
                     }
-                    ngaySinh = ngaySinhStr;
                 }
 
                 try {

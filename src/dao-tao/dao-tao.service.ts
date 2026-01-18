@@ -67,23 +67,47 @@ export class DaoTaoService {
   async getAllNamHoc(query: GetNamHocQueryDto) {
     const { search, page = 1, limit = 10 } = query;
 
-    const qb = this.namHocRepo
-      .createQueryBuilder('namHoc')
-      .leftJoinAndSelect('namHoc.hocKys', 'hocKy')
-      .orderBy('namHoc.namBatDau', 'DESC')
-      .addOrderBy('hocKy.hocKy', 'ASC');
+    // STEP 1: Query lấy danh sách id NamHoc (phân trang trên bảng chính)
+    const idQuery = this.namHocRepo
+      .createQueryBuilder('nh')
+      .select('nh.id')
+      .orderBy('nh.namBatDau', 'DESC');
 
     if (search) {
-      qb.andWhere(
-        '(LOWER(namHoc.tenNamHoc) LIKE :search OR LOWER(namHoc.maNamHoc) LIKE :search)',
+      idQuery.andWhere(
+        '(LOWER(nh.tenNamHoc) LIKE :search OR LOWER(nh.maNamHoc) LIKE :search)',
         { search: `%${search.toLowerCase()}%` },
       );
     }
 
-    // Phân trang
-    qb.skip((page - 1) * limit).take(limit);
+    // Phân trang trên danh sách ID
+    const [idRows, total] = await idQuery
+      .skip((page - 1) * limit)
+      .take(limit)
+      .getManyAndCount();
 
-    const [data, total] = await qb.getManyAndCount();
+    const ids = idRows.map((i) => i.id);
+
+    if (ids.length === 0) {
+      return {
+        data: [],
+        pagination: {
+          total,
+          page,
+          limit,
+          totalPages: Math.ceil(total / limit),
+        },
+      };
+    }
+
+    // STEP 2: Lấy chi tiết Năm học + HocKy theo danh sách id ở trên
+    const data = await this.namHocRepo
+      .createQueryBuilder('namHoc')
+      .leftJoinAndSelect('namHoc.hocKys', 'hocKy')
+      .whereInIds(ids)
+      .orderBy('namHoc.namBatDau', 'DESC')
+      .addOrderBy('hocKy.hocKy', 'ASC')
+      .getMany();
 
     return {
       data,
@@ -95,6 +119,7 @@ export class DaoTaoService {
       },
     };
   }
+
 
 
   async createNamHoc(dto: CreateNamHocDto) {
@@ -246,6 +271,18 @@ export class DaoTaoService {
       throw new BadRequestException('Học kỳ đầu tiên phải là học kỳ 1');
     }
 
+    /** ⭐ NEW VALIDATION: học kỳ lớn hơn phải có ngày bắt đầu > ngày kết thúc học kỳ nhỏ hơn */
+    if (maxHocKy) {
+      const maxEnd = new Date(maxHocKy.ngayKetThuc);
+
+      if (new Date(ngayBatDau) <= maxEnd) {
+        const ngayKTMax = maxEnd.toLocaleDateString('vi-VN');
+        throw new BadRequestException(
+          `Học kỳ ${hocKy} phải bắt đầu sau khi học kỳ ${maxHocKy.hocKy} kết thúc (${ngayKTMax})`
+        );
+      }
+    }
+
     // Kiểm tra chồng thời gian với các học kỳ hiện có
     const allHocKy = await this.hocKyRepo.find({
       where: { namHoc: { id: namHocId } },
@@ -257,8 +294,10 @@ export class DaoTaoService {
 
       // Chồng nếu: bd mới nằm trong khoảng cũ hoặc kt mới nằm trong khoảng cũ
       if (!(kt <= hkBd || bd >= hkKt)) {
+        const ngayBD = new Date(hk.ngayBatDau).toLocaleDateString('vi-VN');
+        const ngayKT = new Date(hk.ngayKetThuc).toLocaleDateString('vi-VN');
         throw new BadRequestException(
-          `Thời gian học kỳ chồng với học kỳ thứ ${hk.hocKy} (${hk.ngayBatDau.toLocaleDateString('vi-VN')} - ${hk.ngayKetThuc.toLocaleDateString('vi-VN')})`,
+          `Thời gian học kỳ chồng với học kỳ thứ ${hk.hocKy} (${ngayBD} - ${ngayKT})`,
         );
       }
     }
@@ -317,6 +356,40 @@ export class DaoTaoService {
         throw new BadRequestException(`Năm học này đã có học kỳ thứ ${dto.hocKy}`);
       }
 
+      // ⭐ NEW VALIDATION: học kỳ lớn hơn phải bắt đầu sau khi học kỳ nhỏ hơn kết thúc
+      // Lấy danh sách học kỳ trong năm học
+      const allHkInYear = await this.hocKyRepo.find({
+        where: { namHoc: { id: finalNamHoc.id } },
+      });
+
+      // Xác định học kỳ trước và sau (nếu có)
+      const currHocKyNumber = dto.hocKy ?? hocKy.hocKy;
+
+      const hkTruoc = allHkInYear.find(h => h.hocKy === currHocKyNumber - 1);
+      const hkSau = allHkInYear.find(h => h.hocKy === currHocKyNumber + 1);
+
+      // Nếu có học kỳ trước → finalBd phải > hkTruoc.ngayKetThuc
+      if (hkTruoc) {
+        const endPrev = new Date(hkTruoc.ngayKetThuc);
+        if (finalBd <= endPrev) {
+          const ngayKT = endPrev.toLocaleDateString('vi-VN');
+          throw new BadRequestException(
+            `Học kỳ ${currHocKyNumber} phải bắt đầu sau ngày kết thúc của học kỳ ${hkTruoc.hocKy} (${ngayKT})`,
+          );
+        }
+      }
+
+      // Nếu có học kỳ sau → finalKt phải < hkSau.ngayBatDau
+      if (hkSau) {
+        const startNext = new Date(hkSau.ngayBatDau);
+        if (finalKt >= startNext) {
+          const ngayBD = startNext.toLocaleDateString('vi-VN');
+          throw new BadRequestException(
+            `Học kỳ ${currHocKyNumber} phải kết thúc trước ngày bắt đầu của học kỳ ${hkSau.hocKy} (${ngayBD})`,
+          );
+        }
+      }
+
       const max = await this.hocKyRepo.findOne({
         where: { namHoc: { id: finalNamHoc.id } },
         order: { hocKy: 'DESC' },
@@ -339,8 +412,10 @@ export class DaoTaoService {
       const otherKt = new Date(other.ngayKetThuc);
 
       if (!(finalKt <= otherBd || finalBd >= otherKt)) {
+        const otherngayBD = new Date(other.ngayBatDau).toLocaleDateString('vi-VN');
+        const otherngayKT = new Date(other.ngayKetThuc).toLocaleDateString('vi-VN');
         throw new BadRequestException(
-          `Thời gian chồng với học kỳ thứ ${other.hocKy} (${other.ngayBatDau.toLocaleDateString('vi-VN')} - ${other.ngayKetThuc.toLocaleDateString('vi-VN')})`,
+          `Thời gian chồng với học kỳ thứ ${other.hocKy} (${otherngayBD} - ${otherngayKT})`,
         );
       }
     }
