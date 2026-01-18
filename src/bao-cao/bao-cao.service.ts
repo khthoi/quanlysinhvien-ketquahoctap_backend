@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, LessThan, LessThanOrEqual, MoreThanOrEqual, Not, Repository } from 'typeorm';
 import * as ExcelJS from 'exceljs';
@@ -21,6 +21,8 @@ import { ChuongTrinhDaoTao } from 'src/dao-tao/entity/chuong-trinh-dao-tao.entit
 import { Nganh } from 'src/danh-muc/entity/nganh.entity';
 import { Khoa } from 'src/danh-muc/entity/khoa.entity';
 import { NamHoc } from 'src/dao-tao/entity/nam-hoc.entity';
+import { VaiTroNguoiDungEnum } from 'src/auth/enums/vai-tro-nguoi-dung.enum';
+import { NguoiDung } from 'src/auth/entity/nguoi-dung.entity';
 
 @Injectable()
 export class BaoCaoService {
@@ -47,7 +49,8 @@ export class BaoCaoService {
         private nganhRepo: Repository<Nganh>,
         @InjectRepository(Khoa)
         private khoaRepo: Repository<Khoa>,
-
+        @InjectRepository(NguoiDung)
+        private nguoiDungRepo: Repository<NguoiDung>,
     ) { }
 
     // Hàm tính điểm
@@ -67,7 +70,29 @@ export class BaoCaoService {
     }
 
     // 1. Bảng điểm lớp học phần
-    async xuatBangDiemLopHocPhan(lopHocPhanId: number): Promise<{ buffer: Buffer; filename: string }> {
+    // 1. Bảng điểm lớp học phần
+    async xuatBangDiemLopHocPhan(lopHocPhanId: number, userId: number): Promise<{ buffer: Buffer; filename: string }> {
+        // ===== KIỂM TRA QUYỀN USER =====
+        const nguoiDung = await this.nguoiDungRepo.findOne({
+            where: { id: userId },
+            relations: ['sinhVien', 'giangVien'],
+        });
+
+        if (!nguoiDung) {
+            throw new NotFoundException('Không tìm thấy thông tin người dùng');
+        }
+
+        // Nếu user liên kết với sinh viên mà không phải giảng viên → báo lỗi
+        if (nguoiDung.sinhVien && !nguoiDung.giangVien) {
+            throw new ForbiddenException('Sinh viên không có quyền xuất bảng điểm lớp học phần');
+        }
+
+        // Nếu user không liên kết với giảng viên nào và không phải CAN_BO_PHONG_DAO_TAO → báo lỗi
+        if (!nguoiDung.giangVien && nguoiDung.vaiTro !== VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO) {
+            throw new ForbiddenException('Tài khoản chưa được liên kết với giảng viên nào');
+        }
+
+        // ===== LẤY THÔNG TIN LỚP HỌC PHẦN =====
         const lhp = await this.lopHocPhanRepo.findOne({
             where: { id: lopHocPhanId },
             relations: [
@@ -79,8 +104,8 @@ export class BaoCaoService {
                 'nganh',
                 'sinhVienLopHocPhans',
                 'sinhVienLopHocPhans.sinhVien',
-                'sinhVienLopHocPhans.sinhVien.lop', // ← THÊM DÒNG NÀY
-                'sinhVienLopHocPhans.sinhVien.lop.nganh', // (tùy chọn, nếu muốn tên ngành trong lớp)
+                'sinhVienLopHocPhans.sinhVien.lop',
+                'sinhVienLopHocPhans.sinhVien.lop.nganh',
                 'ketQuaHocTaps',
                 'ketQuaHocTaps.sinhVien',
             ],
@@ -88,6 +113,21 @@ export class BaoCaoService {
 
         if (!lhp) throw new NotFoundException('Không tìm thấy lớp học phần');
 
+        // ===== KIỂM TRA QUYỀN GIẢNG VIÊN =====
+        // Nếu là GIANG_VIEN thì phải xét giảng viên có đảm nhiệm lớp học phần này không
+        if (nguoiDung.vaiTro === VaiTroNguoiDungEnum.GIANG_VIEN) {
+            if (!nguoiDung.giangVien) {
+                throw new ForbiddenException('Tài khoản giảng viên chưa được liên kết với hồ sơ giảng viên');
+            }
+
+            // Kiểm tra giảng viên có phụ trách lớp học phần này không
+            if (!lhp.giangVien || lhp.giangVien.id !== nguoiDung.giangVien.id) {
+                throw new ForbiddenException('Bạn không phải là giảng viên phụ trách lớp học phần này');
+            }
+        }
+        // Nếu là CAN_BO_PHONG_DAO_TAO thì bỏ qua, không cần xét
+
+        // ===== XUẤT FILE EXCEL =====
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Bảng điểm');
 

@@ -36,6 +36,7 @@ import { VaiTroNguoiDungEnum } from 'src/auth/enums/vai-tro-nguoi-dung.enum';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
+import { GetUser } from 'src/auth/decorators/get-user.decorator';
 
 @ApiTags('Báo cáo')
 @ApiBearerAuth()
@@ -53,14 +54,15 @@ export class BaoCaoController {
   @ApiResponse({ status: 404, description: 'Lớp học phần không tồn tại' })
   @ApiResponse({ status: 500, description: 'Lỗi khi xuất báo cáo' })
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO, VaiTroNguoiDungEnum.GIANG_VIEN)
   @Get('bang-diem-lop-hoc-phan/:id')
   async xuatBangDiemLopHocPhan(
+    @GetUser('userId') userId: number,
     @Param('id', ParseIntPipe) id: number,
     @Res() res: Response,
   ) {
     try {
-      const { buffer, filename } = await this.baoCaoService.xuatBangDiemLopHocPhan(id);
+      const { buffer, filename } = await this.baoCaoService.xuatBangDiemLopHocPhan(id, userId);
       const encodedFilename = encodeURIComponent(filename);
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
       res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFilename}`);

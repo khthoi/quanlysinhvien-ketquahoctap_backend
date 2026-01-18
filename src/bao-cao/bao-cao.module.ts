@@ -14,6 +14,7 @@ import { Khoa } from 'src/danh-muc/entity/khoa.entity';
 import { Nganh } from 'src/danh-muc/entity/nganh.entity';
 import { Lop } from 'src/danh-muc/entity/lop.entity';
 import { ChuongTrinhDaoTao } from 'src/dao-tao/entity/chuong-trinh-dao-tao.entity';
+import { NguoiDung } from 'src/auth/entity/nguoi-dung.entity';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { ChuongTrinhDaoTao } from 'src/dao-tao/entity/chuong-trinh-dao-tao.entit
       Nganh,
       Lop,
       ChuongTrinhDaoTao,
+      NguoiDung,
     ]),
   ],
   controllers: [BaoCaoController],
