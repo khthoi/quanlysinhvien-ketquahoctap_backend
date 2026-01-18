@@ -33,6 +33,7 @@ import { LoaiMonEnum } from './enums/loai-mon.enum';
 
 @Injectable()
 export class DanhMucService {
+    monHocGianygVienRepositor: any;
     constructor(
         @InjectRepository(Khoa)
         private readonly khoaRepository: Repository<Khoa>,
@@ -1375,16 +1376,17 @@ export class DanhMucService {
             throw new BadRequestException('Không thể xóa giảng viên này vì còn được phân công vào lớp học phần');
         }
 
-        // Kiểm tra xem giảng viên có được phân công môn học nào không
+        // 1) Xóa các phân công môn học
         if (giangVien.monHocGiangViens && giangVien.monHocGiangViens.length > 0) {
-            throw new BadRequestException('Không thể xóa giảng viên này vì còn được phân công môn học');
+            await this.giangVienMonHocRepository.remove(giangVien.monHocGiangViens);
         }
 
-        // Kiểm tra xem giảng viên có liên kết với người dùng nào không
+        // 2) Xóa tài khoản người dùng liên kết
         if (giangVien.nguoiDung) {
-            throw new BadRequestException('Không thể xóa giảng viên này vì còn liên kết với tài khoản người dùng');
+            await this.nguoiDungRepository.remove(giangVien.nguoiDung);
         }
 
+        // 3) Xóa giảng viên
         await this.giangVienRepository.remove(giangVien);
     }
 
