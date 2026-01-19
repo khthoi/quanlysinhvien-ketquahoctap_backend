@@ -168,16 +168,12 @@ export class AuthService {
                 'sinhVien.id',
                 'sinhVien.maSinhVien',
                 'sinhVien.hoTen',
-                'sinhVien.email',
-                'sinhVien.sdt',
                 'sinhVien.ngaySinh',
                 'sinhVien.gioiTinh',
                 'sinhVien.diaChi',
 
                 'giangVien.id',
                 'giangVien.hoTen',
-                'giangVien.email',
-                'giangVien.sdt',
                 'giangVien.ngaySinh',
                 'giangVien.gioiTinh',
                 'giangVien.diaChi',
@@ -208,13 +204,6 @@ export class AuthService {
             const searchLower = search.toLowerCase();
             qb.andWhere(
                 '(LOWER(nguoiDung.tenDangNhap) LIKE :search ' +
-                'OR LOWER(sinhVien.hoTen) LIKE :search ' +
-                'OR LOWER(sinhVien.maSinhVien) LIKE :search ' +
-                'OR LOWER(sinhVien.email) LIKE :search ' +
-                'OR LOWER(sinhVien.sdt) LIKE :search ' +
-                'OR LOWER(giangVien.hoTen) LIKE :search ' +
-                'OR LOWER(giangVien.email) LIKE :search ' +
-                'OR LOWER(giangVien.sdt) LIKE :search)',
                 { search: `%${searchLower}%` }
             );
         }
@@ -238,8 +227,6 @@ export class AuthService {
                     id: user.sinhVien.id,
                     maSinhVien: user.sinhVien.maSinhVien,
                     hoTen: user.sinhVien.hoTen,
-                    email: user.sinhVien.email,
-                    sdt: user.sinhVien.sdt,
                     ngaySinh: user.sinhVien.ngaySinh,
                     gioiTinh: user.sinhVien.gioiTinh,
                     diaChi: user.sinhVien.diaChi,
@@ -249,8 +236,6 @@ export class AuthService {
                         type: 'giangvien',
                         id: user.giangVien.id,
                         hoTen: user.giangVien.hoTen,
-                        email: user.giangVien.email,
-                        sdt: user.giangVien.sdt,
                         ngaySinh: user.giangVien.ngaySinh,
                         gioiTinh: user.giangVien.gioiTinh,
                         diaChi: user.giangVien.diaChi,
@@ -284,17 +269,6 @@ export class AuthService {
         });
 
         if (!user) throw new NotFoundException('Người dùng không tồn tại');
-
-        // === KIỂM TRA TÊN ĐĂNG NHẬP TRÙNG ===
-        if (updateUserDto.tenDangNhap) {
-            const exist = await this.nguoiDungRepo.findOne({
-                where: { tenDangNhap: updateUserDto.tenDangNhap },
-            });
-            if (exist && exist.id !== id) {
-                throw new BadRequestException('Tên đăng nhập đã tồn tại');
-            }
-            user.tenDangNhap = updateUserDto.tenDangNhap;
-        }
 
         // === VALIDATION VAI TRÒ MỚI ===
         if (updateUserDto.vaiTro) {

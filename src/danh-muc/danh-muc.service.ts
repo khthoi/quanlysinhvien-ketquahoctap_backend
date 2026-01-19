@@ -1215,7 +1215,6 @@ export class DanhMucService {
 
             // 2. Duyệt từng dòng
             for (const row of rows) {
-
                 if (!row || row.actualCellCount === 0) continue;
 
                 const rowNum = row.number;
@@ -1227,6 +1226,7 @@ export class DanhMucService {
                 const sdt = row.getCell(6).value?.toString().trim() || undefined;
                 const gioiTinhStr = row.getCell(7).value?.toString().trim() || undefined;
                 const diaChi = row.getCell(8).value?.toString().trim() || undefined;
+                const maMonHoc = row.getCell(9).value?.toString().trim() || ''; // Cột 9 - Mã môn học
 
                 // Validate bắt buộc
                 if (!maGiangVien || !hoTen || !email) {
@@ -1239,7 +1239,7 @@ export class DanhMucService {
                     continue;
                 }
 
-                // Validate email cơ bản (class-validator sẽ kiểm tra thêm khi tạo DTO)
+                // Validate email cơ bản
                 if (!email.includes('@')) {
                     results.failed++;
                     results.errors.push({
@@ -1271,7 +1271,7 @@ export class DanhMucService {
                 if (ngaySinhStr) {
                     let parsedDate: Date | null = null;
 
-                    // Trường hợp 1: Nếu là đối tượng Date (từ Excel hoặc dữ liệu đã parse)
+                    // Trường hợp 1: Nếu là đối tượng Date
                     if (ngaySinhStr instanceof Date && !isNaN(ngaySinhStr.getTime())) {
                         parsedDate = ngaySinhStr;
                     }
@@ -1279,31 +1279,27 @@ export class DanhMucService {
                     else if (typeof ngaySinhStr === 'string' && ngaySinhStr.trim()) {
                         const str = ngaySinhStr.trim();
 
-                        // Thử các định dạng phổ biến bằng cách dùng Date constructor + regex hỗ trợ
                         // 1. YYYY-MM-DD (ISO chuẩn)
                         if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
                             parsedDate = new Date(str);
                         }
-                        // 2. DD-MM-YYYY hoặc D-M-YYYY (phổ biến ở Việt Nam)
+                        // 2. DD-MM-YYYY hoặc D-M-YYYY
                         else if (/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/.test(str)) {
                             const [, day, month, year] = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/)!;
                             parsedDate = new Date(Number(year), Number(month) - 1, Number(day));
                         }
-                        // 3. MM/DD/YYYY (định dạng Mỹ, hay gặp khi import từ Excel)
+                        // 3. MM/DD/YYYY
                         else if (/^(\d{1,2})[/](\d{1,2})[/](\d{4})$/.test(str)) {
                             const [, month, day, year] = str.match(/^(\d{1,2})[/](\d{1,2})[/](\d{4})$/)!;
                             parsedDate = new Date(Number(year), Number(month) - 1, Number(day));
                         }
-                        // Có thể thêm định dạng khác nếu cần (ví dụ: DD.MM.YYYY, v.v.)
                     }
 
                     // Kiểm tra kết quả parse có hợp lệ không
                     if (parsedDate && !isNaN(parsedDate.getTime())) {
-                        // Ép về định dạng dd-mm-yyyy (luôn 2 chữ số cho ngày/tháng)
                         const day = String(parsedDate.getDate()).padStart(2, '0');
                         const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
                         const year = parsedDate.getFullYear();
-
                         ngaySinh = `${day}-${month}-${year}`;
                     } else {
                         results.failed++;
@@ -1317,7 +1313,7 @@ export class DanhMucService {
                 }
 
                 try {
-                    // 3. Tạo DTO và gọi hàm createGiangVien hiện có
+                    // 3. Tạo giảng viên
                     const createDto: CreateGiangVienDto = {
                         maGiangVien,
                         hoTen,
@@ -1328,7 +1324,48 @@ export class DanhMucService {
                         diaChi,
                     };
 
-                    await this.createGiangVien(createDto);
+                    const giangVienMoi = await this.createGiangVien(createDto);
+
+                    // 4. Phân công môn học (nếu có mã môn học)
+                    if (maMonHoc) {
+                        // Tìm môn học theo mã
+                        const monHoc = await this.monHocRepository.findOne({
+                            where: { maMonHoc },
+                        });
+
+                        if (!monHoc) {
+                            // Không throw error mà chỉ ghi nhận warning
+                            results.errors.push({
+                                row: rowNum,
+                                maGiangVien,
+                                error: `Tạo giảng viên thành công nhưng mã môn học "${maMonHoc}" không tồn tại, không thể phân công môn học`,
+                            });
+                        } else {
+                            // Kiểm tra đã phân công chưa
+                            const existingPhanCong = await this.giangVienMonHocRepository.findOne({
+                                where: {
+                                    giangVien: { id: giangVienMoi.id },
+                                    monHoc: { id: monHoc.id },
+                                },
+                            });
+
+                            if (existingPhanCong) {
+                                results.errors.push({
+                                    row: rowNum,
+                                    maGiangVien,
+                                    error: `Tạo giảng viên thành công nhưng môn học "${maMonHoc}" đã được phân công cho giảng viên này`,
+                                });
+                            } else {
+                                // Thực hiện phân công
+                                const phanCongDto: PhanCongMonHocDto = {
+                                    giangVienId: giangVienMoi.id,
+                                    monHocId: monHoc.id,
+                                };
+
+                                await this.phanCongMonHoc(phanCongDto);
+                            }
+                        }
+                    }
 
                     results.success++;
                 } catch (error) {

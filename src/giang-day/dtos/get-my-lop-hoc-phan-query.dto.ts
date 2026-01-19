@@ -4,6 +4,11 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class GetMyLopHocPhanQueryDto {
 
+  @ApiProperty({ description: 'Tìm kiếm theo Mã lớp học phần', example: 'LHP001' })
+  @IsOptional()
+  @ApiPropertyOptional()
+  search?: string;
+
   @ApiPropertyOptional({ description: 'Trang số', example: 1 })
   @IsOptional()
   @Transform(({ value }) => parseInt(value, 10))

@@ -1322,6 +1322,7 @@ export class GiangDayService {
             nganhId,
             nienKhoaId,
             trangThai,
+            search, // ← Thêm tham số search
         } = query;
 
         // Tìm giảng viên từ userId
@@ -1352,6 +1353,13 @@ export class GiangDayService {
         if (monHocId) qb.andWhere('lhp.mon_hoc_id = :monHocId', { monHocId });
         if (nganhId) qb.andWhere('lhp.nganh_id = :nganhId', { nganhId });
         if (nienKhoaId) qb.andWhere('lhp.nien_khoa_id = :nienKhoaId', { nienKhoaId });
+
+        // ← THÊM LOGIC TÌM KIẾM THEO MÃ LỚP HỌC PHẦN
+        if (search) {
+            qb.andWhere('LOWER(lhp.maLopHocPhan) LIKE LOWER(:search)', {
+                search: `%${search}%`
+            });
+        }
 
         qb.orderBy('namHoc.namBatDau', 'DESC')
             .addOrderBy('hocKy.hocKy', 'ASC')

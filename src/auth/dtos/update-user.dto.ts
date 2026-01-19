@@ -3,9 +3,6 @@ import { IsEnum, IsOptional } from 'class-validator';
 import { VaiTroNguoiDungEnum } from '../enums/vai-tro-nguoi-dung.enum';
 
 export class UpdateUserDto {
-  @ApiPropertyOptional({ description: 'Tên đăng nhập mới', example: 'newusername' })
-  @IsOptional()
-  tenDangNhap?: string;
 
   @ApiPropertyOptional({
     description: 'Vai trò mới',

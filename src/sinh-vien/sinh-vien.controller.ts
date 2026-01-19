@@ -242,20 +242,20 @@ export class SinhVienController {
     return this.sinhVienService.findMe(userId);
   }
 
-  @ApiOperation({
-    summary: 'Sinh viên cập nhật thông tin cá nhân của mình',
-    description: 'Chỉ sinh viên đang đăng nhập mới được gọi',
-  })
-  @ApiBody({ type: UpdateSinhVienSelfDto })
-  @ApiResponse({ status: 200, description: 'Thông tin cá nhân đã được cập nhật' })
-  @Put('me/my-profile')
-  @Roles(VaiTroNguoiDungEnum.SINH_VIEN)
-  async updateMe(
-    @GetUser('userId') userId: number,
-    @Body() dto: UpdateSinhVienSelfDto,
-  ) {
-    return this.sinhVienService.updateMe(userId, dto);
-  }
+  //@ApiOperation({
+    //summary: 'Sinh viên cập nhật thông tin cá nhân của mình',
+    //description: 'Chỉ sinh viên đang đăng nhập mới được gọi',
+  //})
+  //@ApiBody({ type: UpdateSinhVienSelfDto })
+  //@ApiResponse({ status: 200, description: 'Thông tin cá nhân đã được cập nhật' })
+  //@Put('me/my-profile')
+  //@Roles(VaiTroNguoiDungEnum.SINH_VIEN)
+  //async updateMe(
+    //@GetUser('userId') userId: number,
+    //@Body() dto: UpdateSinhVienSelfDto,
+  //) {
+  //  return this.sinhVienService.updateMe(userId, dto);
+  //}
 
   @ApiOperation({
     summary: 'Xét tốt nghiệp theo niên khóa và trả về thống kê',
