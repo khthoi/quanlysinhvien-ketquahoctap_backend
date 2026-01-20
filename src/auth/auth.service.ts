@@ -203,7 +203,7 @@ export class AuthService {
         if (search) {
             const searchLower = search.toLowerCase();
             qb.andWhere(
-                '(LOWER(nguoiDung.tenDangNhap) LIKE :search ' +
+                'LOWER(nguoiDung.tenDangNhap) LIKE :search',
                 { search: `%${searchLower}%` }
             );
         }

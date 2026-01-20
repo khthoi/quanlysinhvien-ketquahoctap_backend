@@ -279,7 +279,7 @@ export class GiangDayService {
                         continue;
                     }
 
-                    const soLopCanTao = Math.ceil(soSV / 50);
+                    const soLopCanTao = Math.ceil(soSV / 40); // Giả sử mỗi lớp tối đa 40 sinh viên
 
                     const soLopDaTao = await manager.count(LopHocPhan, {
                         where: {
@@ -491,7 +491,7 @@ export class GiangDayService {
         }
 
         // === VALIDATION CŨ 2: Kiểm tra số lượng lớp học phần tối đa theo số sinh viên ===
-        const MAX_SV_MOT_LOP = 50;
+        const MAX_SV_MOT_LOP = 40;
 
         const tongSinhVien = await this.sinhVienRepo.count({
             where: {
@@ -789,7 +789,7 @@ export class GiangDayService {
 
         // === VALIDATION 2: Kiểm tra giới hạn số lớp học phần theo số sinh viên ===
         if (dto.monHocId || dto.nganhId || dto.nienKhoaId) {
-            const MAX_SV_MOT_LOP = 50;
+            const MAX_SV_MOT_LOP = 40;
 
             const tongSinhVien = await this.sinhVienRepo.count({
                 where: {
@@ -1602,7 +1602,6 @@ export class GiangDayService {
         };
 
         for (const row of rows) {
-
             if (!row || row.actualCellCount === 0) continue;
 
             const rowNum = row.number;
@@ -1640,7 +1639,6 @@ export class GiangDayService {
                     throw new BadRequestException(`Không tìm thấy lớp học phần với mã ${maLopHocPhan}`);
                 }
             } catch (err) {
-                // Lớp không tồn tại → toàn bộ sinh viên của lớp này fail
                 overallResults.failed += students.length;
                 students.forEach(s => {
                     overallResults.errors.push({
@@ -1652,6 +1650,18 @@ export class GiangDayService {
                 });
                 continue;
             }
+
+            // === THÊM KIỂM TRA SĨ SỐ TỐI ĐA ===
+            const MAX_SV_MOT_LOP = 40;
+
+            // Đếm số sinh viên HIỆN TẠI đã đăng ký vào lớp này
+            const currentCount = await this.svLhpRepo.count({
+                where: {
+                    lopHocPhan: { id: lopHocPhan.id },
+                },
+            });
+
+            let slotsConLai = MAX_SV_MOT_LOP - currentCount;
 
             const classResult = {
                 success: 0,
@@ -1669,17 +1679,35 @@ export class GiangDayService {
                         throw new BadRequestException(`Mã sinh viên ${maSinhVien} không tồn tại`);
                     }
 
-                    // Gọi hàm đăng ký hiện có (đã có validate đầy đủ)
+                    // Kiểm tra chỗ còn lại TRƯỚC khi đăng ký
+                    if (slotsConLai <= 0) {
+                        throw new BadRequestException(
+                            `Lớp ${maLopHocPhan} đã đủ ${MAX_SV_MOT_LOP} sinh viên. Không thể thêm sinh viên.`
+                        );
+                    }
+
+                    // Gọi hàm đăng ký (giả sử hàm này đã có validate khác như chưa học môn, trùng lớp, v.v.)
                     await this.dangKySinhVien(lopHocPhan.id, sinhVien.id);
 
+                    // Thành công → giảm chỗ còn lại
+                    slotsConLai--;
                     classResult.success++;
                     overallResults.success++;
+
                 } catch (error) {
                     classResult.failed++;
                     overallResults.failed++;
-                    const errMsg = error instanceof BadRequestException ? error.message : 'Lỗi không xác định';
+                    const errMsg = error instanceof BadRequestException
+                        ? error.message
+                        : 'Lỗi không xác định khi đăng ký';
+
                     classResult.errors.push({ row: rowNum, maSinhVien, error: errMsg });
-                    overallResults.errors.push({ row: rowNum, maSinhVien, maLopHocPhan, error: errMsg });
+                    overallResults.errors.push({
+                        row: rowNum,
+                        maSinhVien,
+                        maLopHocPhan,
+                        error: errMsg
+                    });
                 }
             }
 
@@ -1839,7 +1867,7 @@ export class GiangDayService {
                     const soSVChuaHoc = svChuaHoc.length;
 
                     // Bỏ qua nếu không đủ mở ít nhất 1 lớp
-                    if (soSVChuaHoc < 25) {
+                    if (soSVChuaHoc < 20) {
                         continue;
                     }
 
@@ -1855,15 +1883,15 @@ export class GiangDayService {
                     let soLop: number;
                     let danhSachSiSo: number[] = [];
 
-                    // Trường hợp 1: Chỉ đủ mở 1 lớp (25–49 SV)
-                    if (soSVChuaHoc < 50) {
+                    // Trường hợp 1: Chỉ đủ mở 1 lớp (20–39 SV)
+                    if (soSVChuaHoc < 40) {
                         soLop = 1;
                         danhSachSiSo = [soSVChuaHoc];
                     }
                     // Trường hợp 2: Có thể mở từ 2 lớp trở lên
                     else {
                         // Cách 1 - chia đều (khuyến nghị - đơn giản & công bằng)
-                        soLop = Math.ceil(soSVChuaHoc / 50);
+                        soLop = Math.ceil(soSVChuaHoc / 40);
 
                         // hoặc Cách 2 - ưu tiên mở ít lớp hơn một chút nếu chia đẹp
                         // soLop = Math.max(2, Math.floor(soSVChuaHoc / 55)); // thử nghiệm nếu muốn
@@ -1878,12 +1906,12 @@ export class GiangDayService {
                             danhSachSiSo[i]++;
                         }
 
-                        // Kiểm tra an toàn: có lớp nào < 25 không?
-                        // (thường không xảy ra nếu dùng Math.ceil / 50)
-                        if (danhSachSiSo.some(siso => siso < 25)) {
+                        // Kiểm tra an toàn: có lớp nào < 20 không?
+                        // (thường không xảy ra nếu dùng Math.ceil / 40)
+                        if (danhSachSiSo.some(siso => siso < 20)) {
                             // Trường hợp hiếm: điều chỉnh về 1 lớp ít hơn (nếu cần)
                             // Nhưng với công thức trên hầu như không cần
-                            console.warn(`Cảnh báo: Có lớp < 25 sau khi chia - SV=${soSVChuaHoc}, soLop=${soLop}`);
+                            console.warn(`Cảnh báo: Có lớp < 20 sau khi chia - SV=${soSVChuaHoc}, soLop=${soLop}`);
                         }
                     }
 
@@ -1894,14 +1922,33 @@ export class GiangDayService {
                         // Tạo mã lớp học phần
                         const maLopHocPhan = `${monHoc.maMonHoc}_${nk.maNienKhoa}_${nganh.maNganh}_${sttLop}`;
 
-                        // ─── phần tìm giảng viên giữ nguyên ───
+                        // ─── PHÂN CÔNG GIẢNG VIÊN THEO NGUYÊN TẮC CÂN BẰNG TÍN CHỈ ───
                         let maGiangVien = '';
+
                         if (giangViens.length > 0) {
+
+                            // 1. Lấy tải hiện tại của từng giảng viên
+                            const giangVienWithLoad: {
+                                gv: typeof giangViens[0];
+                                tinChi: number;
+                            }[] = [];
+
                             for (const gv of giangViens) {
                                 const tinChiHienTai = await getTinChiHienTaiCuaGV(gv.id, hocKyThucTe.id);
-                                if (tinChiHienTai + monHoc.soTinChi <= 12) {
-                                    maGiangVien = gv.maGiangVien;
-                                    capNhatTinChiGV(gv.id, hocKyThucTe.id, monHoc.soTinChi);
+                                giangVienWithLoad.push({
+                                    gv,
+                                    tinChi: tinChiHienTai
+                                });
+                            }
+
+                            // 2. Sắp xếp theo số tín chỉ tăng dần
+                            giangVienWithLoad.sort((a, b) => a.tinChi - b.tinChi);
+
+                            // 3. Chọn GV có ít tín chỉ nhất nhưng không vượt trần
+                            for (const item of giangVienWithLoad) {
+                                if (item.tinChi + monHoc.soTinChi <= 12) {
+                                    maGiangVien = item.gv.maGiangVien;
+                                    capNhatTinChiGV(item.gv.id, hocKyThucTe.id, monHoc.soTinChi);
                                     break;
                                 }
                             }
@@ -2114,33 +2161,64 @@ export class GiangDayService {
             const maGiangVien = row.getCell(10)?.value?.toString().trim() || '';
             const soSinhVienSeThamGia = Number(row.getCell(11)?.value) || 0;
 
-            // Validate dữ liệu cơ bản
-            if (!maLopHocPhan || !maNganh || !maNienKhoa || !maMonHoc || !maNamHoc || !hocKyValue) {
+            // Validate dữ liệu cơ bản (log chi tiết từng trường thiếu)
+            const missingFields: string[] = [];
+
+            if (!maLopHocPhan) missingFields.push(`mã lớp học phần`);
+            if (!maNganh) missingFields.push(`mã ngành`);
+            if (!maNienKhoa) missingFields.push(`mã niên khóa`);
+            if (!maMonHoc) missingFields.push(`mã môn học`);
+            if (!maNamHoc) missingFields.push(`mã năm học`);
+            if (!hocKyValue) missingFields.push(`học kỳ`);
+
+            if (missingFields.length > 0) {
                 results.failed++;
+
+                const missingMessage = `Thiếu thông tin bắt buộc: ${missingFields.join(', ')}`;
+
                 results.errors.push({
                     row: rowNum,
                     maLopHocPhan: maLopHocPhan || 'N/A',
-                    error: 'Thiếu thông tin bắt buộc (mã lớp, mã ngành, mã niên khóa, mã môn học, mã năm học, hoặc học kỳ)',
+                    error: missingMessage,
                 });
+
                 results.details.push({
                     row: rowNum,
                     maLopHocPhan: maLopHocPhan || 'N/A',
                     status: 'failed',
-                    message: 'Thiếu thông tin bắt buộc',
+                    message: missingMessage,
                 });
+
                 continue;
             }
-
             const groupKey = `${maNganh}__${maNienKhoa}__${maMonHoc}`;
 
             try {
                 // ----- VALIDATE SỐ SV GROUP -----
                 if (!checkedMap.has(groupKey)) {
-                    // Tính tổng số SV đang DANG_HOC của ngành, niên khóa, môn này
+
                     const nganh = await this.nganhRepo.findOneBy({ maNganh });
+                    if (!nganh) {
+                        throw new BadRequestException(
+                            `Mã ngành "${maNganh}" không tồn tại trong hệ thống, vui lòng kiểm tra lại`
+                        );
+                    }
+
                     const nienKhoa = await this.nienKhoaRepo.findOneBy({ maNienKhoa });
+                    if (!nienKhoa) {
+                        throw new BadRequestException(
+                            `Mã niên khóa "${maNienKhoa}" không tồn tại trong hệ thống, vui lòng kiểm tra lại`
+                        );
+                    }
+
                     const monHoc = await this.monHocRepo.findOneBy({ maMonHoc });
-                    if (!nganh || !nienKhoa || !monHoc) throw new BadRequestException('Mã ngành, niên khóa hoặc môn học không tồn tại để kiểm tra tổng SV');
+                    if (!monHoc) {
+                        throw new BadRequestException(
+                            `Mã môn học "${maMonHoc}" không tồn tại trong hệ thống, vui lòng kiểm tra lại`
+                        );
+                    }
+
+                    // Tính tổng số SV đang DANG_HOC của ngành + niên khóa
                     const tongSVHeThong = await this.sinhVienRepo.count({
                         where: {
                             lop: {
@@ -2150,12 +2228,16 @@ export class GiangDayService {
                             tinhTrang: TinhTrangHocTapEnum.DANG_HOC,
                         },
                     });
+
                     const tongSVExcel = excelSinhVienCountMap.get(groupKey) || 0;
+
                     if (tongSVHeThong !== tongSVExcel) {
                         throw new BadRequestException(
-                            `Tổng số sinh viên ngành "${maNganh}", niên khóa "${maNienKhoa}", môn "${maMonHoc}" trong hệ thống là ${tongSVHeThong} nhưng trong file Excel là ${tongSVExcel}`
+                            `Tổng số sinh viên ngành "${maNganh}", niên khóa "${maNienKhoa}", học môn "${maMonHoc}" `
+                            + `trong hệ thống là ${tongSVHeThong} nhưng trong file Excel là ${tongSVExcel}`
                         );
                     }
+
                     checkedMap.set(groupKey, true);
                 }
                 // 1. Kiểm tra mã lớp học phần trùng
@@ -2259,7 +2341,7 @@ export class GiangDayService {
                 }
 
                 // 9. Kiểm tra số lượng lớp học phần tối đa theo số sinh viên
-                const MAX_SV_MOT_LOP = 50;
+                const MAX_SV_MOT_LOP = 40;
 
                 const tongSinhVien = await this.sinhVienRepo.count({
                     where: {
@@ -2350,7 +2432,7 @@ export class GiangDayService {
                     })
                     .setParameter('monHocId', monHoc.id)
                     .orderBy('sv.maSinhVien', 'ASC')
-                    .take(soSinhVienSeThamGia > 0 ? soSinhVienSeThamGia : 50)
+                    .take(soSinhVienSeThamGia > 0 ? soSinhVienSeThamGia : 40)
                     .getMany();
 
                 let soSinhVienDaDangKy = 0;

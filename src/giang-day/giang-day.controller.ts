@@ -364,7 +364,7 @@ export class GiangDayController {
 Hệ thống sẽ tự động: 
 1. Validate dữ liệu (mã lớp trùng, giảng viên được phân công, môn học trong CTDT, giới hạn tín chỉ GV...)
 2. Tạo lớp học phần
-3. Thêm tối đa 50 sinh viên chưa học môn này vào lớp`,
+3. Thêm tối đa 40 sinh viên chưa học môn này vào lớp`,
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({

@@ -1153,19 +1153,16 @@ export class BaoCaoService {
                 continue;
             }
 
-            // Tìm các niên khóa cao hơn niên khóa của sinh viên
             const nienKhoasCaoHon = await this.nienKhoaRepo.find({
-                where: { namBatDau: MoreThanOrEqual(nienKhoaSV.namBatDau + 1) },
+                where: {
+                    namBatDau: MoreThanOrEqual(nienKhoaSV.namBatDau + 1)
+                },
                 order: { namBatDau: 'ASC' },
             });
 
-            // Tìm lớp học phần đề xuất: 
-            // - Cùng môn học
-            // - Cùng ngành
-            // - Niên khóa cao hơn
-            // - Chưa khóa điểm
             let lopDeXuat: LopHocPhan | null = null;
 
+            // 1️⃣ Ưu tiên: niên khóa cao hơn + cùng ngành
             for (const nkCaoHon of nienKhoasCaoHon) {
                 const lhpDeXuat = await this.lopHocPhanRepo.findOne({
                     where: {
@@ -1173,6 +1170,7 @@ export class BaoCaoService {
                         nganh: { id: nganhId },
                         nienKhoa: { id: nkCaoHon.id },
                         khoaDiem: false,
+                        id: Not(lhpTruot.id),
                     },
                     relations: ['monHoc', 'nganh', 'nienKhoa', 'hocKy', 'hocKy.namHoc'],
                     order: { ngayTao: 'DESC' },
@@ -1184,20 +1182,28 @@ export class BaoCaoService {
                 }
             }
 
-            // Nếu không tìm được ở niên khóa cao hơn, tìm ở cùng niên khóa nhưng khác lớp học phần
+            // 2️⃣ Nếu không có: niên khóa cao hơn + khác ngành
             if (!lopDeXuat) {
-                lopDeXuat = await this.lopHocPhanRepo.findOne({
-                    where: {
-                        monHoc: { id: monHocId },
-                        nganh: { id: nganhId },
-                        nienKhoa: { id: nienKhoaSV.id },
-                        khoaDiem: false,
-                        id: Not(lhpTruot.id), // Khác lớp đã trượt
-                    },
-                    relations: ['monHoc', 'nganh', 'nienKhoa', 'hocKy', 'hocKy.namHoc'],
-                    order: { ngayTao: 'DESC' },
-                });
+                for (const nkCaoHon of nienKhoasCaoHon) {
+                    const lhpDeXuatKhacNganh = await this.lopHocPhanRepo.findOne({
+                        where: {
+                            monHoc: { id: monHocId },
+                            nganh: { id: Not(nganhId) },
+                            nienKhoa: { id: nkCaoHon.id },
+                            khoaDiem: false,
+                            id: Not(lhpTruot.id),
+                        },
+                        relations: ['monHoc', 'nganh', 'nienKhoa', 'hocKy', 'hocKy.namHoc'],
+                        order: { ngayTao: 'DESC' },
+                    });
+
+                    if (lhpDeXuatKhacNganh) {
+                        lopDeXuat = lhpDeXuatKhacNganh;
+                        break;
+                    }
+                }
             }
+
 
             ketQuaDeXuat.push({
                 stt: stt++,

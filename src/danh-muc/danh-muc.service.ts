@@ -512,7 +512,7 @@ export class DanhMucService {
     async deleteNienKhoa(id: number): Promise<void> {
         const nienKhoa = await this.nienKhoaRepository.findOne({
             where: { id },
-            relations: ['lops,', 'apDungChuongTrinhs', 'lopHocPhans'],
+            relations: ['lops', 'apDungChuongTrinhs', 'lopHocPhans'],
         });
 
         if (!nienKhoa) {
