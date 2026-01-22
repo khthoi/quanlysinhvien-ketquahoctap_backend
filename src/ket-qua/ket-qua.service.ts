@@ -48,7 +48,7 @@ export class KetQuaService {
   }
 
   private tinhDiemChu(diemTB: number): string {
-    if (diemTB >= 9.5) return 'A+';
+    if (diemTB >= 9.0) return 'A+';
     if (diemTB >= 8.5) return 'A';
     if (diemTB >= 8.0) return 'B+';
     if (diemTB >= 7.0) return 'B';
@@ -61,8 +61,18 @@ export class KetQuaService {
 
   private tinhDiemSo(diemTB: number | null): number | null {
     if (diemTB === null) return null;
-    return Number((diemTB / 10 * 4).toFixed(2));
+
+    if (diemTB >= 9.0) return 4.0;
+    if (diemTB >= 8.5) return 3.7;
+    if (diemTB >= 8.0) return 3.5;
+    if (diemTB >= 7.0) return 3.0;
+    if (diemTB >= 6.5) return 2.5;
+    if (diemTB >= 5.5) return 2.0;
+    if (diemTB >= 5.0) return 1.5;
+    if (diemTB >= 4.0) return 1.0;
+    return 0.0;
   }
+
 
   // Nhập điểm (POST)
   async nhapDiem(userId: number, dto: NhapDiemDto) {
@@ -382,23 +392,66 @@ export class KetQuaService {
       ],
     });
 
+    // ===== LỌC CHỈ LẤY KẾT QUẢ TỪ LỚP HỌC PHẦN ĐÃ KHÓA ĐIỂM =====
+    const ketQuaDaKhoaDiem = ketQua.filter(kq => kq.lopHocPhan.khoaDiem === true);
+
     // Lấy thông tin khen thưởng kỷ luật của sinh viên
     const khenThuongKyLuats = await this.khenThuongKyLuatRepo.find({
       where: { sinhVien: { id: sinhVienId } },
     });
 
-    // Map kết quả học tập
-    const mappedKetQua = ketQua.map(kq => {
+    // ===== NHÓM KẾT QUẢ THEO MÔN HỌC ĐỂ TÍNH GPA =====
+    const ketQuaTheoMon = new Map<number, { monHocId: number; diemTBCHPList: number[] }>();
+
+    for (const kq of ketQuaDaKhoaDiem) {
+      const monHocId = kq.lopHocPhan.monHoc.id;
+      const tbchp = this.tinhTBCHP(kq);
+
+      if (!ketQuaTheoMon.has(monHocId)) {
+        ketQuaTheoMon.set(monHocId, {
+          monHocId,
+          diemTBCHPList: [],
+        });
+      }
+
+      if (tbchp !== null) {
+        ketQuaTheoMon.get(monHocId)!.diemTBCHPList.push(tbchp);
+      }
+    }
+
+    // ===== TÍNH GPA HỆ 4 =====
+    // Lấy điểm TBCHP cao nhất của mỗi môn, quy đổi sang hệ 4, rồi tính trung bình
+    let tongDiemHe4 = 0;
+    let soMonDuocXet = 0;
+
+    for (const [monHocId, data] of ketQuaTheoMon) {
+      if (data.diemTBCHPList.length > 0) {
+        // Lấy điểm TBCHP cao nhất của môn này
+        const diemCaoNhat = Math.max(...data.diemTBCHPList);
+        const diemHe4 = this.diemHe10ToHe4(diemCaoNhat);
+
+        tongDiemHe4 += diemHe4;
+        soMonDuocXet++;
+      }
+    }
+
+    const gpa = soMonDuocXet > 0 ? tongDiemHe4 / soMonDuocXet : null;
+    const xepLoaiHocLuc = gpa !== null ? this.xepLoaiHocLuc(gpa) : null;
+
+    // Map kết quả học tập (chỉ lấy kết quả đã khóa điểm)
+    const mappedKetQua = ketQuaDaKhoaDiem.map(kq => {
       const tbchp = this.tinhTBCHP(kq);
       return {
         id: kq.id,
         lopHocPhan: {
           maLopHocPhan: kq.lopHocPhan.maLopHocPhan,
           monHoc: kq.lopHocPhan.monHoc,
-          giangVien: kq.lopHocPhan.giangVien ? {
-            id: kq.lopHocPhan.giangVien.id,
-            hoTen: kq.lopHocPhan.giangVien.hoTen,
-          } : null,
+          giangVien: kq.lopHocPhan.giangVien
+            ? {
+              id: kq.lopHocPhan.giangVien.id,
+              hoTen: kq.lopHocPhan.giangVien.hoTen,
+            }
+            : null,
           hocKy: kq.lopHocPhan.hocKy,
           namHoc: kq.lopHocPhan.hocKy.namHoc,
           nienKhoa: kq.lopHocPhan.nienKhoa,
@@ -424,7 +477,42 @@ export class KetQuaService {
     return {
       ketQuaHocTap: mappedKetQua,
       khenThuongKyLuat: mappedKhenThuongKyLuat,
+      thongKe: {
+        soMonHoanThanh: soMonDuocXet,
+        soKetQuaHocTap: ketQuaDaKhoaDiem.length,
+        gpa: gpa !== null ? Number(gpa.toFixed(2)) : null,
+        xepLoaiHocLuc,
+      },
     };
+  }
+
+  // ========== HELPER METHODS ==========
+
+  /**
+   * Quy đổi điểm hệ 10 sang hệ 4
+   */
+  private diemHe10ToHe4(diem: number): number {
+    if (diem >= 9.0) return 4.0;
+    if (diem >= 8.5) return 3.7;
+    if (diem >= 8.0) return 3.5;
+    if (diem >= 7.0) return 3.0;
+    if (diem >= 6.5) return 2.5;
+    if (diem >= 5.5) return 2.0;
+    if (diem >= 5.0) return 1.5;
+    if (diem >= 4.0) return 1.0;
+    return 0.0;
+  }
+
+  /**
+   * Xếp loại học lực theo GPA hệ 4
+   */
+  private xepLoaiHocLuc(gpa: number): string {
+    if (gpa >= 3.6) return 'Xuất sắc';
+    if (gpa >= 3.2) return 'Giỏi';
+    if (gpa >= 2.5) return 'Khá';
+    if (gpa >= 2.0) return 'Trung bình';
+    if (gpa >= 1.0) return 'Yếu';
+    return 'Kém';
   }
 
   async nhapDiemExcel(lopHocPhanId: number, userId: number, filePath: string) {

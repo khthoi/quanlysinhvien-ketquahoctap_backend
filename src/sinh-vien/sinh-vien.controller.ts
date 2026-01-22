@@ -15,6 +15,7 @@ import {
   BadRequestException,
   UploadedFile,
   UseInterceptors,
+  Res,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -45,6 +46,8 @@ import { ImportSinhVienBatchDto } from './dtos/import-sinh-vien.dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
+import express from 'express';
+import { XetTotNghiepDto } from './dtos/xet-tot-nghiep.dto';
 
 @ApiTags('Sinh viên')
 @ApiBearerAuth()
@@ -243,34 +246,62 @@ export class SinhVienController {
   }
 
   //@ApiOperation({
-    //summary: 'Sinh viên cập nhật thông tin cá nhân của mình',
-    //description: 'Chỉ sinh viên đang đăng nhập mới được gọi',
+  //summary: 'Sinh viên cập nhật thông tin cá nhân của mình',
+  //description: 'Chỉ sinh viên đang đăng nhập mới được gọi',
   //})
   //@ApiBody({ type: UpdateSinhVienSelfDto })
   //@ApiResponse({ status: 200, description: 'Thông tin cá nhân đã được cập nhật' })
   //@Put('me/my-profile')
   //@Roles(VaiTroNguoiDungEnum.SINH_VIEN)
   //async updateMe(
-    //@GetUser('userId') userId: number,
-    //@Body() dto: UpdateSinhVienSelfDto,
+  //@GetUser('userId') userId: number,
+  //@Body() dto: UpdateSinhVienSelfDto,
   //) {
   //  return this.sinhVienService.updateMe(userId, dto);
   //}
 
   @ApiOperation({
-    summary: 'Xét tốt nghiệp theo niên khóa và trả về thống kê',
-    description: `Xét tất cả sinh viên đang học (DANG_HOC) thuộc niên khóa.
-  Cập nhật trạng thái thành DA_TOT_NGHIEP cho những sinh viên đủ điều kiện.
-  Trả về thống kê: tổng SV của niên khóa, số SV đạt TN, số SV không đạt TN.`,
+    summary: 'Xét tốt nghiệp theo niên khóa và ngành - Xuất file Excel',
+    description: `Xét tất cả sinh viên đang học (DANG_HOC) thuộc niên khóa và ngành. 
+Cập nhật trạng thái thành DA_TOT_NGHIEP cho những sinh viên đủ điều kiện.
+Trả về file Excel thống kê chi tiết kết quả xét tốt nghiệp.`,
   })
-  @ApiParam({ name: 'nienKhoaId', type: Number })
-  @ApiResponse({ status: 200, description: 'Thống kê xét tốt nghiệp' })
-  @Get('xet-tot-nghiep/:nienKhoaId/thong-ke')
+  @ApiBody({ type: XetTotNghiepDto })
+  @ApiResponse({
+    status: 200,
+    description: 'File Excel thống kê xét tốt nghiệp',
+    content: {
+      'application/vnd.openxmlformats-officedocument. spreadsheetml.sheet': {
+        schema: {
+          type: 'string',
+          format: 'binary',
+        },
+      },
+    },
+  })
+  @Post('xet-tot-nghiep/thong-ke')
   @Roles(VaiTroNguoiDungEnum.ADMIN, VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async xetTotNghiepThongKe(
-    @Param('nienKhoaId', ParseIntPipe) nienKhoaId: number,
+    @Body() dto: XetTotNghiepDto,
+    @Res() res: express.Response,
   ) {
-    return this.sinhVienService.xetTotNghiepVaTraThongKe(nienKhoaId);
+    const buffer = await this.sinhVienService.xetTotNghiepVaXuatExcel(
+      dto.nienKhoaId,
+      dto.nganhId,
+    );
+
+    const fileName = `ThongKe_XetTotNghiep_${Date.now()}.xlsx`;
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${fileName}"`,
+    );
+
+    res.send(buffer);
   }
 
   @ApiOperation({

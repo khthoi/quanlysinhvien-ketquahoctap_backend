@@ -23,6 +23,42 @@ import { Khoa } from 'src/danh-muc/entity/khoa.entity';
 import { NamHoc } from 'src/dao-tao/entity/nam-hoc.entity';
 import { VaiTroNguoiDungEnum } from 'src/auth/enums/vai-tro-nguoi-dung.enum';
 import { NguoiDung } from 'src/auth/entity/nguoi-dung.entity';
+import { GioiTinh } from 'src/danh-muc/enums/gioi-tinh.enum';
+
+
+// Interface cho kết quả học tập theo môn học
+interface KetQuaMonHoc {
+    monHocId: number;
+    maMonHoc: string;
+    tenMonHoc: string;
+    soTinChi: number;
+    ketQuas: {
+        lopHocPhanId: number;
+        maLopHocPhan: string;
+        hocKy: string;
+        diemQuaTrinh: number;
+        diemThanhPhan: number;
+        diemThi: number;
+        diemTBCHP: number;
+        khoaDiem: boolean;
+    }[];
+}
+
+// Interface cho dữ liệu xuất Excel
+interface KetQuaXuatExcel {
+    stt: number;
+    maMonHoc: string;
+    tenMonHoc: string;
+    maLopHocPhan: string;
+    soTinChi: number;
+    hocKy: string;
+    diemQuaTrinh: number;
+    diemThanhPhan: number;
+    diemThi: number;
+    diemTBCHP: number;
+    diemHe4: number;
+    xepLoai: string;
+}
 
 @Injectable()
 export class BaoCaoService {
@@ -58,7 +94,8 @@ export class BaoCaoService {
         return dqt * 0.1 + dtp * 0.3 + dt * 0.6;
     }
 
-    private diemSoToDiemChu(diem: number): string {
+    private diemTBCHPToDiemChu(diem: number): string {
+        if (diem >= 9.0) return 'A+';
         if (diem >= 8.5) return 'A';
         if (diem >= 8.0) return 'B+';
         if (diem >= 7.0) return 'B';
@@ -69,7 +106,19 @@ export class BaoCaoService {
         return 'F';
     }
 
-    // 1. Bảng điểm lớp học phần
+
+    private diemHe10ToHe4(diem: number): number {
+        if (diem >= 9.0) return 4.0;
+        if (diem >= 8.5) return 3.7;
+        if (diem >= 8.0) return 3.5;
+        if (diem >= 7.0) return 3.0;
+        if (diem >= 6.5) return 2.5;
+        if (diem >= 5.5) return 2.0;
+        if (diem >= 5.0) return 1.5;
+        if (diem >= 4.0) return 1.0;
+        return 0.0;
+    }
+
     // 1. Bảng điểm lớp học phần
     async xuatBangDiemLopHocPhan(lopHocPhanId: number, userId: number): Promise<{ buffer: Buffer; filename: string }> {
         // ===== KIỂM TRA QUYỀN USER =====
@@ -164,8 +213,8 @@ export class BaoCaoService {
             let tbchp = 0, diemSo = 0, diemChu = 'F';
             if (kq) {
                 tbchp = this.tinhDiemTBCHP(kq.diemQuaTrinh, kq.diemThanhPhan, kq.diemThi);
-                diemSo = Math.round(tbchp * 10) / 10;
-                diemChu = this.diemSoToDiemChu(diemSo);
+                diemSo = this.diemHe10ToHe4(tbchp);
+                diemChu = this.diemTBCHPToDiemChu(tbchp);
             }
 
             const row = worksheet.getRow(rowIndex++);
@@ -178,7 +227,7 @@ export class BaoCaoService {
                 kq?.diemQuaTrinh || '',
                 kq?.diemThanhPhan || '',
                 kq?.diemThi || '',
-                kq ? tbchp.toFixed(2) : '',
+                kq ? Number(tbchp.toFixed(2)) : '',
                 kq ? diemSo : '',
                 kq ? diemChu : '',
             ];
@@ -202,71 +251,523 @@ export class BaoCaoService {
     async xuatPhieuDiemCaNhan(sinhVienId: number): Promise<{ buffer: Buffer; filename: string }> {
         const sv = await this.sinhVienRepo.findOne({
             where: { id: sinhVienId },
-            relations: ['lop', 'lop.nganh', 'lop.nienKhoa', 'ketQuaHocTaps', 'ketQuaHocTaps.lopHocPhan', 'ketQuaHocTaps.lopHocPhan.monHoc', 'ketQuaHocTaps.lopHocPhan.hocKy', 'ketQuaHocTaps.lopHocPhan.hocKy.namHoc'],
+            relations: [
+                'lop',
+                'lop.nganh',
+                'lop.nganh.khoa',
+                'lop.nienKhoa',
+                'ketQuaHocTaps',
+                'ketQuaHocTaps.lopHocPhan',
+                'ketQuaHocTaps.lopHocPhan.monHoc',
+                'ketQuaHocTaps.lopHocPhan.hocKy',
+                'ketQuaHocTaps.lopHocPhan.hocKy.namHoc',
+            ],
         });
 
         if (!sv) throw new NotFoundException('Không tìm thấy sinh viên');
 
-        const workbook = new ExcelJS.Workbook();
-        const worksheet = workbook.addWorksheet('Phiếu điểm');
+        // ===== LỌC CHỈ LẤY KẾT QUẢ TỪ LỚP HỌC PHẦN ĐÃ KHÓA ĐIỂM =====
+        const ketQuasDaKhoaDiem = sv.ketQuaHocTaps.filter(kq => kq.lopHocPhan.khoaDiem === true);
 
-        // Header
-        worksheet.mergeCells('A1:G1');
-        worksheet.getCell('A1').value = 'PHIẾU ĐIỂM CÁ NHÂN';
-        worksheet.getCell('A1').font = { size: 16, bold: true };
-        worksheet.getCell('A1').alignment = { horizontal: 'center' };
-        worksheet.getCell('A3').value = `Họ tên: ${sv.hoTen}`;
-        worksheet.getCell('A4').value = `MSSV: ${sv.maSinhVien}`;
-        worksheet.getCell('E3').value = `Ngày sinh: ${sv.ngaySinh ? new Date(sv.ngaySinh).toLocaleDateString('vi-VN') : ''}`;
-        worksheet.getCell('E4').value = `Lớp: ${sv.lop.maLop}`;
-        worksheet.getCell('A5').value = `Ngành: ${sv.lop.nganh.tenNganh}`;
-        worksheet.getCell('E5').value = `Niên khóa: ${sv.lop.nienKhoa.tenNienKhoa}`;
+        if (ketQuasDaKhoaDiem.length === 0) {
+            throw new NotFoundException('Sinh viên chưa có kết quả học tập nào được khóa điểm');
+        }
 
-        // Table
-        const headerRow = worksheet.getRow(7);
-        headerRow.values = ['STT', 'Mã HP', 'Tên học phần', 'Mã lớp học phần', 'Số TC', 'Học kỳ', 'TBCHP', 'Xếp loại'];
-        headerRow.font = { bold: true };
-        headerRow.eachCell(cell => {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9E1F2' } };
-            cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
-        });
+        // ===== NHÓM KẾT QUẢ THEO MÔN HỌC =====
+        const ketQuaTheoMon = new Map<number, KetQuaMonHoc>();
 
-        let rowIndex = 8;
-        sv.ketQuaHocTaps.forEach((kq, idx) => {
-            const tbchp = this.tinhDiemTBCHP(kq.diemQuaTrinh, kq.diemThanhPhan, kq.diemThi);
-            const diemSo = Math.round(tbchp * 10) / 10;
-            const diemChu = this.diemSoToDiemChu(diemSo);
+        for (const kq of ketQuasDaKhoaDiem) {
+            const monHoc = kq.lopHocPhan.monHoc;
+            const monHocId = monHoc.id;
+            const diemTBCHP = this.tinhDiemTBCHP(kq.diemQuaTrinh, kq.diemThanhPhan, kq.diemThi);
+
             const ngayBD = kq.lopHocPhan.hocKy.ngayBatDau
                 ? new Date(kq.lopHocPhan.hocKy.ngayBatDau).toLocaleDateString('vi-VN')
                 : '';
-
             const ngayKT = kq.lopHocPhan.hocKy.ngayKetThuc
                 ? new Date(kq.lopHocPhan.hocKy.ngayKetThuc).toLocaleDateString('vi-VN')
                 : '';
-            const row = worksheet.getRow(rowIndex++);
-            row.values = [
-                idx + 1,
-                kq.lopHocPhan.monHoc.maMonHoc,
-                kq.lopHocPhan.monHoc.tenMonHoc,
-                kq.lopHocPhan.maLopHocPhan,
-                kq.lopHocPhan.monHoc.soTinChi,
-                `${kq.lopHocPhan.hocKy.hocKy} (${ngayBD} - ${ngayKT}) - ${kq.lopHocPhan.hocKy.namHoc.tenNamHoc}`,
-                diemSo.toFixed(1),
-                diemChu,
-            ];
+            const hocKyStr = `HK${kq.lopHocPhan.hocKy.hocKy} (${ngayBD} - ${ngayKT}) - ${kq.lopHocPhan.hocKy.namHoc.tenNamHoc}`;
+
+            if (!ketQuaTheoMon.has(monHocId)) {
+                ketQuaTheoMon.set(monHocId, {
+                    monHocId,
+                    maMonHoc: monHoc.maMonHoc,
+                    tenMonHoc: monHoc.tenMonHoc,
+                    soTinChi: monHoc.soTinChi,
+                    ketQuas: [],
+                });
+            }
+
+            ketQuaTheoMon.get(monHocId)!.ketQuas.push({
+                lopHocPhanId: kq.lopHocPhan.id,
+                maLopHocPhan: kq.lopHocPhan.maLopHocPhan,
+                hocKy: hocKyStr,
+                diemQuaTrinh: kq.diemQuaTrinh,
+                diemThanhPhan: kq.diemThanhPhan,
+                diemThi: kq.diemThi,
+                diemTBCHP,
+                khoaDiem: kq.lopHocPhan.khoaDiem,
+            });
+        }
+
+        // ===== TÍNH GPA HỆ 4 =====
+        // Lấy điểm TBCHP cao nhất của mỗi môn, quy đổi sang hệ 4, rồi tính trung bình
+        let tongDiemHe4 = 0;
+        let soMonDuocXet = 0;
+
+        for (const [monHocId, data] of ketQuaTheoMon) {
+            // Lấy điểm TBCHP cao nhất của môn này
+            const diemCaoNhat = Math.max(...data.ketQuas.map(kq => kq.diemTBCHP));
+            const diemHe4 = this.diemHe10ToHe4(diemCaoNhat);
+
+            tongDiemHe4 += diemHe4;
+            soMonDuocXet++;
+        }
+
+        const gpaHe4 = soMonDuocXet > 0 ? tongDiemHe4 / soMonDuocXet : 0;
+
+        // ===== CHUẨN BỊ DỮ LIỆU XUẤT EXCEL =====
+        const danhSachKetQua: KetQuaXuatExcel[] = [];
+        let stt = 0;
+
+        for (const kq of ketQuasDaKhoaDiem) {
+            stt++;
+            const diemTBCHP = this.tinhDiemTBCHP(kq.diemQuaTrinh, kq.diemThanhPhan, kq.diemThi);
+            const diemHe4 = this.diemHe10ToHe4(diemTBCHP);
+            const xepLoai = this.diemTBCHPToDiemChu(diemTBCHP);
+
+            const ngayBD = kq.lopHocPhan.hocKy.ngayBatDau
+                ? new Date(kq.lopHocPhan.hocKy.ngayBatDau).toLocaleDateString('vi-VN')
+                : '';
+            const ngayKT = kq.lopHocPhan.hocKy.ngayKetThuc
+                ? new Date(kq.lopHocPhan.hocKy.ngayKetThuc).toLocaleDateString('vi-VN')
+                : '';
+
+            danhSachKetQua.push({
+                stt,
+                maMonHoc: kq.lopHocPhan.monHoc.maMonHoc,
+                tenMonHoc: kq.lopHocPhan.monHoc.tenMonHoc,
+                maLopHocPhan: kq.lopHocPhan.maLopHocPhan,
+                soTinChi: kq.lopHocPhan.monHoc.soTinChi,
+                hocKy: `HK${kq.lopHocPhan.hocKy.hocKy} (${ngayBD} - ${ngayKT}) - ${kq.lopHocPhan.hocKy.namHoc.tenNamHoc}`,
+                diemQuaTrinh: kq.diemQuaTrinh,
+                diemThanhPhan: kq.diemThanhPhan,
+                diemThi: kq.diemThi,
+                diemTBCHP,
+                diemHe4,
+                xepLoai,
+            });
+        }
+
+        // Tính tổng số tín chỉ
+        const tongTinChi = [...ketQuaTheoMon.values()].reduce((sum, mon) => sum + mon.soTinChi, 0);
+
+        // ===== TẠO FILE EXCEL =====
+        const workbook = new ExcelJS.Workbook();
+        workbook.creator = 'Hệ thống quản lý đào tạo';
+        workbook.created = new Date();
+
+        const worksheet = workbook.addWorksheet('Phiếu điểm cá nhân', {
+            pageSetup: {
+                paperSize: 9, // A4
+                orientation: 'landscape',
+                fitToPage: true,
+            },
         });
 
-        worksheet.columns = [
-            { width: 5 }, { width: 12 }, { width: 30 }, { width: 20 }, { width: 8 },
-            { width: 55 }, { width: 10 }, { width: 10 },
+        // ========== HEADER SECTION ==========
+        // Tiêu đề chính - Row 1
+        worksheet.mergeCells('A1:L1');
+        const titleCell = worksheet.getCell('A1');
+        titleCell.value = 'PHIẾU ĐIỂM CÁ NHÂN';
+        titleCell.font = { name: 'Times New Roman', size: 20, bold: true, color: { argb: '1F4E79' } };
+        titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+        worksheet.getRow(1).height = 40;
+
+        // Dòng trống - Row 2
+        worksheet.getRow(2).height = 10;
+
+        // ========== THÔNG TIN SINH VIÊN - Row 3, 4, 5, 6 ==========
+        // Row 3
+        worksheet.mergeCells('A3:C3');
+        const hoTenLabel = worksheet.getCell('A3');
+        hoTenLabel.value = 'Họ và tên: ';
+        hoTenLabel.font = { name: 'Times New Roman', size: 12, bold: true };
+        hoTenLabel.alignment = { horizontal: 'left', vertical: 'middle' };
+
+        worksheet.mergeCells('D3:F3');
+        const hoTenValue = worksheet.getCell('D3');
+        hoTenValue.value = sv.hoTen;
+        hoTenValue.font = { name: 'Times New Roman', size: 12 };
+        hoTenValue.alignment = { horizontal: 'left', vertical: 'middle' };
+
+        worksheet.mergeCells('G3:H3');
+        const mssvLabel = worksheet.getCell('G3');
+        mssvLabel.value = 'MSSV:';
+        mssvLabel.font = { name: 'Times New Roman', size: 12, bold: true };
+        mssvLabel.alignment = { horizontal: 'left', vertical: 'middle' };
+
+        worksheet.mergeCells('I3:L3');
+        const mssvValue = worksheet.getCell('I3');
+        mssvValue.value = sv.maSinhVien;
+        mssvValue.font = { name: 'Times New Roman', size: 12 };
+        mssvValue.alignment = { horizontal: 'left', vertical: 'middle' };
+
+        worksheet.getRow(3).height = 22;
+
+        // Row 4
+        worksheet.mergeCells('A4:C4');
+        const ngaySinhLabel = worksheet.getCell('A4');
+        ngaySinhLabel.value = 'Ngày sinh:';
+        ngaySinhLabel.font = { name: 'Times New Roman', size: 12, bold: true };
+        ngaySinhLabel.alignment = { horizontal: 'left', vertical: 'middle' };
+
+        worksheet.mergeCells('D4:F4');
+        const ngaySinhValue = worksheet.getCell('D4');
+        ngaySinhValue.value = sv.ngaySinh ? new Date(sv.ngaySinh).toLocaleDateString('vi-VN') : '';
+        ngaySinhValue.font = { name: 'Times New Roman', size: 12 };
+        ngaySinhValue.alignment = { horizontal: 'left', vertical: 'middle' };
+
+        worksheet.mergeCells('G4:H4');
+        const gioiTinhLabel = worksheet.getCell('G4');
+        gioiTinhLabel.value = 'Giới tính: ';
+        gioiTinhLabel.font = { name: 'Times New Roman', size: 12, bold: true };
+        gioiTinhLabel.alignment = { horizontal: 'left', vertical: 'middle' };
+
+        worksheet.mergeCells('I4:L4');
+        const gioiTinhValue = worksheet.getCell('I4');
+        gioiTinhValue.value = this.mapGioiTinh(sv.gioiTinh);
+        gioiTinhValue.font = { name: 'Times New Roman', size: 12 };
+        gioiTinhValue.alignment = { horizontal: 'left', vertical: 'middle' };
+
+        worksheet.getRow(4).height = 22;
+
+        // Row 5
+        worksheet.mergeCells('A5:C5');
+        const lopLabel = worksheet.getCell('A5');
+        lopLabel.value = 'Lớp:';
+        lopLabel.font = { name: 'Times New Roman', size: 12, bold: true };
+        lopLabel.alignment = { horizontal: 'left', vertical: 'middle' };
+
+        worksheet.mergeCells('D5:F5');
+        const lopValue = worksheet.getCell('D5');
+        lopValue.value = `${sv.lop.maLop} - ${sv.lop.tenLop}`;
+        lopValue.font = { name: 'Times New Roman', size: 12 };
+        lopValue.alignment = { horizontal: 'left', vertical: 'middle' };
+
+        worksheet.mergeCells('G5:H5');
+        const nienKhoaLabel = worksheet.getCell('G5');
+        nienKhoaLabel.value = 'Niên khóa:';
+        nienKhoaLabel.font = { name: 'Times New Roman', size: 12, bold: true };
+        nienKhoaLabel.alignment = { horizontal: 'left', vertical: 'middle' };
+
+        worksheet.mergeCells('I5:L5');
+        const nienKhoaValue = worksheet.getCell('I5');
+        nienKhoaValue.value = sv.lop.nienKhoa.tenNienKhoa;
+        nienKhoaValue.font = { name: 'Times New Roman', size: 12 };
+        nienKhoaValue.alignment = { horizontal: 'left', vertical: 'middle' };
+
+        worksheet.getRow(5).height = 22;
+
+        // Row 6
+        worksheet.mergeCells('A6:C6');
+        const nganhLabel = worksheet.getCell('A6');
+        nganhLabel.value = 'Ngành: ';
+        nganhLabel.font = { name: 'Times New Roman', size: 12, bold: true };
+        nganhLabel.alignment = { horizontal: 'left', vertical: 'middle' };
+
+        worksheet.mergeCells('D6:F6');
+        const nganhValue = worksheet.getCell('D6');
+        nganhValue.value = sv.lop.nganh.tenNganh;
+        nganhValue.font = { name: 'Times New Roman', size: 12 };
+        nganhValue.alignment = { horizontal: 'left', vertical: 'middle' };
+
+        worksheet.mergeCells('G6:H6');
+        const khoaLabel = worksheet.getCell('G6');
+        khoaLabel.value = 'Khoa:';
+        khoaLabel.font = { name: 'Times New Roman', size: 12, bold: true };
+        khoaLabel.alignment = { horizontal: 'left', vertical: 'middle' };
+
+        worksheet.mergeCells('I6:L6');
+        const khoaValue = worksheet.getCell('I6');
+        khoaValue.value = sv.lop.nganh.khoa?.tenKhoa || 'N/A';
+        khoaValue.font = { name: 'Times New Roman', size: 12 };
+        khoaValue.alignment = { horizontal: 'left', vertical: 'middle' };
+
+        worksheet.getRow(6).height = 22;
+
+        // Dòng trống - Row 7
+        worksheet.getRow(7).height = 10;
+
+        // ========== THỐNG KÊ TỔNG QUAN - Row 8, 9, 10 ==========
+        worksheet.mergeCells('A8:L8');
+        const statsHeaderCell = worksheet.getCell('A8');
+        statsHeaderCell.value = 'THỐNG KÊ TỔNG QUAN';
+        statsHeaderCell.font = { name: 'Times New Roman', size: 13, bold: true, color: { argb: 'FFFFFF' } };
+        statsHeaderCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '2E75B6' } };
+        statsHeaderCell.alignment = { horizontal: 'center', vertical: 'middle' };
+        worksheet.getRow(8).height = 28;
+
+        // Row 9 - Thống kê
+        worksheet.mergeCells('A9:C9');
+        const soMonLabel = worksheet.getCell('A9');
+        soMonLabel.value = 'Số môn học đã hoàn thành:';
+        soMonLabel.font = { name: 'Times New Roman', size: 11, bold: true };
+        soMonLabel.alignment = { horizontal: 'left', vertical: 'middle' };
+
+        const soMonValue = worksheet.getCell('D9');
+        soMonValue.value = soMonDuocXet;
+        soMonValue.font = { name: 'Times New Roman', size: 12, bold: true, color: { argb: '305496' } };
+        soMonValue.alignment = { horizontal: 'center', vertical: 'middle' };
+
+        worksheet.mergeCells('E9:G9');
+        const tongTCLabel = worksheet.getCell('E9');
+        tongTCLabel.value = 'Tổng số tín chỉ:';
+        tongTCLabel.font = { name: 'Times New Roman', size: 11, bold: true };
+        tongTCLabel.alignment = { horizontal: 'left', vertical: 'middle' };
+
+        const tongTCValue = worksheet.getCell('H9');
+        tongTCValue.value = tongTinChi;
+        tongTCValue.font = { name: 'Times New Roman', size: 12, bold: true, color: { argb: '305496' } };
+        tongTCValue.alignment = { horizontal: 'center', vertical: 'middle' };
+
+        worksheet.mergeCells('I9:K9');
+        const gpaLabel = worksheet.getCell('I9');
+        gpaLabel.value = 'GPA (Hệ 4):';
+        gpaLabel.font = { name: 'Times New Roman', size: 11, bold: true };
+        gpaLabel.alignment = { horizontal: 'left', vertical: 'middle' };
+
+        const gpaValue = worksheet.getCell('L9');
+        gpaValue.value = gpaHe4.toFixed(2);
+        gpaValue.font = { name: 'Times New Roman', size: 14, bold: true };
+        // Màu GPA theo mức
+        if (gpaHe4 >= 3.5) {
+            gpaValue.font.color = { argb: '548235' }; // Xanh lá - Xuất sắc/Giỏi
+        } else if (gpaHe4 >= 2.5) {
+            gpaValue.font.color = { argb: '2E75B6' }; // Xanh dương - Khá
+        } else if (gpaHe4 >= 2.0) {
+            gpaValue.font.color = { argb: 'C65911' }; // Cam - Trung bình
+        } else {
+            gpaValue.font.color = { argb: 'FF0000' }; // Đỏ - Yếu
+        }
+        gpaValue.alignment = { horizontal: 'center', vertical: 'middle' };
+
+        worksheet.getRow(9).height = 25;
+
+        // Row 10 - Xếp loại GPA
+        worksheet.mergeCells('A10:C10');
+        const xepLoaiGPALabel = worksheet.getCell('A10');
+        xepLoaiGPALabel.value = 'Xếp loại học lực:';
+        xepLoaiGPALabel.font = { name: 'Times New Roman', size: 11, bold: true };
+        xepLoaiGPALabel.alignment = { horizontal: 'left', vertical: 'middle' };
+
+        worksheet.mergeCells('D10:F10');
+        const xepLoaiGPAValue = worksheet.getCell('D10');
+        xepLoaiGPAValue.value = this.xepLoaiHocLuc(gpaHe4);
+        xepLoaiGPAValue.font = { name: 'Times New Roman', size: 12, bold: true };
+        if (gpaHe4 >= 3.5) {
+            xepLoaiGPAValue.font.color = { argb: '548235' };
+        } else if (gpaHe4 >= 2.5) {
+            xepLoaiGPAValue.font.color = { argb: '2E75B6' };
+        } else if (gpaHe4 >= 2.0) {
+            xepLoaiGPAValue.font.color = { argb: 'C65911' };
+        } else {
+            xepLoaiGPAValue.font.color = { argb: 'FF0000' };
+        }
+        xepLoaiGPAValue.alignment = { horizontal: 'left', vertical: 'middle' };
+
+        worksheet.mergeCells('G10:I10');
+        const soKetQuaLabel = worksheet.getCell('G10');
+        soKetQuaLabel.value = 'Số kết quả học tập:';
+        soKetQuaLabel.font = { name: 'Times New Roman', size: 11, bold: true };
+        soKetQuaLabel.alignment = { horizontal: 'left', vertical: 'middle' };
+
+        worksheet.mergeCells('J10:L10');
+        const soKetQuaValue = worksheet.getCell('J10');
+        soKetQuaValue.value = danhSachKetQua.length;
+        soKetQuaValue.font = { name: 'Times New Roman', size: 12, bold: true, color: { argb: '305496' } };
+        soKetQuaValue.alignment = { horizontal: 'left', vertical: 'middle' };
+
+        worksheet.getRow(10).height = 25;
+
+        // Dòng trống - Row 11
+        worksheet.getRow(11).height = 15;
+
+        // ========== BẢNG KẾT QUẢ HỌC TẬP - Bắt đầu từ Row 12 ==========
+        const tableStartRow = 12;
+
+        // Header của bảng
+        const headers = [
+            { header: 'STT', key: 'stt', width: 6 },
+            { header: 'Mã HP', key: 'maMonHoc', width: 20 },
+            { header: 'Tên học phần', key: 'tenMonHoc', width: 35 },
+            { header: 'Mã lớp HP', key: 'maLopHocPhan', width: 35 },
+            { header: 'Số TC', key: 'soTinChi', width: 8 },
+            { header: 'Học kỳ', key: 'hocKy', width: 45 },
+            { header: 'Điểm QT', key: 'diemQuaTrinh', width: 10 },
+            { header: 'Điểm TP', key: 'diemThanhPhan', width: 10 },
+            { header: 'Điểm thi', key: 'diemThi', width: 10 },
+            { header: 'TBCHP', key: 'diemTBCHP', width: 10 },
+            { header: 'Điểm hệ 4', key: 'diemHe4', width: 12 },
+            { header: 'Xếp loại', key: 'xepLoai', width: 10 },
         ];
 
-        const buffer = await workbook.xlsx.writeBuffer() as unknown as Buffer;
+        // Set column widths
+        headers.forEach((col, index) => {
+            worksheet.getColumn(index + 1).width = col.width;
+        });
 
-        // ✅ Filename có dấu
+        // Header row
+        const headerRow = worksheet.getRow(tableStartRow);
+        headers.forEach((col, index) => {
+            const cell = headerRow.getCell(index + 1);
+            cell.value = col.header;
+            cell.font = { name: 'Times New Roman', size: 11, bold: true, color: { argb: 'FFFFFF' } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '2E75B6' } };
+            cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+            cell.border = {
+                top: { style: 'thin', color: { argb: '000000' } },
+                left: { style: 'thin', color: { argb: '000000' } },
+                bottom: { style: 'thin', color: { argb: '000000' } },
+                right: { style: 'thin', color: { argb: '000000' } },
+            };
+        });
+        headerRow.height = 30;
+
+        // Data rows
+        danhSachKetQua.forEach((kq, index) => {
+            const rowIndex = tableStartRow + 1 + index;
+            const row = worksheet.getRow(rowIndex);
+
+            const rowData = [
+                kq.stt,
+                kq.maMonHoc,
+                kq.tenMonHoc,
+                kq.maLopHocPhan,
+                kq.soTinChi,
+                kq.hocKy,
+                kq.diemQuaTrinh,
+                kq.diemThanhPhan,
+                kq.diemThi,
+                kq.diemTBCHP.toFixed(2),
+                kq.diemHe4.toFixed(1),
+                kq.xepLoai,
+            ];
+
+            rowData.forEach((value, colIndex) => {
+                const cell = row.getCell(colIndex + 1);
+                cell.value = value;
+                cell.font = { name: 'Times New Roman', size: 11 };
+                cell.alignment = {
+                    horizontal: colIndex === 2 || colIndex === 5 ? 'left' : 'center',
+                    vertical: 'middle',
+                    wrapText: colIndex === 5, // Wrap text cho cột học kỳ
+                };
+                cell.border = {
+                    top: { style: 'thin', color: { argb: '000000' } },
+                    left: { style: 'thin', color: { argb: '000000' } },
+                    bottom: { style: 'thin', color: { argb: '000000' } },
+                    right: { style: 'thin', color: { argb: '000000' } },
+                };
+
+                // Màu nền xen kẽ
+                if (index % 2 === 1) {
+                    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'D6DCE4' } };
+                }
+
+                // Màu cho cột xếp loại
+                if (colIndex === 11) {
+                    cell.font = { name: 'Times New Roman', size: 11, bold: true };
+                    if (kq.xepLoai === 'A+' || kq.xepLoai === 'A') {
+                        cell.font.color = { argb: '548235' }; // Xanh lá
+                    } else if (kq.xepLoai === 'B+' || kq.xepLoai === 'B') {
+                        cell.font.color = { argb: '2E75B6' }; // Xanh dương
+                    } else if (kq.xepLoai === 'C+' || kq.xepLoai === 'C') {
+                        cell.font.color = { argb: 'C65911' }; // Cam
+                    } else if (kq.xepLoai === 'D+' || kq.xepLoai === 'D') {
+                        cell.font.color = { argb: 'BF8F00' }; // Vàng đậm
+                    } else {
+                        cell.font.color = { argb: 'FF0000' }; // Đỏ - F
+                    }
+                }
+
+                // Màu cho cột TBCHP
+                if (colIndex === 9) {
+                    cell.font = { name: 'Times New Roman', size: 11, bold: true };
+                    if (kq.diemTBCHP >= 8.0) {
+                        cell.font.color = { argb: '548235' };
+                    } else if (kq.diemTBCHP >= 6.5) {
+                        cell.font.color = { argb: '2E75B6' };
+                    } else if (kq.diemTBCHP >= 4.0) {
+                        cell.font.color = { argb: 'C65911' };
+                    } else {
+                        cell.font.color = { argb: 'FF0000' };
+                    }
+                }
+            });
+
+            row.height = 25;
+        });
+
+        // ========== FOOTER ==========
+        const footerRow = tableStartRow + danhSachKetQua.length + 2;
+        worksheet.mergeCells(`A${footerRow}:L${footerRow}`);
+        const footerCell = worksheet.getCell(`A${footerRow}`);
+        footerCell.value = `Phiếu điểm được xuất tự động từ hệ thống vào lúc ${this.formatDateTime(new Date())}`;
+        footerCell.font = { name: 'Times New Roman', size: 10, italic: true, color: { argb: '808080' } };
+        footerCell.alignment = { horizontal: 'right', vertical: 'middle' };
+
+        // Ghi chú
+        const noteRow = footerRow + 1;
+        worksheet.mergeCells(`A${noteRow}:L${noteRow}`);
+        const noteCell = worksheet.getCell(`A${noteRow}`);
+        noteCell.value = '* Chỉ hiển thị kết quả học tập của các lớp học phần đã được khóa điểm.  GPA được tính dựa trên điểm cao nhất của mỗi môn học. ';
+        noteCell.font = { name: 'Times New Roman', size: 9, italic: true, color: { argb: '808080' } };
+        noteCell.alignment = { horizontal: 'left', vertical: 'middle' };
+
+        // Xuất buffer
+        const buffer = (await workbook.xlsx.writeBuffer()) as unknown as Buffer;
+
+        // Filename có dấu
         const filename = `Phiếu điểm cá nhân - ${sv.hoTen} - MSV_${sv.maSinhVien}.xlsx`;
 
         return { buffer, filename };
+    }
+
+    // ========== HELPER METHODS ==========
+
+    /**
+     * Xếp loại học lực theo GPA hệ 4
+     */
+    private xepLoaiHocLuc(gpa: number): string {
+        if (gpa >= 3.6) return 'Xuất sắc';
+        if (gpa >= 3.2) return 'Giỏi';
+        if (gpa >= 2.5) return 'Khá';
+        if (gpa >= 2.0) return 'Trung bình';
+        if (gpa >= 1.0) return 'Yếu';
+        return 'Kém';
+    }
+
+    private mapGioiTinh(gioiTinh: GioiTinh): string {
+        const map = {
+            [GioiTinh.NAM]: 'Nam',
+            [GioiTinh.NU]: 'Nữ',
+            [GioiTinh.KHONG_XAC_DINH]: 'Không xác định',
+        };
+        return map[gioiTinh] || 'Không xác định';
+    }
+
+    private formatDateTime(date: Date): string {
+        if (!date) return '';
+        const d = new Date(date);
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        const hours = String(d.getHours()).padStart(2, '0');
+        const minutes = String(d.getMinutes()).padStart(2, '0');
+        const seconds = String(d.getSeconds()).padStart(2, '0');
+        return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
     }
 
     async xuatBaoCaoGiangVien(giangVienId: number): Promise<{ buffer: Buffer, filename: string }> {
@@ -1016,8 +1517,8 @@ export class BaoCaoService {
 
                 // Sinh viên trượt nếu TBCHP <= 4.0
                 if (diemTBCHP <= 4.0) {
-                    const diemSo = Math.round(diemTBCHP * 10) / 10;
-                    const diemChu = this.diemSoToDiemChu(diemSo);
+                    const diemSo = this.diemHe10ToHe4(diemTBCHP);
+                    const diemChu = this.diemTBCHPToDiemChu(diemTBCHP);
 
                     danhSachTruotTamThoi.push({
                         sinhVien: kq.sinhVien,
@@ -1053,7 +1554,7 @@ export class BaoCaoService {
                         id: Not(lopHocPhanTruotId), // Loại trừ lớp đã trượt
                     },
                 },
-                relations: ['lopHocPhan', 'lopHocPhan. monHoc', 'lopHocPhan. hocKy', 'lopHocPhan. hocKy.namHoc'],
+                relations: ['lopHocPhan', 'lopHocPhan.monHoc', 'lopHocPhan.hocKy', 'lopHocPhan.hocKy.namHoc'],
             });
 
             let daHocLaiThanhCongHoacDangHoc = false;
@@ -1346,15 +1847,15 @@ export class BaoCaoService {
             { key: 'hoTen', width: 25 },
             { key: 'gioiTinh', width: 12 },
             { key: 'sdt', width: 15 },
-            { key: 'maLopHocPhanTruot', width: 25 },
-            { key: 'diemQuaTrinh', width: 14 },
-            { key: 'diemThanhPhan', width: 14 },
-            { key: 'diemThi', width: 14 },
-            { key: 'diemTBCHP', width: 10 },
-            { key: 'diemSo', width: 10 },
-            { key: 'diemChu', width: 10 },
-            { key: 'danhGia', width: 15 },
-            { key: 'maLopHocPhanDeXuat', width: 30 },
+            { key: 'maLopHocPhanTruot', width: 33 },
+            { key: 'diemQuaTrinh', width: 17 },
+            { key: 'diemThanhPhan', width: 17 },
+            { key: 'diemThi', width: 17 },
+            { key: 'diemTBCHP', width: 17 },
+            { key: 'diemSo', width: 17 },
+            { key: 'diemChu', width: 17 },
+            { key: 'danhGia', width: 17 },
+            { key: 'maLopHocPhanDeXuat', width: 33 },
         ];
 
         // === FOOTER SUMMARY ===

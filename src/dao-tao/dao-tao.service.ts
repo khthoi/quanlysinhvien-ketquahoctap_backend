@@ -972,7 +972,7 @@ export class DaoTaoService {
         maLopHocPhan: lhp.maLopHocPhan,
         monHoc: lhp.monHoc.maMonHoc,
         hocKy: `${lhp.hocKy.hocKy} (${this.formatDateVN(lhp.hocKy.ngayBatDau)} - ${this.formatDateVN(lhp.hocKy.ngayKetThuc)})`,
-        nienKhoa: lhp.nienKhoa.tenNienKhoa,
+        nienKhoa: lhp.nienKhoa.maNienKhoa,
         giangVien: lhp.giangVien?.hoTen || 'Chưa phân công',
         siSo: lhp.siSo,
         khoaDiem: lhp.khoaDiem,
