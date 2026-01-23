@@ -582,9 +582,9 @@ export class KetQuaService {
       const rowNum = row.number;
 
       const maSinhVien = row.getCell(2).value?.toString().trim(); // Cột 2: Mã sinh viên
-      const diemQuaTrinh = parseFloat(row.getCell(5).value?.toString() || 'NaN');
-      const diemThanhPhan = parseFloat(row.getCell(6).value?.toString() || 'NaN');
-      const diemThi = parseFloat(row.getCell(7).value?.toString() || 'NaN');
+      const diemQuaTrinh = parseFloat(row.getCell(6).value?.toString() || 'NaN');
+      const diemThanhPhan = parseFloat(row.getCell(7).value?.toString() || 'NaN');
+      const diemThi = parseFloat(row.getCell(8).value?.toString() || 'NaN');
 
       if (!maSinhVien) {
         results.errors.push({ row: rowNum, maSinhVien: 'N/A', error: 'Thiếu mã sinh viên' });
