@@ -864,27 +864,37 @@ export class GiangDayService {
         const nienKhoaLopHocPhan = lhp.nienKhoa.namBatDau;
         const nienKhoaSinhVien = sinhVien.lop.nienKhoa.namBatDau;
 
-        // Kiểm tra đã học môn này chưa
-        const dangKyCu = await this.svLhpRepo.findOne({
+        // Kiểm tra đã học môn này chưa (có thể học nhiều lần)
+        const dangKyCuList = await this.svLhpRepo.find({
             where: {
                 sinhVien: { id: sinhVienId },
                 lopHocPhan: { monHoc: { id: lhp.monHoc.id } },
             },
             relations: ['lopHocPhan'],
+            order: {
+                lopHocPhan: {
+                    ngayTao: 'DESC', // lớp mới nhất trước (có thể đổi theo hocKy/nienKhoa nếu cần)
+                },
+            },
         });
 
         let loaiThamGia = LoaiHinhThamGiaLopHocPhanEnum.CHINH_QUY;
 
-        if (dangKyCu) {
+        // Lấy lần học hợp lệ: đã khóa điểm
+        const lanHocHopLe = dangKyCuList.find(dk => dk.lopHocPhan.khoaDiem);
+
+        if (lanHocHopLe) {
             const ketQua = await this.ketQuaHocTapRepo.findOne({
                 where: {
                     sinhVien: { id: sinhVienId },
-                    lopHocPhan: { id: dangKyCu.lopHocPhan.id },
+                    lopHocPhan: { id: lanHocHopLe.lopHocPhan.id },
                 },
             });
 
             if (!ketQua) {
-                throw new BadRequestException('Sinh viên đã học môn này nhưng chưa có kết quả → không được đăng ký lại');
+                throw new BadRequestException(
+                    'Lớp học phần cũ đã khóa điểm nhưng chưa có kết quả học tập',
+                );
             }
 
             const diemTong =
@@ -892,12 +902,13 @@ export class GiangDayService {
                 (ketQua.diemThanhPhan || 0) * 0.3 +
                 (ketQua.diemThi || 0) * 0.6;
 
-            if (diemTong <= 4.0) {
-                loaiThamGia = LoaiHinhThamGiaLopHocPhanEnum.HOC_LAI;
-            } else {
-                loaiThamGia = LoaiHinhThamGiaLopHocPhanEnum.HOC_CAI_THIEN;
-            }
+            loaiThamGia =
+                diemTong <= 4.0
+                    ? LoaiHinhThamGiaLopHocPhanEnum.HOC_LAI
+                    : LoaiHinhThamGiaLopHocPhanEnum.HOC_CAI_THIEN;
+
         } else {
+            // Chưa từng có lần học hợp lệ → xét học bổ sung theo niên khóa
             if (nienKhoaLopHocPhan > nienKhoaSinhVien) {
                 loaiThamGia = LoaiHinhThamGiaLopHocPhanEnum.HOC_BO_SUNG;
             }
