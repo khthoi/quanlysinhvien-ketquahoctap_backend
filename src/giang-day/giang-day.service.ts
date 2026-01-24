@@ -808,7 +808,6 @@ export class GiangDayService {
         if (!lhp.nienKhoa) throw new BadRequestException('Lớp học phần không có niên khóa');
         if (!lhp.hocKy) throw new BadRequestException('Lớp học phần không có học kỳ');
         if (!lhp.nganh) throw new BadRequestException('Lớp học phần không có ngành');
-        if (!lhp.giangVien) throw new BadRequestException('Lớp học phần không có giảng viên');
 
         // Load sinh viên
         const sinhVien = await this.sinhVienRepo.findOne({
