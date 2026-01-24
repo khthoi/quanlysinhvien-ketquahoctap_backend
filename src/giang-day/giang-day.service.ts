@@ -880,39 +880,58 @@ export class GiangDayService {
 
         let loaiThamGia = LoaiHinhThamGiaLopHocPhanEnum.CHINH_QUY;
 
-        // Lấy lần học hợp lệ: đã khóa điểm
-        const lanHocHopLe = dangKyCuList.find(dk => dk.lopHocPhan.khoaDiem);
+        if (dangKyCuList.length > 0) {
 
-        if (lanHocHopLe) {
-            const ketQua = await this.ketQuaHocTapRepo.findOne({
-                where: {
-                    sinhVien: { id: sinhVienId },
-                    lopHocPhan: { id: lanHocHopLe.lopHocPhan.id },
-                },
-            });
-
-            if (!ketQua) {
+            // 1. Bắt buộc tất cả lớp cũ phải khóa điểm
+            const tonTaiLopChuaKhoa = dangKyCuList.some(dk => !dk.lopHocPhan.khoaDiem);
+            if (tonTaiLopChuaKhoa) {
                 throw new BadRequestException(
-                    'Lớp học phần cũ đã khóa điểm nhưng chưa có kết quả học tập',
+                    'Sinh viên còn lớp học phần của môn này chưa khóa điểm → chưa được phép đăng ký lớp mới',
                 );
             }
 
-            const diemTong =
-                (ketQua.diemQuaTrinh || 0) * 0.1 +
-                (ketQua.diemThanhPhan || 0) * 0.3 +
-                (ketQua.diemThi || 0) * 0.6;
+            // 2. Lấy tất cả kết quả học tập của môn này
+            const ketQuaList = await this.ketQuaHocTapRepo.find({
+                where: {
+                    sinhVien: { id: sinhVienId },
+                    lopHocPhan: {
+                        monHoc: { id: lhp.monHoc.id },
+                    },
+                },
+                relations: ['lopHocPhan'],
+            });
 
+            if (ketQuaList.length === 0) {
+                throw new BadRequestException(
+                    'Tất cả lớp đã khóa điểm nhưng không tồn tại dữ liệu kết quả học tập',
+                );
+            }
+
+            // 3. Tính TBCHP cho từng lần học
+            const dsDiem = ketQuaList.map(kq => {
+                const tb =
+                    (kq.diemQuaTrinh || 0) * 0.1 +
+                    (kq.diemThanhPhan || 0) * 0.3 +
+                    (kq.diemThi || 0) * 0.6;
+                return tb;
+            });
+
+            // 4. Lấy điểm cao nhất
+            const diemCaoNhat = Math.max(...dsDiem);
+
+            // 5. Phân loại theo điểm cao nhất
             loaiThamGia =
-                diemTong <= 4.0
+                diemCaoNhat <= 4.0
                     ? LoaiHinhThamGiaLopHocPhanEnum.HOC_LAI
                     : LoaiHinhThamGiaLopHocPhanEnum.HOC_CAI_THIEN;
 
         } else {
-            // Chưa từng có lần học hợp lệ → xét học bổ sung theo niên khóa
+            // Chưa từng học môn này → xét học bổ sung theo niên khóa
             if (nienKhoaLopHocPhan > nienKhoaSinhVien) {
                 loaiThamGia = LoaiHinhThamGiaLopHocPhanEnum.HOC_BO_SUNG;
             }
         }
+
 
         // Tạo đăng ký
         const registration = this.svLhpRepo.create({
