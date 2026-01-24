@@ -229,22 +229,6 @@ export class BaoCaoService {
         };
         schoolCell.alignment = { horizontal: 'center', vertical: 'middle' };
         worksheet.getRow(1).height = 22;
-
-        // Dòng 2: Phòng đào tạo
-        worksheet.mergeCells('A2:K2');
-        const deptCell = worksheet.getCell('A2');
-        deptCell.value = 'PHÒNG ĐÀO TẠO';
-        deptCell.font = {
-            name: 'Times New Roman',
-            size: 12,
-            italic: true,
-        };
-        deptCell.alignment = { horizontal: 'center', vertical: 'middle' };
-        worksheet.getRow(2).height = 20;
-
-        // Dòng 3: Trống
-        worksheet.getRow(3).height = 10;
-
         // Dòng 4: Tiêu đề chính
         worksheet.mergeCells('A4:K4');
         const titleCell = worksheet.getCell('A4');
