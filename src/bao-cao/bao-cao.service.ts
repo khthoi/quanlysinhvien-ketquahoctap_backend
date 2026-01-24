@@ -163,47 +163,152 @@ export class BaoCaoService {
         if (!lhp) throw new NotFoundException('Không tìm thấy lớp học phần');
 
         // ===== KIỂM TRA QUYỀN GIẢNG VIÊN =====
-        // Nếu là GIANG_VIEN thì phải xét giảng viên có đảm nhiệm lớp học phần này không
         if (nguoiDung.vaiTro === VaiTroNguoiDungEnum.GIANG_VIEN) {
             if (!nguoiDung.giangVien) {
                 throw new ForbiddenException('Tài khoản giảng viên chưa được liên kết với hồ sơ giảng viên');
             }
 
-            // Kiểm tra giảng viên có phụ trách lớp học phần này không
             if (!lhp.giangVien || lhp.giangVien.id !== nguoiDung.giangVien.id) {
                 throw new ForbiddenException('Bạn không phải là giảng viên phụ trách lớp học phần này');
             }
         }
-        // Nếu là CAN_BO_PHONG_DAO_TAO thì bỏ qua, không cần xét
 
         // ===== XUẤT FILE EXCEL =====
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Bảng điểm');
 
-        // Header
-        worksheet.mergeCells('A1:K1');
-        worksheet.getCell('A1').value = `BẢNG ĐIỂM LỚP HỌC PHẦN: ${lhp.maLopHocPhan}`;
-        worksheet.getCell('A1').font = { size: 16, bold: true };
-        worksheet.getCell('A1').alignment = { horizontal: 'center' };
+        // ===== ĐỊNH NGHĨA STYLE =====
+        const fontStyle: Partial<ExcelJS.Font> = {
+            name: 'Times New Roman',
+            size: 12,
+        };
 
+        const headerFontStyle: Partial<ExcelJS.Font> = {
+            name: 'Times New Roman',
+            size: 12,
+            bold: true,
+            color: { argb: 'FFFFFFFF' },
+        };
+
+        const titleFontStyle: Partial<ExcelJS.Font> = {
+            name: 'Times New Roman',
+            size: 18,
+            bold: true,
+            color: { argb: 'FF1F4E79' },
+        };
+
+        const blueFill: ExcelJS.Fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF4472C4' },
+        };
+
+        const lightBlueFill: ExcelJS.Fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFD6E3F8' },
+        };
+
+        const borderStyle: Partial<ExcelJS.Borders> = {
+            top: { style: 'thin', color: { argb: 'FF000000' } },
+            left: { style: 'thin', color: { argb: 'FF000000' } },
+            bottom: { style: 'thin', color: { argb: 'FF000000' } },
+            right: { style: 'thin', color: { argb: 'FF000000' } },
+        };
+
+        // ===== HEADER BÁO CÁO =====
+        // Dòng 1: Tên trường/đơn vị
+        worksheet.mergeCells('A1:K1');
+        const schoolCell = worksheet.getCell('A1');
+        schoolCell.value = 'TRƯỜNG ĐẠI HỌC THỦ ĐÔ HÀ NỘI';
+        schoolCell.font = {
+            name: 'Times New Roman',
+            size: 13,
+            bold: true,
+            color: { argb: 'FF1F4E79' },
+        };
+        schoolCell.alignment = { horizontal: 'center', vertical: 'middle' };
+        worksheet.getRow(1).height = 22;
+
+        // Dòng 2: Phòng đào tạo
         worksheet.mergeCells('A2:K2');
-        worksheet.getCell('A2').value = `Môn: ${lhp.monHoc.tenMonHoc} - Số Tín Chỉ: ${lhp.monHoc.soTinChi} | Giảng viên: ${lhp.giangVien?.hoTen || 'Chưa phân công'}`;
+        const deptCell = worksheet.getCell('A2');
+        deptCell.value = 'PHÒNG ĐÀO TẠO';
+        deptCell.font = {
+            name: 'Times New Roman',
+            size: 12,
+            italic: true,
+        };
+        deptCell.alignment = { horizontal: 'center', vertical: 'middle' };
+        worksheet.getRow(2).height = 20;
+
+        // Dòng 3: Trống
+        worksheet.getRow(3).height = 10;
+
+        // Dòng 4: Tiêu đề chính
+        worksheet.mergeCells('A4:K4');
+        const titleCell = worksheet.getCell('A4');
+        titleCell.value = `BẢNG ĐIỂM LỚP HỌC PHẦN`;
+        titleCell.font = titleFontStyle;
+        titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+        worksheet.getRow(4).height = 30;
+
+        // Dòng 5: Mã lớp học phần
+        worksheet.mergeCells('A5:K5');
+        const maLhpCell = worksheet.getCell('A5');
+        maLhpCell.value = `Mã LHP: ${lhp.maLopHocPhan}`;
+        maLhpCell.font = {
+            name: 'Times New Roman',
+            size: 14,
+            bold: true,
+            color: { argb: 'FF4472C4' },
+        };
+        maLhpCell.alignment = { horizontal: 'center', vertical: 'middle' };
+        worksheet.getRow(5).height = 22;
+
+        // Dòng 6: Thông tin môn học và giảng viên
+        worksheet.mergeCells('A6:K6');
+        const monHocCell = worksheet.getCell('A6');
+        monHocCell.value = `Môn học: ${lhp.monHoc.tenMonHoc} | Số tín chỉ: ${lhp.monHoc.soTinChi} | Giảng viên: ${lhp.giangVien?.hoTen || 'Chưa phân công'}`;
+        monHocCell.font = {
+            name: 'Times New Roman',
+            size: 12,
+        };
+        monHocCell.alignment = { horizontal: 'center', vertical: 'middle' };
+        worksheet.getRow(6).height = 20;
+
+        // Dòng 7: Thông tin học kỳ
         const ngayBD = new Date(lhp.hocKy.ngayBatDau).toLocaleDateString('vi-VN');
         const ngayKT = new Date(lhp.hocKy.ngayKetThuc).toLocaleDateString('vi-VN');
-        worksheet.mergeCells('A3:K3');
-        worksheet.getCell('A3').value = `Học kỳ: ${lhp.hocKy.hocKy} (${ngayBD} - ${ngayKT}) - ${lhp.hocKy.namHoc.tenNamHoc}`;
+        worksheet.mergeCells('A7:K7');
+        const hocKyCell = worksheet.getCell('A7');
+        hocKyCell.value = `Học kỳ: ${lhp.hocKy.hocKy} (${ngayBD} - ${ngayKT}) - Năm học: ${lhp.hocKy.namHoc.tenNamHoc}`;
+        hocKyCell.font = {
+            name: 'Times New Roman',
+            size: 12,
+        };
+        hocKyCell.alignment = { horizontal: 'center', vertical: 'middle' };
+        worksheet.getRow(7).height = 20;
 
-        // Table header
-        const headerRow = worksheet.getRow(5);
-        headerRow.values = ['STT', 'MSSV', 'Họ tên', 'Ngày sinh', 'Lớp', 'ĐQT (10%)', 'ĐTP (30%)', 'ĐThi (60%)', 'TBCHP', 'Điểm số', 'Điểm chữ'];
-        headerRow.font = { bold: true };
-        headerRow.eachCell(cell => {
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9E1F2' } };
-            cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+        // Dòng 8: Trống
+        worksheet.getRow(8).height = 10;
+
+        // ===== TABLE HEADER (Dòng 9) =====
+        const headerRow = worksheet.getRow(9);
+        const headers = ['STT', 'MSSV', 'Họ và tên', 'Ngày sinh', 'Lớp', 'ĐQT (10%)', 'ĐTP (30%)', 'ĐThi (60%)', 'TBCHP', 'Điểm số', 'Điểm chữ'];
+
+        headers.forEach((header, index) => {
+            const cell = headerRow.getCell(index + 1);
+            cell.value = header;
+            cell.font = headerFontStyle;
+            cell.fill = blueFill;
+            cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+            cell.border = borderStyle;
         });
+        headerRow.height = 28;
 
-        // Data
-        let rowIndex = 6;
+        // ===== DATA ROWS =====
+        let rowIndex = 10;
         const ketQuaMap = new Map(lhp.ketQuaHocTaps.map(kq => [kq.sinhVien.id, kq]));
 
         lhp.sinhVienLopHocPhans.forEach((svlhp, idx) => {
@@ -217,31 +322,124 @@ export class BaoCaoService {
                 diemChu = this.diemTBCHPToDiemChu(tbchp);
             }
 
-            const row = worksheet.getRow(rowIndex++);
-            row.values = [
+            const row = worksheet.getRow(rowIndex);
+            const rowData = [
                 idx + 1,
                 sv.maSinhVien,
                 sv.hoTen,
                 sv.ngaySinh ? new Date(sv.ngaySinh).toLocaleDateString('vi-VN') : '',
                 sv.lop?.maLop || '',
-                kq?.diemQuaTrinh || '',
-                kq?.diemThanhPhan || '',
-                kq?.diemThi || '',
+                kq?.diemQuaTrinh ?? '',
+                kq?.diemThanhPhan ?? '',
+                kq?.diemThi ?? '',
                 kq ? Number(tbchp.toFixed(2)) : '',
                 kq ? diemSo : '',
                 kq ? diemChu : '',
             ];
+
+            rowData.forEach((value, colIndex) => {
+                const cell = row.getCell(colIndex + 1);
+                cell.value = value;
+                cell.font = fontStyle;
+                cell.border = borderStyle;
+                cell.alignment = {
+                    horizontal: [0, 3, 4, 5, 6, 7, 8, 9, 10].includes(colIndex) ? 'center' : 'left',
+                    vertical: 'middle',
+                };
+
+                // Màu nền xen kẽ
+                if (idx % 2 === 1) {
+                    cell.fill = lightBlueFill;
+                }
+
+                // Highlight điểm đỏ nếu < 4 (không đạt)
+                if (colIndex === 8 && kq && tbchp < 4) {
+                    cell.font = {
+                        name: 'Times New Roman',
+                        size: 12,
+                        color: { argb: 'FFFF0000' },
+                        bold: true,
+                    };
+                }
+            });
+
+            row.height = 22;
+            rowIndex++;
         });
 
-        // Styling
+        // ===== FOOTER =====
+        rowIndex++; // Dòng trống
+
+        // Thống kê
+        worksheet.mergeCells(`A${rowIndex}:K${rowIndex}`);
+        const statsCell = worksheet.getCell(`A${rowIndex}`);
+        const tongSoSV = lhp.sinhVienLopHocPhans.length;
+        const soSVDat = lhp.sinhVienLopHocPhans.filter(svlhp => {
+            const kq = ketQuaMap.get(svlhp.sinhVien.id);
+            if (!kq) return false;
+            const tbchp = this.tinhDiemTBCHP(kq.diemQuaTrinh, kq.diemThanhPhan, kq.diemThi);
+            return tbchp >= 4.0;
+        }).length;
+        statsCell.value = `Tổng số sinh viên: ${tongSoSV} | Đạt: ${soSVDat} | Không đạt: ${tongSoSV - soSVDat} | Tỷ lệ đạt: ${((soSVDat / tongSoSV) * 100).toFixed(1)}%`;
+        statsCell.font = {
+            name: 'Times New Roman',
+            size: 12,
+            bold: true,
+            italic: true,
+        };
+        statsCell.alignment = { horizontal: 'right', vertical: 'middle' };
+        rowIndex += 2;
+
+        // Ngày xuất và chữ ký
+        worksheet.mergeCells(`G${rowIndex}:K${rowIndex}`);
+        const dateCell = worksheet.getCell(`G${rowIndex}`);
+        const today = new Date();
+        dateCell.value = `Ngày ${today.getDate()} tháng ${today.getMonth() + 1} năm ${today.getFullYear()}`;
+        dateCell.font = {
+            name: 'Times New Roman',
+            size: 12,
+            italic: true,
+        };
+        dateCell.alignment = { horizontal: 'center', vertical: 'middle' };
+        rowIndex++;
+
+        worksheet.mergeCells(`G${rowIndex}:K${rowIndex}`);
+        const signCell = worksheet.getCell(`G${rowIndex}`);
+        signCell.value = 'GIẢNG VIÊN PHỤ TRÁCH';
+        signCell.font = {
+            name: 'Times New Roman',
+            size: 12,
+            bold: true,
+        };
+        signCell.alignment = { horizontal: 'center', vertical: 'middle' };
+        rowIndex += 3;
+
+        worksheet.mergeCells(`G${rowIndex}:K${rowIndex}`);
+        const nameCell = worksheet.getCell(`G${rowIndex}`);
+        nameCell.value = lhp.giangVien?.hoTen || '';
+        nameCell.font = {
+            name: 'Times New Roman',
+            size: 12,
+            bold: true,
+        };
+        nameCell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+        // ===== COLUMN WIDTHS =====
         worksheet.columns = [
-            { width: 5 }, { width: 12 }, { width: 25 }, { width: 12 },
-            { width: 20 }, { width: 15 }, { width: 15 }, { width: 15 },
-            { width: 15 }, { width: 15 }, { width: 10 },
+            { width: 6 },   // STT
+            { width: 18 },  // MSSV
+            { width: 28 },  // Họ tên
+            { width: 18 },  // Ngày sinh
+            { width: 25 },  // Lớp
+            { width: 18 },  // ĐQT
+            { width: 18 },  // ĐTP
+            { width: 18 },  // ĐThi
+            { width: 10 },  // TBCHP
+            { width: 10 },  // Điểm số
+            { width: 10 },  // Điểm chữ
         ];
 
         const buffer = await workbook.xlsx.writeBuffer() as unknown as Buffer;
-
         const filename = `BangDiem_LHP_${lhp.maLopHocPhan}.xlsx`;
 
         return { buffer, filename };
@@ -1479,7 +1677,10 @@ export class BaoCaoService {
 
         // 3. Lấy tất cả lớp học phần thuộc năm học và học kỳ đó
         const lopHocPhans = await this.lopHocPhanRepo.find({
-            where: { hocKy: { id: hocKyEntity.id } },
+            where: {
+                hocKy: { id: hocKyEntity.id },
+                khoaDiem: true, // ✅ chỉ lấy lớp đã khóa điểm
+            },
             relations: [
                 'monHoc',
                 'nganh',
@@ -1577,8 +1778,18 @@ export class BaoCaoService {
                     break;
                 }
 
-                // Trường hợp 2: Có kết quả rồi → Kiểm tra điểm
-                if (kqLopKhac.diemQuaTrinh !== null && kqLopKhac.diemThanhPhan !== null && kqLopKhac.diemThi !== null) {
+                // Nếu lớp CHƯA khóa điểm → coi như đang học lại → không đề xuất
+                if (!lopKhac.khoaDiem) {
+                    daHocLaiThanhCongHoacDangHoc = true;
+                    break;
+                }
+
+                // Trường hợp lớp đã khóa điểm → mới xét kết quả
+                if (
+                    kqLopKhac.diemQuaTrinh !== null &&
+                    kqLopKhac.diemThanhPhan !== null &&
+                    kqLopKhac.diemThi !== null
+                ) {
                     const diemTBCHPLopKhac = this.tinhDiemTBCHP(
                         kqLopKhac.diemQuaTrinh,
                         kqLopKhac.diemThanhPhan,
@@ -1586,11 +1797,12 @@ export class BaoCaoService {
                     );
 
                     if (diemTBCHPLopKhac > 4.0) {
-                        // Đã học lại thành công (đậu) → Không cần đề xuất
+                        // Đã học lại thành công → không đề xuất
                         daHocLaiThanhCongHoacDangHoc = true;
                         break;
                     }
                 }
+
                 // Nếu có kết quả nhưng điểm vẫn <= 4.0 → Vẫn trượt → Tiếp tục xét
             }
 

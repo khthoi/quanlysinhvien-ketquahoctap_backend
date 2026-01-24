@@ -823,10 +823,9 @@ export class GiangDayService {
 
         // Kiểm tra tình trạng
         if (
-            sinhVien.tinhTrang === TinhTrangHocTapEnum.THOI_HOC ||
-            sinhVien.tinhTrang === TinhTrangHocTapEnum.BAO_LUU
+            sinhVien.tinhTrang !== TinhTrangHocTapEnum.DANG_HOC
         ) {
-            throw new BadRequestException('Sinh viên đang nghỉ học hoặc bảo lưu không được đăng ký');
+            throw new BadRequestException('Chỉ những sinh viên đang học mới được đăng ký lớp học phần');
         }
 
         // ===== VALIDATION MỚI: Môn học phải thuộc CTDT của sinh viên =====

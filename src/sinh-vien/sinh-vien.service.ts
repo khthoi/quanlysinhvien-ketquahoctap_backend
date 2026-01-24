@@ -45,14 +45,11 @@ interface SinhVienXetTotNghiep {
     ngayXet: Date;
 }
 
-// Interface để lưu kết quả học tập theo môn học
-interface KetQuaTheoMonHoc {
+// Interface mới - tối ưu hóa, chỉ lưu thông tin cần thiết
+interface KetQuaTheoMonHocOptimized {
     monHocId: number;
-    ketQuas: {
-        lopHocPhanId: number;
-        khoaDiem: boolean;
-        diemTBCHP: number;
-    }[];
+    diemTBCHPCaoNhatDaKhoaDiem: number | null; // Điểm cao nhất trong các LHP đã khóa điểm
+    coLopChuaKhoaDiem: boolean; // Có lớp nào chưa khóa điểm không
 }
 
 @Injectable()
@@ -609,11 +606,11 @@ export class SinhVienService {
         const ngayXet = new Date();
         let tongSinhVien = 0;
 
-        // Danh sách sinh viên cần xét
+        // Danh sách sinh viên cần xét (sử dụng interface tối ưu)
         interface SinhVienCanXet {
             sinhVien: SinhVien;
             lop: Lop;
-            ketQuaTheoMon: Map<number, KetQuaTheoMonHoc>;
+            ketQuaTheoMon: Map<number, KetQuaTheoMonHocOptimized>;
         }
 
         const danhSachSinhVienCanXet: SinhVienCanXet[] = [];
@@ -633,25 +630,39 @@ export class SinhVienService {
                     relations: ['lopHocPhan', 'lopHocPhan.monHoc'],
                 });
 
-                // Nhóm kết quả theo môn học
-                const ketQuaTheoMon = new Map<number, KetQuaTheoMonHoc>();
+                // ===== TỐI ƯU: Nhóm kết quả theo môn học, chỉ lưu điểm cao nhất đã khóa điểm =====
+                const ketQuaTheoMon = new Map<number, KetQuaTheoMonHocOptimized>();
 
                 for (const kq of ketQuas) {
                     const monHocId = kq.lopHocPhan.monHoc.id;
                     const diemTBCHP = this.tinhDiemTBCHP(kq);
+                    const khoaDiem = kq.lopHocPhan.khoaDiem;
 
                     if (!ketQuaTheoMon.has(monHocId)) {
+                        // Khởi tạo với kết quả đầu tiên
                         ketQuaTheoMon.set(monHocId, {
                             monHocId,
-                            ketQuas: [],
+                            diemTBCHPCaoNhatDaKhoaDiem: khoaDiem ? diemTBCHP : null,
+                            coLopChuaKhoaDiem: !khoaDiem,
                         });
-                    }
+                    } else {
+                        const existing = ketQuaTheoMon.get(monHocId)!;
 
-                    ketQuaTheoMon.get(monHocId)!.ketQuas.push({
-                        lopHocPhanId: kq.lopHocPhan.id,
-                        khoaDiem: kq.lopHocPhan.khoaDiem,
-                        diemTBCHP,
-                    });
+                        // Cập nhật điểm cao nhất (chỉ xét lớp đã khóa điểm)
+                        if (khoaDiem) {
+                            if (
+                                existing.diemTBCHPCaoNhatDaKhoaDiem === null ||
+                                diemTBCHP > existing.diemTBCHPCaoNhatDaKhoaDiem
+                            ) {
+                                existing.diemTBCHPCaoNhatDaKhoaDiem = diemTBCHP;
+                            }
+                        }
+
+                        // Cập nhật flag có lớp chưa khóa điểm
+                        if (!khoaDiem) {
+                            existing.coLopChuaKhoaDiem = true;
+                        }
+                    }
                 }
 
                 danhSachSinhVienCanXet.push({
@@ -674,14 +685,19 @@ export class SinhVienService {
                 const ketQuaMon = ketQuaTheoMon.get(monHocId);
 
                 // Điều kiện 1: Chưa có kết quả học tập của môn bắt buộc
-                if (!ketQuaMon || ketQuaMon.ketQuas.length === 0) {
+                if (!ketQuaMon) {
                     khongDuDieuKien = true;
                     break;
                 }
 
                 // Điều kiện 2: Còn tồn tại ít nhất một lớp học phần của môn bắt buộc chưa khóa điểm
-                const coLopChuaKhoaDiem = ketQuaMon.ketQuas.some(kq => !kq.khoaDiem);
-                if (coLopChuaKhoaDiem) {
+                if (ketQuaMon.coLopChuaKhoaDiem) {
+                    khongDuDieuKien = true;
+                    break;
+                }
+
+                // Điều kiện 3: Chưa có điểm nào đã khóa điểm cho môn này
+                if (ketQuaMon.diemTBCHPCaoNhatDaKhoaDiem === null) {
                     khongDuDieuKien = true;
                     break;
                 }
@@ -705,11 +721,9 @@ export class SinhVienService {
             for (const monHocId of requiredMonHocIds) {
                 const ketQuaMon = ketQuaTheoMon.get(monHocId)!;
 
-                // Kiểm tra xem có ít nhất 1 kết quả học tập đạt >= 4.0 không
-                const coDiemDat = ketQuaMon.ketQuas.some(kq => kq.diemTBCHP >= 4.0);
-
-                if (!coDiemDat) {
-                    // Tất cả kết quả của môn này đều < 4.0 → Trượt môn này
+                // Kiểm tra điểm cao nhất đã khóa điểm có đạt >= 4.0 không
+                if (ketQuaMon.diemTBCHPCaoNhatDaKhoaDiem! < 4.0) {
+                    // Điểm cao nhất vẫn < 4.0 → Trượt môn này
                     datTotNghiep = false;
                     break;
                 }
@@ -735,7 +749,7 @@ export class SinhVienService {
         // Thêm sinh viên KHÔNG ĐỦ ĐIỀU KIỆN
         for (const item of danhSachKhongDuDieuKien) {
             stt++;
-            const gpa = this.tinhGPA(item.ketQuaTheoMon);
+            const gpa = this.tinhGPAOptimized(item.ketQuaTheoMon);
             danhSachSinhVienXuatExcel.push({
                 stt,
                 maSinhVien: item.sinhVien.maSinhVien,
@@ -754,7 +768,7 @@ export class SinhVienService {
         // Thêm sinh viên KHÔNG ĐẠT
         for (const item of danhSachKhongDat) {
             stt++;
-            const gpa = this.tinhGPA(item.ketQuaTheoMon);
+            const gpa = this.tinhGPAOptimized(item.ketQuaTheoMon);
             danhSachSinhVienXuatExcel.push({
                 stt,
                 maSinhVien: item.sinhVien.maSinhVien,
@@ -773,7 +787,7 @@ export class SinhVienService {
         // Thêm sinh viên ĐẠT
         for (const item of danhSachDat) {
             stt++;
-            const gpa = this.tinhGPA(item.ketQuaTheoMon);
+            const gpa = this.tinhGPAOptimized(item.ketQuaTheoMon);
             danhSachSinhVienXuatExcel.push({
                 stt,
                 maSinhVien: item.sinhVien.maSinhVien,
@@ -795,21 +809,20 @@ export class SinhVienService {
         const soSinhVienKhongDuDieuKien = danhSachKhongDuDieuKien.length;
         const tongSinhVienDuocXet = danhSachSinhVienCanXet.length;
 
-        // 11. Tạo file Excel
+        // 11. Tạo file Excel (giữ nguyên phần này như code cũ)
         const workbook = new ExcelJS.Workbook();
         workbook.creator = 'Hệ thống quản lý đào tạo';
         workbook.created = new Date();
 
         const worksheet = workbook.addWorksheet('Thống kê xét tốt nghiệp', {
             pageSetup: {
-                paperSize: 9, // A4
+                paperSize: 9,
                 orientation: 'landscape',
                 fitToPage: true,
             },
         });
 
         // ========== HEADER SECTION ==========
-        // Tiêu đề chính
         worksheet.mergeCells('A1:K1');
         const titleCell = worksheet.getCell('A1');
         titleCell.value = 'THỐNG KÊ XÉT TỐT NGHIỆP SINH VIÊN';
@@ -817,7 +830,6 @@ export class SinhVienService {
         titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
         worksheet.getRow(1).height = 35;
 
-        // Thông tin cơ bản - Row 2
         worksheet.mergeCells('A2:K2');
         const subTitleCell = worksheet.getCell('A2');
         subTitleCell.value = `Niên khóa: ${nienKhoa.tenNienKhoa} (${nienKhoa.namBatDau} - ${nienKhoa.namKetThuc})  |  Ngành: ${nganh.tenNganh}  |  Khoa: ${nganh.khoa?.tenKhoa || 'N/A'}`;
@@ -825,15 +837,13 @@ export class SinhVienService {
         subTitleCell.alignment = { horizontal: 'center', vertical: 'middle' };
         worksheet.getRow(2).height = 25;
 
-        // Chương trình đào tạo - Row 3
         worksheet.mergeCells('A3:K3');
         const ctdtCell = worksheet.getCell('A3');
-        ctdtCell.value = `Chương trình đào tạo:  ${apDung.chuongTrinh.tenChuongTrinh} (${apDung.chuongTrinh.maChuongTrinh})  |  Số môn bắt buộc: ${requiredMonHocIds.size}`;
+        ctdtCell.value = `Chương trình đào tạo: ${apDung.chuongTrinh.tenChuongTrinh} (${apDung.chuongTrinh.maChuongTrinh})  |  Số môn bắt buộc: ${requiredMonHocIds.size}`;
         ctdtCell.font = { name: 'Times New Roman', size: 11, italic: true };
         ctdtCell.alignment = { horizontal: 'center', vertical: 'middle' };
         worksheet.getRow(3).height = 22;
 
-        // Ngày xét - Row 4
         worksheet.mergeCells('A4:K4');
         const dateCell = worksheet.getCell('A4');
         dateCell.value = `Ngày xét tốt nghiệp: ${this.formatDate(ngayXet)}`;
@@ -841,10 +851,9 @@ export class SinhVienService {
         dateCell.alignment = { horizontal: 'center', vertical: 'middle' };
         worksheet.getRow(4).height = 22;
 
-        // Dòng trống - Row 5
         worksheet.getRow(5).height = 10;
 
-        // ========== THỐNG KÊ TỔNG QUAN - Row 6, 7, 8 ==========
+        // ========== THỐNG KÊ TỔNG QUAN ==========
         worksheet.mergeCells('A6:E6');
         worksheet.getCell('A6').value = 'THỐNG KÊ TỔNG QUAN';
         worksheet.getCell('A6').font = { name: 'Times New Roman', size: 13, bold: true, color: { argb: 'FFFFFF' } };
@@ -852,7 +861,6 @@ export class SinhVienService {
         worksheet.getCell('A6').alignment = { horizontal: 'center', vertical: 'middle' };
         worksheet.getRow(6).height = 25;
 
-        // Thống kê chi tiết - Row 7, 8
         const statsData = [
             { label: 'Tổng sinh viên được xét:', value: tongSinhVienDuocXet, color: '305496' },
             { label: 'Sinh viên đạt tốt nghiệp:', value: soSinhVienDat, color: '548235' },
@@ -879,14 +887,11 @@ export class SinhVienService {
 
         worksheet.getRow(7).height = 22;
         worksheet.getRow(8).height = 22;
-
-        // Dòng trống - Row 9
         worksheet.getRow(9).height = 15;
 
-        // ========== BẢNG DỮ LIỆU - Bắt đầu từ Row 10 ==========
+        // ========== BẢNG DỮ LIỆU ==========
         const tableStartRow = 10;
 
-        // Header của bảng (thêm cột GPA)
         const headers = [
             { header: 'STT', key: 'stt', width: 6 },
             { header: 'Mã sinh viên', key: 'maSinhVien', width: 19 },
@@ -901,12 +906,10 @@ export class SinhVienService {
             { header: 'Ngày xét TN', key: 'ngayXet', width: 19 },
         ];
 
-        // Set column widths
         headers.forEach((col, index) => {
             worksheet.getColumn(index + 1).width = col.width;
         });
 
-        // Header row
         const headerRow = worksheet.getRow(tableStartRow);
         headers.forEach((col, index) => {
             const cell = headerRow.getCell(index + 1);
@@ -923,7 +926,6 @@ export class SinhVienService {
         });
         headerRow.height = 30;
 
-        // Data rows
         danhSachSinhVienXuatExcel.forEach((sv, index) => {
             const rowIndex = tableStartRow + 1 + index;
             const row = worksheet.getRow(rowIndex);
@@ -957,34 +959,31 @@ export class SinhVienService {
                     right: { style: 'thin', color: { argb: '000000' } },
                 };
 
-                // Màu nền xen kẽ
                 if (index % 2 === 1) {
                     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'D6DCE4' } };
                 }
 
-                // Màu cho cột kết quả xét TN (cột index 9)
                 if (colIndex === 9) {
                     cell.font = { name: 'Times New Roman', size: 11, bold: true };
                     if (sv.ketQuaXet === KetQuaXetTotNghiep.DAT) {
-                        cell.font.color = { argb: '548235' }; // Xanh lá
+                        cell.font.color = { argb: '548235' };
                     } else if (sv.ketQuaXet === KetQuaXetTotNghiep.KHONG_DAT) {
-                        cell.font.color = { argb: 'C65911' }; // Cam đỏ
+                        cell.font.color = { argb: 'C65911' };
                     } else {
-                        cell.font.color = { argb: '7F7F7F' }; // Xám
+                        cell.font.color = { argb: '7F7F7F' };
                     }
                 }
 
-                // Màu cho cột GPA (cột index 8)
                 if (colIndex === 8 && sv.gpa !== null) {
                     cell.font = { name: 'Times New Roman', size: 11, bold: true };
                     if (sv.gpa >= 3.5) {
-                        cell.font.color = { argb: '548235' }; // Xanh lá - Xuất sắc/Giỏi
+                        cell.font.color = { argb: '548235' };
                     } else if (sv.gpa >= 2.5) {
-                        cell.font.color = { argb: '2E75B6' }; // Xanh dương - Khá
+                        cell.font.color = { argb: '2E75B6' };
                     } else if (sv.gpa >= 2.0) {
-                        cell.font.color = { argb: 'C65911' }; // Cam - Trung bình
+                        cell.font.color = { argb: 'C65911' };
                     } else {
-                        cell.font.color = { argb: 'FF0000' }; // Đỏ - Yếu
+                        cell.font.color = { argb: 'FF0000' };
                     }
                 }
             });
@@ -1030,11 +1029,11 @@ export class SinhVienService {
     }
 
     /**
-     * Tính GPA của sinh viên
-     * - Nếu có nhiều kết quả học tập của cùng 1 môn, chỉ lấy điểm cao nhất
-     * - GPA = Trung bình cộng các điểm hệ 4 của tất cả các môn
-     */
-    private tinhGPA(ketQuaTheoMon: Map<number, KetQuaTheoMonHoc>): number | null {
+ * Tính GPA của sinh viên (phiên bản tối ưu)
+ * - Sử dụng trực tiếp điểm cao nhất đã được tính sẵn trong Map
+ * - GPA = Trung bình cộng các điểm hệ 4 của tất cả các môn đã khóa điểm
+ */
+    private tinhGPAOptimized(ketQuaTheoMon: Map<number, KetQuaTheoMonHocOptimized>): number | null {
         if (ketQuaTheoMon.size === 0) {
             return null;
         }
@@ -1043,18 +1042,13 @@ export class SinhVienService {
         let soMonDuocXet = 0;
 
         for (const [monHocId, data] of ketQuaTheoMon) {
-            // Chỉ xét các kết quả đã khóa điểm
-            const ketQuasDaKhoaDiem = data.ketQuas.filter(kq => kq.khoaDiem);
-
-            if (ketQuasDaKhoaDiem.length === 0) {
+            // Chỉ xét các môn có điểm đã khóa điểm
+            if (data.diemTBCHPCaoNhatDaKhoaDiem === null) {
                 continue;
             }
 
-            // Lấy điểm TBCHP cao nhất của môn này
-            const diemCaoNhat = Math.max(...ketQuasDaKhoaDiem.map(kq => kq.diemTBCHP));
-
             // Quy đổi sang hệ 4
-            const diemHe4 = this.diemHe10ToHe4(diemCaoNhat);
+            const diemHe4 = this.diemHe10ToHe4(data.diemTBCHPCaoNhatDaKhoaDiem);
 
             tongDiemHe4 += diemHe4;
             soMonDuocXet++;

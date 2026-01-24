@@ -453,20 +453,40 @@ export class DanhMucService {
     // Thêm niên khóa mới (chỉ cán bộ ĐT)
     async createNienKhoa(createNienKhoaDto: CreateNienKhoaDto): Promise<NienKhoa> {
 
+        // Kiểm tra khoảng cách đúng 4 năm
+        if (createNienKhoaDto.namKetThuc !== createNienKhoaDto.namBatDau + 4) {
+            throw new BadRequestException('Khoảng thời gian niên khóa phải đúng 4 năm (năm kết thúc = năm bắt đầu + 4)');
+        }
+
         if (createNienKhoaDto.namKetThuc <= createNienKhoaDto.namBatDau) {
             throw new BadRequestException('Năm kết thúc phải lớn hơn năm bắt đầu');
         }
 
-        // Kiểm tra trùng mã niên khóa (ví dụ: "K2022")
-        const existing = await this.nienKhoaRepository.findOneBy({
+        // Kiểm tra trùng mã niên khóa
+        const existingByMa = await this.nienKhoaRepository.findOneBy({
             maNienKhoa: createNienKhoaDto.maNienKhoa,
         });
 
-        if (existing) {
+        if (existingByMa) {
             throw new BadRequestException('Mã niên khóa này đã tồn tại trong hệ thống');
         }
 
-        // Tạo mới niên khóa
+        // Kiểm tra trùng khoảng thời gian (cùng năm bắt đầu VÀ năm kết thúc)
+        const existingByTime = await this.nienKhoaRepository.findOne({
+            where: {
+                namBatDau: createNienKhoaDto.namBatDau,
+                namKetThuc: createNienKhoaDto.namKetThuc,
+            },
+        });
+
+        if (existingByTime) {
+            throw new BadRequestException(
+                `Đã tồn tại niên khóa với khoảng thời gian ${createNienKhoaDto.namBatDau} - ${createNienKhoaDto.namKetThuc}. ` +
+                'Không được tạo niên khóa trùng năm bắt đầu và năm kết thúc.'
+            );
+        }
+
+        // Tạo mới
         const nienKhoa = this.nienKhoaRepository.create(createNienKhoaDto);
         return await this.nienKhoaRepository.save(nienKhoa);
     }
@@ -475,34 +495,48 @@ export class DanhMucService {
     async updateNienKhoa(id: number, updateNienKhoaDto: UpdateNienKhoaDto): Promise<NienKhoa> {
         const nienKhoa = await this.getNienKhoaById(id); // throw NotFoundException nếu không tồn tại
 
-        const trungmaNienKhoa = await this.nienKhoaRepository.findOneBy({
-            maNienKhoa: updateNienKhoaDto.maNienKhoa,
-            id: Not(id),
-        });
-
-        if (trungmaNienKhoa) {
-            throw new BadRequestException('Mã niên khóa này đã được sử dụng bởi niên khóa khác');
-        }
-
-        if (updateNienKhoaDto.namKetThuc && updateNienKhoaDto.namBatDau && updateNienKhoaDto.namKetThuc <= updateNienKhoaDto.namBatDau) {
-            throw new BadRequestException('Năm kết thúc phải lớn hơn năm bắt đầu');
-        }
-
-        // Chỉ kiểm tra trùng tên nếu người dùng thay đổi tên niên khóa
-        if (
-            updateNienKhoaDto.tenNienKhoa &&
-            updateNienKhoaDto.tenNienKhoa !== nienKhoa.tenNienKhoa
-        ) {
-            const existing = await this.nienKhoaRepository.findOneBy({
-                tenNienKhoa: updateNienKhoaDto.tenNienKhoa,
+        // Kiểm tra trùng mã niên khóa (khác với chính nó)
+        if (updateNienKhoaDto.maNienKhoa) {
+            const trungMa = await this.nienKhoaRepository.findOne({
+                where: {
+                    maNienKhoa: updateNienKhoaDto.maNienKhoa,
+                    id: Not(id),
+                },
             });
 
-            if (existing) {
-                throw new BadRequestException('Tên niên khóa này đã được sử dụng bởi niên khóa khác');
+            if (trungMa) {
+                throw new BadRequestException('Mã niên khóa này đã được sử dụng bởi niên khóa khác');
             }
         }
 
-        // Cập nhật các trường (bao gồm tenNienKhoa nếu hợp lệ)
+        // Xác định giá trị năm mới (dùng giá trị từ DTO nếu có, nếu không thì giữ nguyên)
+        const namBatDauMoi = updateNienKhoaDto.namBatDau ?? nienKhoa.namBatDau;
+        const namKetThucMoi = updateNienKhoaDto.namKetThuc ?? nienKhoa.namKetThuc;
+
+        // Kiểm tra khoảng cách đúng 4 năm
+        if (namKetThucMoi !== namBatDauMoi + 4) {
+            throw new BadRequestException('Khoảng thời gian niên khóa phải đúng 4 năm (năm kết thúc = năm bắt đầu + 4)');
+        }
+
+        // Kiểm tra trùng khoảng thời gian với niên khóa KHÁC (không tính chính nó)
+        if (updateNienKhoaDto.namBatDau || updateNienKhoaDto.namKetThuc) {
+            const existingByTime = await this.nienKhoaRepository.findOne({
+                where: {
+                    namBatDau: namBatDauMoi,
+                    namKetThuc: namKetThucMoi,
+                    id: Not(id),
+                },
+            });
+
+            if (existingByTime) {
+                throw new BadRequestException(
+                    `Đã tồn tại niên khóa khác với khoảng thời gian ${namBatDauMoi} - ${namKetThucMoi}. ` +
+                    'Không được cập nhật trùng năm bắt đầu và năm kết thúc.'
+                );
+            }
+        }
+
+        // Cập nhật các trường
         Object.assign(nienKhoa, updateNienKhoaDto);
 
         return await this.nienKhoaRepository.save(nienKhoa);
@@ -838,6 +872,173 @@ export class DanhMucService {
         return items;
     }
 
+    async exportMonHocToExcel(query: GetAllMonHocQueryDto): Promise<Buffer> {
+        // Lấy danh sách môn học
+        const monHocs = await this.getAllMonHoc(query);
+
+        // Tạo workbook
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Danh sách môn học');
+
+        // Định nghĩa style chung
+        const fontStyle: Partial<ExcelJS.Font> = {
+            name: 'Times New Roman',
+            size: 12,
+        };
+
+        const headerFontStyle: Partial<ExcelJS.Font> = {
+            name: 'Times New Roman',
+            size: 12,
+            bold: true,
+            color: { argb: 'FFFFFFFF' }, // Màu chữ trắng
+        };
+
+        const blueFill: ExcelJS.Fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF4472C4' }, // Màu xanh dương
+        };
+
+        const lightBlueFill: ExcelJS.Fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFD6E3F8' }, // Màu xanh dương nhạt cho dòng xen kẽ
+        };
+
+        const borderStyle: Partial<ExcelJS.Borders> = {
+            top: { style: 'thin', color: { argb: 'FF000000' } },
+            left: { style: 'thin', color: { argb: 'FF000000' } },
+            bottom: { style: 'thin', color: { argb: 'FF000000' } },
+            right: { style: 'thin', color: { argb: 'FF000000' } },
+        };
+
+        // ===== THÊM HEADER BÁO CÁO =====
+        // Merge cells cho tiêu đề chính
+        worksheet.mergeCells('A1:G1');
+        const titleCell = worksheet.getCell('A1');
+        titleCell.value = 'BÁO CÁO DANH SÁCH MÔN HỌC';
+        titleCell.font = {
+            name: 'Times New Roman',
+            size: 18,
+            bold: true,
+            color: { argb: 'FF1F4E79' }, // Màu xanh dương đậm
+        };
+        titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+        worksheet.getRow(1).height = 30;
+
+        // Merge cells cho dòng phụ đề
+        worksheet.mergeCells('A2:G2');
+        const subtitleCell = worksheet.getCell('A2');
+        subtitleCell.value = `Ngày xuất báo cáo: ${new Date().toLocaleDateString('vi-VN')}`;
+        subtitleCell.font = {
+            name: 'Times New Roman',
+            size: 11,
+            italic: true,
+        };
+        subtitleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+        worksheet.getRow(2).height = 20;
+
+        // Dòng trống
+        worksheet.getRow(3).height = 10;
+
+        // ===== ĐỊNH NGHĨA CỘT HEADER (Bắt đầu từ dòng 4) =====
+        const headerRow = worksheet.getRow(4);
+        const headers = [
+            { header: 'STT', key: 'stt', width: 8 },
+            { header: 'Mã môn học', key: 'maMonHoc', width: 25 },
+            { header: 'Tên môn học', key: 'tenMonHoc', width: 35 },
+            { header: 'Số tín chỉ', key: 'soTinChi', width: 12 },
+            { header: 'Loại môn', key: 'loaiMon', width: 22 },
+            { header: 'Mô tả', key: 'moTa', width: 50 },
+            { header: 'Mã GV phụ trách', key: 'maGiangVien', width: 28 },
+        ];
+
+        // Set độ rộng cột
+        headers.forEach((col, index) => {
+            worksheet.getColumn(index + 1).width = col.width;
+        });
+
+        // Thêm header values
+        headers.forEach((col, index) => {
+            const cell = headerRow.getCell(index + 1);
+            cell.value = col.header;
+            cell.font = headerFontStyle;
+            cell.fill = blueFill;
+            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+            cell.border = borderStyle;
+        });
+        headerRow.height = 25;
+
+        // ===== THÊM DỮ LIỆU =====
+        let currentRow = 5; // Bắt đầu từ dòng 5
+
+        for (let i = 0; i < monHocs.length; i++) {
+            const monHoc = monHocs[i];
+
+            // Lấy thông tin giảng viên phụ trách (nếu có)
+            const giangVienMonHoc = await this.giangVienMonHocRepository.findOne({
+                where: { monHoc: { id: monHoc.id } },
+                relations: ['giangVien'],
+            });
+
+            const row = worksheet.getRow(currentRow);
+            const rowData = [
+                i + 1,
+                monHoc.maMonHoc,
+                monHoc.tenMonHoc,
+                monHoc.soTinChi,
+                this.formatLoaiMon(monHoc.loaiMon),
+                monHoc.moTa || '',
+                giangVienMonHoc?.giangVien?.maGiangVien || '',
+            ];
+
+            rowData.forEach((value, index) => {
+                const cell = row.getCell(index + 1);
+                cell.value = value;
+                cell.font = fontStyle;
+                cell.border = borderStyle;
+                cell.alignment = {
+                    vertical: 'middle',
+                    horizontal: index === 0 || index === 3 ? 'center' : 'left',
+                    wrapText: true,
+                };
+
+                // Màu nền xen kẽ cho dễ đọc
+                if (i % 2 === 1) {
+                    cell.fill = lightBlueFill;
+                }
+            });
+
+            row.height = 20;
+            currentRow++;
+        }
+
+        // ===== THÊM FOOTER =====
+        currentRow++; // Dòng trống
+        worksheet.mergeCells(`A${currentRow}:G${currentRow}`);
+        const footerCell = worksheet.getCell(`A${currentRow}`);
+        footerCell.value = `Tổng số môn học: ${monHocs.length}`;
+        footerCell.font = {
+            name: 'Times New Roman',
+            size: 12,
+            bold: true,
+            italic: true,
+        };
+        footerCell.alignment = { vertical: 'middle', horizontal: 'right' };
+
+        // Xuất ra buffer
+        return await workbook.xlsx.writeBuffer() as unknown as Buffer;
+    }
+
+    private formatLoaiMon(loaiMon: LoaiMonEnum): string {
+        const mapping = {
+            [LoaiMonEnum.DAI_CUONG]: 'Đại cương',
+            [LoaiMonEnum.CHUYEN_NGANH]: 'Chuyên ngành',
+            [LoaiMonEnum.TU_CHON]: 'Tự chọn',
+        };
+        return mapping[loaiMon] || loaiMon;
+    }
+
     // Thêm mới: version getAllMonHoc() có phân trang + search
     async getAllMonHocWithPagination(query: PaginationQueryDto) {
         const { page = 1, limit = 10, search, loaiMon } = query;
@@ -869,6 +1070,111 @@ export class DanhMucService {
                 totalPages: Math.ceil(total / limit),
             },
         };
+    }
+
+    async exportGiangVienToExcel(query: PaginationQueryDto & GetGiangVienQueryDto): Promise<Buffer> {
+        // Lấy tất cả giảng viên (không phân trang cho export)
+        const queryWithoutPagination = { ...query, page: 1, limit: 999999 };
+        const result = await this.getAllGiangVien(queryWithoutPagination);
+        const giangViens = result.data;
+
+        // Lấy tất cả môn học để tạo dropdown
+        const allMonHocs = await this.monHocRepository.find({
+            select: ['id', 'maMonHoc', 'tenMonHoc'],
+            order: { maMonHoc: 'ASC' },
+        });
+
+        // Tạo workbook
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Danh sách giảng viên');
+
+        // Định nghĩa các cột
+        worksheet.columns = [
+            { header: 'STT', key: 'stt', width: 10 },
+            { header: 'Mã giảng viên', key: 'maGiangVien', width: 20 },
+            { header: 'Tên giảng viên', key: 'hoTen', width: 30 },
+            { header: 'Email', key: 'email', width: 30 },
+            { header: 'SĐT', key: 'sdt', width: 15 },
+            { header: 'Ngày sinh', key: 'ngaySinh', width: 15 },
+            { header: 'Giới tính', key: 'gioiTinh', width: 15 },
+            { header: 'Địa chỉ', key: 'diaChi', width: 40 },
+            { header: 'Môn học phụ trách', key: 'monHocPhuTrach', width: 25 },
+        ];
+
+        // Style cho header
+        worksheet.getRow(1).font = { bold: true };
+        worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
+        worksheet.getRow(1).fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFD9D9D9' },
+        };
+
+        // Thêm dữ liệu
+        for (let i = 0; i < giangViens.length; i++) {
+            const gv = giangViens[i];
+
+            // Lấy danh sách mã môn học mà giảng viên phụ trách
+            const monHocIds = gv.monHocGiangViens?.map(gvmh => gvmh.monHoc?.maMonHoc).filter(Boolean) || [];
+
+            const row = worksheet.addRow({
+                stt: i + 1,
+                maGiangVien: gv.maGiangVien,
+                hoTen: gv.hoTen,
+                email: gv.email,
+                sdt: gv.sdt || '',
+                ngaySinh: gv.ngaySinh ? this.formatDate(new Date(gv.ngaySinh)) : '',
+                gioiTinh: this.formatGioiTinh(gv.gioiTinh),
+                diaChi: gv.diaChi || '',
+                monHocPhuTrach: monHocIds.join(', '),
+            });
+        }
+
+        // Tạo dropdown cho cột "Môn học phụ trách"
+        const monHocList = allMonHocs.map(mh => mh.maMonHoc).join(',');
+
+        // Áp dụng data validation cho cột môn học (cột I - index 9)
+        for (let i = 2; i <= giangViens.length + 1; i++) {
+            worksheet.getCell(`I${i}`).dataValidation = {
+                type: 'list',
+                allowBlank: true,
+                formulae: [`"${monHocList}"`],
+                showErrorMessage: true,
+                errorTitle: 'Giá trị không hợp lệ',
+                error: 'Vui lòng chọn mã môn học từ danh sách',
+            };
+        }
+
+        // Border cho tất cả các cell có dữ liệu
+        worksheet.eachRow((row, rowNumber) => {
+            row.eachCell((cell) => {
+                cell.border = {
+                    top: { style: 'thin' },
+                    left: { style: 'thin' },
+                    bottom: { style: 'thin' },
+                    right: { style: 'thin' },
+                };
+            });
+        });
+
+        // Xuất ra buffer
+        return await workbook.xlsx.writeBuffer() as unknown as Buffer;
+    }
+
+    private formatGioiTinh(gioiTinh: GioiTinh): string {
+        const mapping = {
+            [GioiTinh.NAM]: 'Nam',
+            [GioiTinh.NU]: 'Nữ',
+            [GioiTinh.KHONG_XAC_DINH]: 'Không rõ',
+        };
+        return mapping[gioiTinh] || 'Không rõ';
+    }
+
+    private formatDate(date: Date): string {
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        return `${day}-${month}-${year}`;
     }
 
     // Lấy chi tiết một môn học
@@ -1391,7 +1697,7 @@ export class DanhMucService {
         }
     }
 
-    // Thêm giảng viên mới (admin)
+    // Thêm giảng viên mới 
     async createGiangVien(createGiangVienDto: CreateGiangVienDto): Promise<GiangVien> {
         // Kiểm tra email trùng (do có @Unique(['email']))
         const existing = await this.giangVienRepository.findOneBy({ email: createGiangVienDto.email });
@@ -1408,7 +1714,7 @@ export class DanhMucService {
         return await this.giangVienRepository.save(giangVien);
     }
 
-    // Cập nhật giảng viên (admin)
+    // Cập nhật giảng viên 
     async updateGiangVien(id: number, updateGiangVienDto: UpdateGiangVienDto): Promise<GiangVien> {
         const giangVien = await this.getGiangVienById(id);
 
@@ -1432,7 +1738,7 @@ export class DanhMucService {
         return await this.giangVienRepository.save(giangVien);
     }
 
-    // Xóa giảng viên (admin)
+    // Xóa giảng viên
     async deleteGiangVien(id: number): Promise<void> {
         const giangVien = await this.giangVienRepository.findOne({
             where: { id },

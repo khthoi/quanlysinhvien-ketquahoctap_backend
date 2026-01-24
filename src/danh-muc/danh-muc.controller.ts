@@ -14,6 +14,7 @@ import {
   BadRequestException,
   UploadedFile,
   UseInterceptors,
+  Res,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -60,6 +61,7 @@ import { GetAllNganhResponseDto, GetNganhByIdResponseDto } from './dtos/get-all-
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
+import express from 'express';
 
 @ApiTags('Danh mục')
 @Controller('danh-muc')
@@ -449,6 +451,20 @@ export class DanhMucController {
     return this.danhMucService.getAllMonHoc(query);
   }
 
+  @ApiOperation({ summary: 'Xuất danh sách môn học ra Excel' })
+  @ApiResponse({ status: 200, description: 'File Excel được tải về' })
+  @ApiBearerAuth()
+  @Get('mon-hoc/export-excel')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  async exportMonHocToExcel(@Query() query: GetAllMonHocQueryDto, @Res() res: express.Response) {
+    const buffer = await this.danhMucService.exportMonHocToExcel(query);
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=danh-sach-mon-hoc-${Date.now()}.xlsx`);
+    res.send(buffer);
+  }
+
   @ApiOperation({ summary: 'Lấy danh sách môn học có phân trang' })
   @ApiResponse({ status: 200, type: [MonHoc] })
   @ApiBearerAuth()
@@ -563,6 +579,20 @@ export class DanhMucController {
     @Body() capNhatThongTinCaNhanGiangVienDto: CapNhatThongTinCaNhanGiangVienDto,
   ): Promise<GiangVien> {
     return this.danhMucService.updateMyProfile({ userId, vaiTro }, capNhatThongTinCaNhanGiangVienDto);
+  }
+
+  @ApiOperation({ summary: 'Xuất danh sách giảng viên ra Excel' })
+  @ApiResponse({ status: 200, description: 'File Excel được tải về' })
+  @ApiBearerAuth()
+  @Get('giang-vien/export-excel')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  async exportGiangVienToExcel(@Query() query: PaginationQueryDto & GetGiangVienQueryDto, @Res() res: express.Response) {
+    const buffer = await this.danhMucService.exportGiangVienToExcel(query);
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=danh-sach-giang-vien-${Date.now()}.xlsx`);
+    res.send(buffer);
   }
 
   @ApiOperation({ summary: 'Lấy thông tin cá nhân giảng viên' })
