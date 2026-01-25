@@ -687,22 +687,36 @@ export class DaoTaoService {
     await this.apDungRepo.remove(ap);
   }
 
-  async importChiTietMonHocFromExcel(filePath: string): Promise<{
+  async importChiTietMonHocFromExcel(
+    chuongTrinhId: number,
+    filePath: string,
+  ): Promise<{
     message: string;
     totalRows: number;
     success: number;
     failed: number;
-    errors: { row: number; maMonHoc: string; maChuongTrinh: string; error: string }[];
+    errors: { row: number; maMonHoc: string; error: string }[];
+    successRows: { row: number; maMonHoc: string; thuTuHocKy: number }[];
   }> {
     const results = {
       totalRows: 0,
       success: 0,
       failed: 0,
-      errors: [] as { row: number; maMonHoc: string; maChuongTrinh: string; error: string }[],
+      errors: [] as { row: number; maMonHoc: string; error: string }[],
+      successRows: [] as { row: number; maMonHoc: string; thuTuHocKy: number }[],
     };
 
     try {
-      // 1. Đọc file Excel
+      // 1. Kiểm tra chương trình đào tạo tồn tại
+      const chuongTrinh = await this.chuongTrinhRepo.findOne({
+        where: { id: chuongTrinhId },
+      });
+
+      if (!chuongTrinh) {
+        throw new NotFoundException(`Chương trình đào tạo ID = ${chuongTrinhId} không tồn tại`);
+      }
+
+      // 2. Đọc file Excel
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.readFile(filePath);
       const worksheet = workbook.getWorksheet(1);
@@ -718,89 +732,115 @@ export class DaoTaoService {
 
       results.totalRows = rows.length;
 
-      // 2. Duyệt từng dòng
+      // 3. Duyệt từng dòng
       for (const row of rows) {
-
         if (!row || row.actualCellCount === 0) continue;
 
         const rowNum = row.number;
 
-        const maMonHoc = row.getCell(2).value?.toString().trim() || ''; // Cột thứ 3 sẽ là tên môn học
-        const thuTuHocKyStr = row.getCell(4).value?.toString().trim() || '';
-        const ghiChu = row.getCell(5).value?.toString().trim() || undefined;
-        const maChuongTrinh = row.getCell(6).value?.toString().trim() || '';
+        // Cấu trúc file:
+        // A: STT
+        // B: Học kỳ
+        // C: Mã môn học
+        // D: Ghi chú
 
-        // Validate bắt buộc
-        if (!maMonHoc || !thuTuHocKyStr || !maChuongTrinh) {
+        const thuTuHocKyStr = row.getCell(2).value?.toString().trim() || '';
+        const maMonHoc = row.getCell(3).value?.toString().trim() || '';
+        const ghiChu = row.getCell(4).value?.toString().trim() || undefined;
+
+        // Validate Mã môn học
+        if (!maMonHoc) {
           results.failed++;
           results.errors.push({
             row: rowNum,
-            maMonHoc: maMonHoc || 'N/A',
-            maChuongTrinh: maChuongTrinh || 'N/A',
-            error: 'Thiếu trường bắt buộc: Mã môn học, Thứ tự học kỳ, Mã chương trình đào tạo',
+            maMonHoc: 'N/A',
+            error: 'Thiếu mã môn học',
           });
           continue;
         }
 
-        // Validate thứ tự học kỳ
-        const thuTuHocKy = parseInt(thuTuHocKyStr, 10);
-        if (isNaN(thuTuHocKy) || thuTuHocKy < 1) {
+        // Validate Thứ tự học kỳ
+        if (!thuTuHocKyStr) {
           results.failed++;
           results.errors.push({
             row: rowNum,
             maMonHoc,
-            maChuongTrinh,
-            error: 'Thứ tự học kỳ phải là số nguyên lớn hơn hoặc bằng 1',
+            error: 'Thiếu thứ tự học kỳ',
+          });
+          continue;
+        }
+
+        // Validate học kỳ
+        const thuTuHocKy = parseInt(thuTuHocKyStr, 10);
+        if (isNaN(thuTuHocKy) || thuTuHocKy < 1 || thuTuHocKy > 8) {
+          results.failed++;
+          results.errors.push({
+            row: rowNum,
+            maMonHoc,
+            error: 'Thứ tự học kỳ phải là số nguyên từ 1 đến 8',
           });
           continue;
         }
 
         try {
-          // 3. Tra cứu môn học theo mã
+          // 4. Tra cứu môn học
           const monHoc = await this.monHocRepo.findOne({ where: { maMonHoc } });
           if (!monHoc) {
             throw new NotFoundException(`Môn học với mã ${maMonHoc} không tồn tại`);
           }
 
-          // 4. Tra cứu chương trình đào tạo theo mã
-          const chuongTrinh = await this.chuongTrinhRepo.findOne({ where: { maChuongTrinh } });
-          if (!chuongTrinh) {
-            throw new NotFoundException(`Chương trình đào tạo với mã ${maChuongTrinh} không tồn tại`);
+          // 5. Check trùng môn trong CTĐT
+          const exists = await this.chiTietRepo.findOne({
+            where: {
+              chuongTrinh: { id: chuongTrinhId },
+              monHoc: { id: monHoc.id },
+            },
+          });
+
+          if (exists) {
+            throw new BadRequestException(`Môn ${maMonHoc} đã tồn tại trong CTĐT`);
           }
 
-          // 5. Tạo DTO và gọi hàm themMonHocVaoChuongTrinh hiện có
+          // 6. Tạo DTO
           const dto: CreateChiTietMonHocDto = {
             thuTuHocKy,
             monHocId: monHoc.id,
             ghiChu,
           };
 
-          await this.themMonHocVaoChuongTrinh(chuongTrinh.id, dto);
+          // 7. Gọi nghiệp vụ hiện có
+          await this.themMonHocVaoChuongTrinh(chuongTrinhId, dto);
 
           results.success++;
-        } catch (error) {
+          results.successRows.push({
+            row: rowNum,
+            maMonHoc,
+            thuTuHocKy,
+          });
+        } catch (error: any) {
           results.failed++;
           results.errors.push({
             row: rowNum,
             maMonHoc,
-            maChuongTrinh,
-            error: error.message || 'Lỗi không xác định khi thêm môn vào chương trình',
+            error: error.message || 'Lỗi khi thêm môn vào chương trình đào tạo',
           });
         }
       }
 
       return {
-        message: `Đã xử lý ${results.totalRows} dòng từ file Excel`,
+        message: `Import CTĐT hoàn tất cho chương trình ID=${chuongTrinhId}. Thành công: ${results.success}/${results.totalRows}`,
         totalRows: results.totalRows,
         success: results.success,
         failed: results.failed,
         errors: results.errors.length > 0 ? results.errors : [],
+        successRows: results.successRows,
       };
     } finally {
       // Xóa file tạm
       await fs.unlink(filePath).catch(() => { });
     }
   }
+
 
   // Thêm môn học vào chương trình
   async themMonHocVaoChuongTrinh(chuongTrinhId: number, dto: CreateChiTietMonHocDto) {
@@ -854,6 +894,131 @@ export class DaoTaoService {
 
     await this.chiTietRepo.remove(chiTiet);
   }
+
+  async exportMauNhapChuongTrinhDaoTaoExcel(): Promise<Buffer> {
+    const workbook = new ExcelJS.Workbook();
+
+    // =========================
+    // Sheet 1: Nhập CTĐT
+    // =========================
+    const worksheet = workbook.addWorksheet('NHAP_CTDT');
+
+    worksheet.columns = [
+      { header: 'STT', key: 'stt', width: 8 },              // A
+      { header: 'Học kỳ', key: 'hocKy', width: 14 },        // B
+      { header: 'Môn học', key: 'monHoc', width: 40 },      // C
+      { header: 'Ghi chú', key: 'ghiChu', width: 40 },      // D
+    ];
+
+    // =========================
+    // Style Header
+    // =========================
+    const headerRow = worksheet.getRow(1);
+    headerRow.height = 32;
+
+    headerRow.eachCell(cell => {
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF0E3364' }, // xanh đậm
+      };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' },
+      };
+    });
+
+    // Freeze header
+    worksheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+    // =========================
+    // Sheet ẩn: Danh mục môn học
+    // =========================
+    const hiddenSheet = workbook.addWorksheet('DM_MON_HOC', { state: 'hidden' });
+
+    hiddenSheet.columns = [
+      { header: 'Mã môn', key: 'ma', width: 20 },   // A
+      { header: 'Tên môn', key: 'ten', width: 40 }, // B
+    ];
+
+    const monHocs = await this.monHocRepo.find({
+      order: { tenMonHoc: 'ASC' },
+    });
+
+    monHocs.forEach(m => {
+      hiddenSheet.addRow({
+        ma: m.maMonHoc,
+        ten: m.tenMonHoc,
+      });
+    });
+
+    const lastRow = monHocs.length + 1;
+
+    // =========================
+    // Dropdown Học kỳ (1 → 8)
+    // =========================
+    for (let i = 2; i <= 10; i++) {
+      worksheet.getCell(`B${i}`).dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: ['"1,2,3,4,5,6,7,8"'],
+        showErrorMessage: true,
+        errorTitle: 'Giá trị không hợp lệ',
+        error: 'Học kỳ chỉ được chọn từ 1 đến 8',
+      };
+    }
+
+    // =========================
+    // Dropdown Môn học (chọn MÃ)
+    // =========================
+    for (let i = 2; i <= 10; i++) {
+      // Cột C: select mã môn
+      worksheet.getCell(`C${i}`).dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: [`=DM_MON_HOC!$A$2:$A$${lastRow}`], // danh sách mã môn
+        showErrorMessage: true,
+        errorTitle: 'Giá trị không hợp lệ',
+        error: 'Chỉ được chọn mã môn từ danh sách',
+      };
+
+      // Hiển thị tên môn bằng VLOOKUP (comment gợi ý)
+      worksheet.getCell(`C${i}`).note = `
+Chọn mã môn từ danh sách.
+Tên môn sẽ tự hiển thị theo mã môn.
+
+Công thức Excel tham khảo:
+=VLOOKUP(C${i}, DM_MON_HOC!A:B, 2, FALSE)
+`;
+    }
+    // =========================
+    // Format body
+    // =========================
+    worksheet.eachRow((row, rowNumber) => {
+      if (rowNumber > 1) {
+        row.height = 26;
+        row.eachCell(cell => {
+          cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
+          cell.border = {
+            top: { style: 'thin' },
+            left: { style: 'thin' },
+            bottom: { style: 'thin' },
+            right: { style: 'thin' },
+          };
+        });
+      }
+    });
+    // =========================
+    // Xuất file
+    // =========================
+    const buffer = await workbook.xlsx.writeBuffer();
+    return Buffer.from(buffer);
+  }
+
 
   // Chi tiết 1 bản ghi
   async getChiTietMonHoc(id: number) {

@@ -14,6 +14,7 @@ import {
   BadRequestException,
   UploadedFile,
   UseInterceptors,
+  Res,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -50,6 +51,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { GetUser } from 'src/auth/decorators/get-user.decorator';
+import express from 'express';
 
 @ApiTags('Đào tạo')
 @ApiBearerAuth()
@@ -164,6 +166,26 @@ export class DaoTaoController {
     return this.daoTaoService.getAllChuongTrinh(query);
   }
 
+  @ApiOperation({ summary: 'Xuất file Excel mẫu nhập môn học vào chương trình đào tạo' })
+  @ApiResponse({ status: 200, description: 'File Excel mẫu CTĐT được tải về' })
+  @ApiBearerAuth()
+  @Get('chuong-trinh/export-mau-excel')
+  async exportMauNhapChuongTrinhDaoTao(@Res() res: express.Response) {
+    const buffer = await this.daoTaoService.exportMauNhapChuongTrinhDaoTaoExcel();
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=mau-nhap-chuong-trinh-dao-tao-${Date.now()}.xlsx`,
+    );
+
+    res.send(buffer);
+  }
+
   @ApiOperation({ summary: 'Lấy thông tin chi tiết một chương trình đào tạo' })
   @ApiParam({ name: 'id', type: Number, description: 'ID chương trình đào tạo' })
   @ApiResponse({ status: 200, description: 'Thông tin chương trình đào tạo' })
@@ -245,55 +267,57 @@ export class DaoTaoController {
 
   /* ==================== CHI TIẾT CHƯƠNG TRÌNH ĐÀO TẠO (MÔN HỌC TRONG CTĐT) ==================== */
 
-  @Post('chuong-trinh/mon-hoc/import-excel')
-  @ApiOperation({
-    summary: 'Nhập hàng loạt môn học vào chương trình đào tạo từ file Excel',
-    description:
-      'File Excel cần các cột: STT (bỏ qua), Mã môn học, Thứ tự học kỳ, Ghi chú (tùy chọn), Mã chương trình đào tạo. ' +
-      'Hỗ trợ nhập cho nhiều chương trình đào tạo khác nhau trong cùng file.',
-  })
-  @ApiConsumes('multipart/form-data')
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        file: { type: 'string', format: 'binary' },
-      },
-      required: ['file'],
+@Post('chuong-trinh/:id/mon-hoc/import-excel')
+@ApiOperation({
+  summary: 'Nhập hàng loạt môn học vào chương trình đào tạo từ file Excel',
+  description:
+    'File Excel cần các cột: STT (bỏ qua), Thứ tự học kỳ, Mã môn học, Ghi chú (tùy chọn). ' +
+    'Chương trình đào tạo được xác định theo :id trên URL.',
+})
+@ApiConsumes('multipart/form-data')
+@ApiBody({
+  schema: {
+    type: 'object',
+    properties: {
+      file: { type: 'string', format: 'binary' },
     },
-  })
-  @ApiResponse({ status: 200, description: 'Kết quả nhập chi tiết môn học từ Excel' })
-  @ApiBearerAuth()
-  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
-  @UseInterceptors(
-    FileInterceptor('file', {
-      storage: diskStorage({
-        destination: './uploads/temp',
-        filename: (req, file, cb) => {
-          const randomName = Array(32)
-            .fill(null)
-            .map(() => Math.round(Math.random() * 16).toString(16))
-            .join('');
-          cb(null, `${randomName}${extname(file.originalname)}`);
-        },
-      }),
-      fileFilter: (req, file, cb) => {
-        if (!file.originalname.match(/\.(xlsx|xls)$/)) {
-          return cb(new BadRequestException('Chỉ chấp nhận file .xlsx hoặc .xls'), false);
-        }
-        cb(null, true);
+    required: ['file'],
+  },
+})
+@ApiResponse({ status: 200, description: 'Kết quả nhập chi tiết môn học từ Excel' })
+@ApiBearerAuth()
+@Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+@UseInterceptors(
+  FileInterceptor('file', {
+    storage: diskStorage({
+      destination: './uploads/temp',
+      filename: (req, file, cb) => {
+        const randomName = Array(32)
+          .fill(null)
+          .map(() => Math.round(Math.random() * 16).toString(16))
+          .join('');
+        cb(null, `${randomName}${extname(file.originalname)}`);
       },
-      limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
     }),
-  )
-  async importChiTietMonHocFromExcel(@UploadedFile() file: Express.Multer.File) {
-    if (!file) {
-      throw new BadRequestException('Không có file được tải lên');
-    }
-
-    return this.daoTaoService.importChiTietMonHocFromExcel(file.path);
+    fileFilter: (req, file, cb) => {
+      if (!file.originalname.match(/\.(xlsx|xls)$/)) {
+        return cb(new BadRequestException('Chỉ chấp nhận file .xlsx hoặc .xls'), false);
+      }
+      cb(null, true);
+    },
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  }),
+)
+async importChiTietMonHocFromExcel(
+  @Param('id') id: number,
+  @UploadedFile() file: Express.Multer.File,
+) {
+  if (!file) {
+    throw new BadRequestException('Không có file được tải lên');
   }
 
+  return this.daoTaoService.importChiTietMonHocFromExcel(+id, file.path);
+}
 
   @ApiOperation({ summary: 'Thêm môn học vào chương trình đào tạo' })
   @ApiParam({ name: 'chuong_trinh_id', type: Number, description: 'ID chương trình đào tạo' })
@@ -347,7 +371,7 @@ export class DaoTaoController {
     @GetUser("userId") userId: number,
   ) {
     return this.daoTaoService.getTatCaMonHocTrongChuongTrinhCuaSinhVien(userId);
-  }  
+  }
 
   @ApiOperation({ summary: 'Lấy tất cả môn học thuộc một chương trình đào tạo' })
   @ApiParam({ name: 'chuong_trinh_id', type: Number, description: 'ID chương trình đào tạo' })
