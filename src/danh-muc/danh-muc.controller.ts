@@ -565,6 +565,29 @@ export class DanhMucController {
   }
 
   /* ==================== GIẢNG VIÊN ==================== */
+
+   @ApiOperation({ summary: 'Xuất file Excel mẫu nhập giảng viên' })
+  @ApiResponse({ status: 200, description: 'File Excel mẫu nhập giảng viên được tải về' })
+  @ApiBearerAuth()
+  @Get('giang-vien/export-excel-template')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  async exportMauNhapGiangVienExcel(@Res() res: express.Response) {
+    const buffer = await this.danhMucService.exportMauNhapGiangVienExcel();
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=mau-nhap-giang-vien-${Date.now()}.xlsx`
+    );
+
+    res.send(buffer);
+  }
+
+
   @ApiOperation({ summary: 'Giảng viên cập nhật thông tin cá nhân của mình' })
   @ApiBody({ type: CapNhatThongTinCaNhanGiangVienDto })
   @ApiResponse({ status: 200, type: GiangVien })

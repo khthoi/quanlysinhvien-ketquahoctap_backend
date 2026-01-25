@@ -697,15 +697,23 @@ export class DanhMucService {
                 const maNienKhoa = row.getCell(5).value?.toString().trim() || '';
 
                 // Validate cơ bản
-                if (!maLop || !tenLop || !maNganh || !maNienKhoa) {
+                const missingFields: string[] = [];
+
+                if (!maLop) missingFields.push('Mã lớp');
+                if (!tenLop) missingFields.push('Tên lớp');
+                if (!maNganh) missingFields.push('Mã ngành');
+                if (!maNienKhoa) missingFields.push('Mã niên khóa');
+
+                if (missingFields.length > 0) {
                     results.failed++;
                     results.errors.push({
                         row: rowNum,
                         maLop: maLop || 'N/A',
-                        error: 'Thiếu một hoặc nhiều trường bắt buộc (Mã lớp, Tên lớp, Mã ngành, Mã niên khóa)',
+                        error: `Thiếu dữ liệu: ${missingFields.join(', ')}`,
                     });
                     continue;
                 }
+
 
                 try {
                     // 3. Tra cứu Ngành theo mã
@@ -873,14 +881,12 @@ export class DanhMucService {
     }
 
     async exportMonHocToExcel(query: GetAllMonHocQueryDto): Promise<Buffer> {
-        // Lấy danh sách môn học
         const monHocs = await this.getAllMonHoc(query);
 
-        // Tạo workbook
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Danh sách môn học');
 
-        // Định nghĩa style chung
+        // ===== STYLE =====
         const fontStyle: Partial<ExcelJS.Font> = {
             name: 'Times New Roman',
             size: 12,
@@ -890,19 +896,19 @@ export class DanhMucService {
             name: 'Times New Roman',
             size: 12,
             bold: true,
-            color: { argb: 'FFFFFFFF' }, // Màu chữ trắng
+            color: { argb: 'FFFFFFFF' },
         };
 
         const blueFill: ExcelJS.Fill = {
             type: 'pattern',
             pattern: 'solid',
-            fgColor: { argb: 'FF4472C4' }, // Màu xanh dương
+            fgColor: { argb: 'FF4472C4' },
         };
 
         const lightBlueFill: ExcelJS.Fill = {
             type: 'pattern',
             pattern: 'solid',
-            fgColor: { argb: 'FFD6E3F8' }, // Màu xanh dương nhạt cho dòng xen kẽ
+            fgColor: { argb: 'FFD6E3F8' },
         };
 
         const borderStyle: Partial<ExcelJS.Borders> = {
@@ -912,8 +918,7 @@ export class DanhMucService {
             right: { style: 'thin', color: { argb: 'FF000000' } },
         };
 
-        // ===== THÊM HEADER BÁO CÁO =====
-        // Merge cells cho tiêu đề chính
+        // ===== HEADER =====
         worksheet.mergeCells('A1:G1');
         const titleCell = worksheet.getCell('A1');
         titleCell.value = 'BÁO CÁO DANH SÁCH MÔN HỌC';
@@ -921,67 +926,62 @@ export class DanhMucService {
             name: 'Times New Roman',
             size: 18,
             bold: true,
-            color: { argb: 'FF1F4E79' }, // Màu xanh dương đậm
+            color: { argb: 'FF1F4E79' },
         };
         titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
         worksheet.getRow(1).height = 30;
 
-        // Merge cells cho dòng phụ đề
         worksheet.mergeCells('A2:G2');
         const subtitleCell = worksheet.getCell('A2');
         subtitleCell.value = `Ngày xuất báo cáo: ${new Date().toLocaleDateString('vi-VN')}`;
-        subtitleCell.font = {
-            name: 'Times New Roman',
-            size: 11,
-            italic: true,
-        };
+        subtitleCell.font = { name: 'Times New Roman', size: 11, italic: true };
         subtitleCell.alignment = { vertical: 'middle', horizontal: 'center' };
         worksheet.getRow(2).height = 20;
 
-        // Dòng trống
         worksheet.getRow(3).height = 10;
 
-        // ===== ĐỊNH NGHĨA CỘT HEADER (Bắt đầu từ dòng 4) =====
+        // ===== HEADER TABLE =====
         const headerRow = worksheet.getRow(4);
         const headers = [
-            { header: 'STT', key: 'stt', width: 8 },
-            { header: 'Mã môn học', key: 'maMonHoc', width: 25 },
-            { header: 'Tên môn học', key: 'tenMonHoc', width: 35 },
-            { header: 'Số tín chỉ', key: 'soTinChi', width: 12 },
-            { header: 'Loại môn', key: 'loaiMon', width: 22 },
-            { header: 'Mô tả', key: 'moTa', width: 50 },
-            { header: 'Mã GV phụ trách', key: 'maGiangVien', width: 28 },
+            { header: 'STT', width: 8 },
+            { header: 'Mã môn học', width: 25 },
+            { header: 'Tên môn học', width: 35 },
+            { header: 'Số tín chỉ', width: 12 },
+            { header: 'Loại môn', width: 22 },
+            { header: 'Mô tả', width: 50 },
+            { header: 'GV phụ trách', width: 35 }, // combobox
         ];
 
-        // Set độ rộng cột
-        headers.forEach((col, index) => {
-            worksheet.getColumn(index + 1).width = col.width;
-        });
-
-        // Thêm header values
-        headers.forEach((col, index) => {
-            const cell = headerRow.getCell(index + 1);
+        headers.forEach((col, i) => {
+            worksheet.getColumn(i + 1).width = col.width;
+            const cell = headerRow.getCell(i + 1);
             cell.value = col.header;
             cell.font = headerFontStyle;
             cell.fill = blueFill;
             cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
             cell.border = borderStyle;
         });
-        headerRow.height = 25;
+        headerRow.height = 28;
 
-        // ===== THÊM DỮ LIỆU =====
-        let currentRow = 5; // Bắt đầu từ dòng 5
+        // ===== DATA =====
+        let currentRow = 5;
 
         for (let i = 0; i < monHocs.length; i++) {
             const monHoc = monHocs[i];
 
-            // Lấy thông tin giảng viên phụ trách (nếu có)
-            const giangVienMonHoc = await this.giangVienMonHocRepository.findOne({
+            // Lấy TẤT CẢ giảng viên của môn
+            const gvMonHocs = await this.giangVienMonHocRepository.find({
                 where: { monHoc: { id: monHoc.id } },
                 relations: ['giangVien'],
             });
 
+            // Build list cho combobox
+            const gvList = gvMonHocs.map(gv =>
+                `${gv.giangVien.maGiangVien} - ${gv.giangVien.hoTen}`
+            );
+
             const row = worksheet.getRow(currentRow);
+
             const rowData = [
                 i + 1,
                 monHoc.maMonHoc,
@@ -989,7 +989,7 @@ export class DanhMucService {
                 monHoc.soTinChi,
                 this.formatLoaiMon(monHoc.loaiMon),
                 monHoc.moTa || '',
-                giangVienMonHoc?.giangVien?.maGiangVien || '',
+                '', // cell combobox
             ];
 
             rowData.forEach((value, index) => {
@@ -1003,18 +1003,37 @@ export class DanhMucService {
                     wrapText: true,
                 };
 
-                // Màu nền xen kẽ cho dễ đọc
                 if (i % 2 === 1) {
                     cell.fill = lightBlueFill;
                 }
             });
 
-            row.height = 20;
+            // ===== COMBOBOX GV =====
+            const gvCell = row.getCell(7);
+
+            if (gvList.length > 0) {
+                gvCell.dataValidation = {
+                    type: 'list',
+                    allowBlank: true,
+                    showInputMessage: true,
+                    promptTitle: 'Chọn giảng viên',
+                    prompt: 'Chọn giảng viên phụ trách môn học',
+                    showErrorMessage: true,
+                    errorTitle: 'Giá trị không hợp lệ',
+                    error: 'Vui lòng chọn giảng viên trong danh sách',
+                    formulae: [`"${gvList.join(',')}"`], // Excel dropdown
+                };
+            } else {
+                gvCell.value = 'Chưa phân công';
+                gvCell.font = { ...fontStyle, italic: true, color: { argb: 'FF999999' } };
+            }
+
+            row.height = 22;
             currentRow++;
         }
 
-        // ===== THÊM FOOTER =====
-        currentRow++; // Dòng trống
+        // ===== FOOTER =====
+        currentRow++;
         worksheet.mergeCells(`A${currentRow}:G${currentRow}`);
         const footerCell = worksheet.getCell(`A${currentRow}`);
         footerCell.value = `Tổng số môn học: ${monHocs.length}`;
@@ -1026,7 +1045,6 @@ export class DanhMucService {
         };
         footerCell.alignment = { vertical: 'middle', horizontal: 'right' };
 
-        // Xuất ra buffer
         return await workbook.xlsx.writeBuffer() as unknown as Buffer;
     }
 
@@ -1231,15 +1249,21 @@ export class DanhMucService {
                 const loaiMonStr = row.getCell(4).value?.toString().trim() || '';
                 const soTinChiStr = row.getCell(5).value?.toString().trim() || '';
                 const moTa = row.getCell(6).value?.toString().trim() || undefined;
-                const maGiangVien = row.getCell(7).value?.toString().trim() || ''; // Cột 7 - tùy chọn
 
                 // Validate cơ bản (thiếu trường bắt buộc)
-                if (!maMonHoc || !tenMonHoc || !loaiMonStr || !soTinChiStr) {
+                const missingFields: string[] = [];
+
+                if (!maMonHoc) missingFields.push('Mã môn');
+                if (!tenMonHoc) missingFields.push('Tên môn');
+                if (!loaiMonStr) missingFields.push('Loại môn');
+                if (!soTinChiStr) missingFields.push('Tín chỉ');
+
+                if (missingFields.length > 0) {
                     results.failed++;
                     results.errors.push({
                         row: rowNum,
                         maMonHoc: maMonHoc || 'N/A',
-                        error: 'Thiếu một hoặc nhiều trường bắt buộc (Mã môn, Tên môn, Loại môn, Tín chỉ)',
+                        error: `Thiếu dữ liệu: ${missingFields.join(', ')}`,
                     });
                     continue;
                 }
@@ -1269,7 +1293,7 @@ export class DanhMucService {
                 }
 
                 try {
-                    // 3. Tạo môn học trước
+                    // 3. Tạo môn học
                     const createDto: CreateMonHocDto = {
                         maMonHoc,
                         tenMonHoc,
@@ -1278,34 +1302,7 @@ export class DanhMucService {
                         moTa,
                     };
 
-                    const monHocMoi = await this.createMonHoc(createDto);
-
-                    // 4. Nếu có mã giảng viên ở cột 7 → phân công
-                    if (!maGiangVien) {
-                        results.failed++;
-                        results.errors.push({
-                            row: rowNum,
-                            maMonHoc,
-                            error: 'Thiếu mã giảng viên để phân công giảng viên cho môn học',
-                        });
-                    } else {
-                        // Tìm giảng viên theo mã
-                        const giangVien = await this.giangVienRepository.findOne({
-                            where: { maGiangVien },
-                        });
-
-                        if (!giangVien) {
-                            throw new BadRequestException(`Mã giảng viên ${maGiangVien} không tồn tại`);
-                        }
-
-                        // Gọi hàm phân công hiện có
-                        const phanCongDto = {
-                            giangVienId: giangVien.id,
-                            monHocId: monHocMoi.id,
-                        };
-
-                        await this.phanCongMonHoc(phanCongDto);
-                    }
+                    await this.createMonHoc(createDto);
 
                     results.success++;
                 } catch (error) {
@@ -1396,6 +1393,205 @@ export class DanhMucService {
 
         await this.monHocRepository.remove(monHoc);
     }
+
+    async exportMauNhapGiangVienExcel(): Promise<Buffer> {
+        const workbook = new ExcelJS.Workbook();
+
+        // =========================
+        // Lấy danh sách môn học
+        // =========================
+        const monHocs = await this.monHocRepository.find({
+            order: { tenMonHoc: 'ASC' },
+        });
+
+        // Sheet 1: Giảng viên
+        const wsGiangVien = workbook.addWorksheet('Giảng viên');
+        const gvColumns = [
+            { header: 'STT', key: 'stt', width: 8 },
+            { header: 'Mã giảng viên', key: 'maGiangVien', width: 18 },
+            { header: 'Họ tên', key: 'hoTen', width: 25 },
+            { header: 'Ngày sinh', key: 'ngaySinh', width: 16 },
+            { header: 'Email', key: 'email', width: 30 },
+            { header: 'Số điện thoại', key: 'soDienThoai', width: 18 },
+            { header: 'Giới tính', key: 'gioiTinh', width: 14 },
+            { header: 'Địa chỉ', key: 'diaChi', width: 35 },
+        ];
+        wsGiangVien.columns = gvColumns;
+
+        // Style Header cho Sheet Giảng viên
+        const gvHeaderRow = wsGiangVien.getRow(1);
+        gvHeaderRow.height = 35;
+        gvHeaderRow.eachCell(cell => {
+            cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+            cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FF1F4E78' }, // xanh đậm
+            };
+            cell.border = {
+                top: { style: 'thin' },
+                left: { style: 'thin' },
+                bottom: { style: 'thin' },
+                right: { style: 'thin' },
+            };
+        });
+
+        // Freeze header
+        wsGiangVien.views = [{ state: 'frozen', ySplit: 1 }];
+
+        // Data mẫu Sheet 1
+        wsGiangVien.addRow({
+            stt: 1,
+            maGiangVien: 'GV001',
+            hoTen: 'Nguyễn Văn A',
+            ngaySinh: '1985-05-12',
+            email: 'nguyenvana@university.edu.vn',
+            soDienThoai: '0987654321',
+            gioiTinh: 'NAM',
+            diaChi: 'Hà Nội',
+        });
+        wsGiangVien.addRow({
+            stt: 2,
+            maGiangVien: 'GV002',
+            hoTen: 'Trần Thị B',
+            ngaySinh: '1990-08-20',
+            email: 'tranthib@university.edu.vn',
+            soDienThoai: '0912345678',
+            gioiTinh: 'NU',
+            diaChi: 'TP. Hồ Chí Minh',
+        });
+
+        // Format body cho Sheet Giảng viên
+        wsGiangVien.eachRow((row, rowNumber) => {
+            if (rowNumber > 1) {
+                row.height = 28;
+                row.eachCell(cell => {
+                    cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
+                    cell.border = {
+                        top: { style: 'thin' },
+                        left: { style: 'thin' },
+                        bottom: { style: 'thin' },
+                        right: { style: 'thin' },
+                    };
+                });
+            }
+        });
+
+        // Dropdown giới tính cho Sheet 1 (cột G từ row 2 đến 500)
+        for (let i = 2; i <= 500; i++) {
+            wsGiangVien.getCell(`G${i}`).dataValidation = {
+                type: 'list',
+                allowBlank: true,
+                formulae: ['"NAM,NU"'],
+                showErrorMessage: true,
+                errorStyle: 'error',
+                errorTitle: 'Giá trị không hợp lệ',
+                error: 'Chỉ được chọn NAM hoặc NU',
+            };
+        }
+
+        // Ghi chú hướng dẫn cho Sheet 1
+        wsGiangVien.getCell('G1').note = `
+Chỉ chọn 1 trong 2:
+NAM
+NU
+`;
+
+        // Sheet 2: Phân công môn học
+        const wsPhanCong = workbook.addWorksheet('Phân công môn học');
+        const pcColumns = [
+            { header: 'Mã giảng viên', key: 'maGiangVien', width: 18 },
+            { header: 'Mã môn học', key: 'maMonHoc', width: 20 },
+        ];
+        wsPhanCong.columns = pcColumns;
+
+        // Style Header cho Sheet Phân công
+        const pcHeaderRow = wsPhanCong.getRow(1);
+        pcHeaderRow.height = 35;
+        pcHeaderRow.eachCell(cell => {
+            cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+            cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FF1F4E78' }, // xanh đậm
+            };
+            cell.border = {
+                top: { style: 'thin' },
+                left: { style: 'thin' },
+                bottom: { style: 'thin' },
+                right: { style: 'thin' },
+            };
+        });
+
+        // Freeze header
+        wsPhanCong.views = [{ state: 'frozen', ySplit: 1 }];
+
+        // Data mẫu Sheet 2
+        wsPhanCong.addRow({ maGiangVien: 'GV001', maMonHoc: monHocs[0]?.maMonHoc || '' });
+        wsPhanCong.addRow({ maGiangVien: 'GV001', maMonHoc: monHocs[1]?.maMonHoc || '' });
+        wsPhanCong.addRow({ maGiangVien: 'GV002', maMonHoc: monHocs[0]?.maMonHoc || '' });
+
+        // Format body cho Sheet Phân công
+        wsPhanCong.eachRow((row, rowNumber) => {
+            if (rowNumber > 1) {
+                row.height = 28;
+                row.eachCell(cell => {
+                    cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
+                    cell.border = {
+                        top: { style: 'thin' },
+                        left: { style: 'thin' },
+                        bottom: { style: 'thin' },
+                        right: { style: 'thin' },
+                    };
+                });
+            }
+        });
+
+        // Sheet ẩn: DM_MON_HOC
+        const hiddenSheet = workbook.addWorksheet('DM_MON_HOC', { state: 'hidden' });
+        hiddenSheet.columns = [
+            { header: 'Mã môn', key: 'ma', width: 20 },
+            { header: 'Tên môn', key: 'ten', width: 40 },
+        ];
+        monHocs.forEach(m => {
+            hiddenSheet.addRow({
+                ma: m.maMonHoc,
+                ten: m.tenMonHoc,
+            });
+        });
+        const lastRow = monHocs.length + 1;
+
+        // Dropdown cho cột B (Mã môn học) ở Sheet Phân công (từ row 2 đến 1000)
+        for (let i = 2; i <= 1000; i++) {
+            wsPhanCong.getCell(`B${i}`).dataValidation = {
+                type: 'list',
+                allowBlank: true,
+                formulae: [`=DM_MON_HOC!$A$2:$A$${lastRow}`], // mã môn
+                showErrorMessage: true,
+                errorStyle: 'error',
+                errorTitle: 'Giá trị không hợp lệ',
+                error: 'Chọn mã môn trong danh sách',
+            };
+        }
+
+        // Ghi chú hướng dẫn cho Sheet Phân công
+        wsPhanCong.getCell('A1').note = `
+Copy mã giảng viên từ Sheet "Giảng viên".
+Mỗi dòng là một phân công (một môn cho một giảng viên).
+Có thể có nhiều dòng cho cùng một giảng viên nếu dạy nhiều môn.
+`;
+
+        wsPhanCong.getCell('B1').note = `
+Chọn mã môn từ danh sách dropdown.
+`;
+
+        // Xuất file
+        const arrayBuffer = await workbook.xlsx.writeBuffer();
+        return Buffer.from(arrayBuffer);
+    }
+
 
     async getAllGiangVien(query: PaginationQueryDto & GetGiangVienQueryDto) {
         const { page = 1, limit = 10, search, monHocId } = query;
@@ -1490,65 +1686,101 @@ export class DanhMucService {
 
     async importGiangVienFromExcel(filePath: string): Promise<{
         message: string;
-        totalRows: number;
-        success: number;
-        failed: number;
-        errors: { row: number; maGiangVien: string; error: string }[];
+        totalRowsSheet1: number;
+        successSheet1: number;
+        failedSheet1: number;
+        totalRowsSheet2: number;
+        successSheet2: number;
+        failedSheet2: number;
+        errors: { sheet: string; row: number; maGiangVien?: string; error: string }[];
+        success: { sheet: string; row: number; maGiangVien?: string; maMonHoc?: string; message: string }[];
     }> {
         const results = {
-            totalRows: 0,
-            success: 0,
-            failed: 0,
-            errors: [] as { row: number; maGiangVien: string; error: string }[],
+            totalRowsSheet1: 0,
+            successSheet1: 0,
+            failedSheet1: 0,
+            totalRowsSheet2: 0,
+            successSheet2: 0,
+            failedSheet2: 0,
+            errors: [] as { sheet: string; row: number; maGiangVien?: string; error: string }[],
+            success: [] as { sheet: string; row: number; maGiangVien?: string; maMonHoc?: string; message: string }[],
         };
+
+        function getCellText(cellValue: any): string {
+            if (!cellValue) return '';
+
+            if (typeof cellValue === 'string') return cellValue.trim();
+            if (typeof cellValue === 'number') return cellValue.toString();
+            if (cellValue instanceof Date) return cellValue.toISOString();
+
+            if (typeof cellValue === 'object') {
+                if (cellValue.text) return cellValue.text.toString().trim();
+                if (cellValue.hyperlink) return cellValue.hyperlink.replace(/^mailto:/i, '').trim();
+                if (cellValue.richText) return cellValue.richText.map((r: any) => r.text).join('').trim();
+                if (cellValue.result) return cellValue.result.toString().trim();
+            }
+
+            return cellValue.toString().trim();
+        }
+
 
         try {
             // 1. Đọc file Excel
             const workbook = new ExcelJS.Workbook();
             await workbook.xlsx.readFile(filePath);
-            const worksheet = workbook.getWorksheet(1);
 
-            if (!worksheet) {
-                throw new BadRequestException('File Excel không có sheet dữ liệu');
+            // Lấy hai sheet
+            const wsGiangVien = workbook.getWorksheet('Giảng viên');
+            const wsPhanCong = workbook.getWorksheet('Phân công môn học');
+
+            if (!wsGiangVien) {
+                throw new BadRequestException('Không tìm thấy sheet "Giảng viên"');
             }
 
-            const rows = worksheet.getRows(2, worksheet.rowCount - 1) || [];
-            if (rows.length === 0) {
-                throw new BadRequestException('File Excel không có dữ liệu từ dòng 2 trở đi');
-            }
+            // ────────────────────────────────────────────────
+            // XỬ LÝ SHEET 1: Giảng viên (tạo giảng viên trước)
+            // ────────────────────────────────────────────────
+            const rowsSheet1 = wsGiangVien.getRows(2, wsGiangVien.rowCount - 1) || [];
+            results.totalRowsSheet1 = rowsSheet1.length;
 
-            results.totalRows = rows.length;
+            const createdGiangVienMap = new Map<string, GiangVien>(); // Lưu tạm các giảng viên vừa tạo để dùng ở sheet 2
 
-            // 2. Duyệt từng dòng
-            for (const row of rows) {
+            for (const row of rowsSheet1) {
                 if (!row || row.actualCellCount === 0) continue;
 
                 const rowNum = row.number;
 
-                const maGiangVien = row.getCell(2).value?.toString().trim() || '';
-                const hoTen = row.getCell(3).value?.toString().trim() || '';
-                const ngaySinhStr = row.getCell(4).value?.toString().trim() || Any;
-                const email = row.getCell(5).value?.toString().trim() || '';
+                // Lấy giá trị (cột bắt đầu từ 1: STT, 2: Mã GV, 3: Họ tên, ...)
+                const maGiangVien = (row.getCell(2).value?.toString() || '').trim();
+                const hoTen = (row.getCell(3).value?.toString() || '').trim();
+                const ngaySinhStr = row.getCell(4).value;
+                const email = getCellText(row.getCell(5).value);
                 const sdt = row.getCell(6).value?.toString().trim() || undefined;
-                const gioiTinhStr = row.getCell(7).value?.toString().trim() || undefined;
+                const gioiTinhStr = (row.getCell(7).value?.toString() || '').trim();
                 const diaChi = row.getCell(8).value?.toString().trim() || undefined;
-                const maMonHoc = row.getCell(9).value?.toString().trim() || ''; // Cột 9 - Mã môn học
 
                 // Validate bắt buộc
-                if (!maGiangVien || !hoTen || !email) {
-                    results.failed++;
+                const missing: string[] = [];
+                if (!maGiangVien) missing.push('Mã giảng viên');
+                if (!hoTen) missing.push('Họ tên');
+                if (!email) missing.push('Email');
+
+                if (missing.length > 0) {
+                    results.failedSheet1++;
                     results.errors.push({
+                        sheet: 'Giảng viên',
                         row: rowNum,
                         maGiangVien: maGiangVien || 'N/A',
-                        error: 'Thiếu trường bắt buộc: Mã giảng viên, Họ tên, Email',
+                        error: `Thiếu trường bắt buộc: ${missing.join(', ')}`,
                     });
                     continue;
                 }
 
                 // Validate email cơ bản
-                if (!email.includes('@')) {
-                    results.failed++;
+                if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                    results.failedSheet1++;
                     results.errors.push({
+                        sheet: 'Giảng viên',
                         row: rowNum,
                         maGiangVien,
                         error: 'Email không hợp lệ',
@@ -1556,71 +1788,85 @@ export class DanhMucService {
                     continue;
                 }
 
-                // Validate giới tính (nếu có)
+                // Xử lý giới tính
                 let gioiTinh: GioiTinh | undefined;
                 if (gioiTinhStr) {
-                    gioiTinh = GioiTinh[gioiTinhStr as keyof typeof GioiTinh];
-                    if (!gioiTinh) {
-                        results.failed++;
+                    const upper = gioiTinhStr.toUpperCase();
+                    if (['NAM', 'NU', 'KHONG_XAC_DINH'].includes(upper)) {
+                        gioiTinh = GioiTinh[upper as keyof typeof GioiTinh];
+                    } else {
+                        results.failedSheet1++;
                         results.errors.push({
+                            sheet: 'Giảng viên',
                             row: rowNum,
                             maGiangVien,
-                            error: `Giới tính "${gioiTinhStr}" không hợp lệ. Giá trị cho phép: NAM, NU, KHONG_XAC_DINH`,
+                            error: `Giới tính không hợp lệ: "${gioiTinhStr}". Chỉ chấp nhận: NAM, NU, KHONG_XAC_DINH`,
                         });
                         continue;
                     }
                 }
 
-                // Validate và chuẩn hóa ngày sinh (nếu có)
+                // =========================
+                // Xử lý ngày sinh (BẮT BUỘC)
+                // =========================
                 let ngaySinh: string | undefined;
 
-                if (ngaySinhStr) {
-                    let parsedDate: Date | null = null;
+                // ❌ Không có data → lỗi
+                if (!ngaySinhStr || (typeof ngaySinhStr === 'string' && !ngaySinhStr.trim())) {
+                    results.failedSheet1++;
+                    results.errors.push({
+                        sheet: 'Giảng viên',
+                        row: rowNum,
+                        maGiangVien,
+                        error: 'Thiếu dữ liệu: Ngày sinh',
+                    });
+                    continue;
+                }
 
-                    // Trường hợp 1: Nếu là đối tượng Date
-                    if (ngaySinhStr instanceof Date && !isNaN(ngaySinhStr.getTime())) {
-                        parsedDate = ngaySinhStr;
+                let parsed: Date | null = null;
+
+                // Excel date object
+                if (ngaySinhStr instanceof Date && !isNaN(ngaySinhStr.getTime())) {
+                    parsed = ngaySinhStr;
+                }
+                // String
+                else if (typeof ngaySinhStr === 'string') {
+                    const str = ngaySinhStr.trim();
+
+                    // YYYY-MM-DD
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+                        parsed = new Date(str);
                     }
-                    // Trường hợp 2: Nếu là chuỗi
-                    else if (typeof ngaySinhStr === 'string' && ngaySinhStr.trim()) {
-                        const str = ngaySinhStr.trim();
-
-                        // 1. YYYY-MM-DD (ISO chuẩn)
-                        if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
-                            parsedDate = new Date(str);
-                        }
-                        // 2. DD-MM-YYYY hoặc D-M-YYYY
-                        else if (/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/.test(str)) {
-                            const [, day, month, year] = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/)!;
-                            parsedDate = new Date(Number(year), Number(month) - 1, Number(day));
-                        }
-                        // 3. MM/DD/YYYY
-                        else if (/^(\d{1,2})[/](\d{1,2})[/](\d{4})$/.test(str)) {
-                            const [, month, day, year] = str.match(/^(\d{1,2})[/](\d{1,2})[/](\d{4})$/)!;
-                            parsedDate = new Date(Number(year), Number(month) - 1, Number(day));
-                        }
+                    // DD-MM-YYYY hoặc DD/MM/YYYY
+                    else if (/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/.test(str)) {
+                        const [, d, m, y] = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/)!;
+                        parsed = new Date(+y, +m - 1, +d);
                     }
-
-                    // Kiểm tra kết quả parse có hợp lệ không
-                    if (parsedDate && !isNaN(parsedDate.getTime())) {
-                        const day = String(parsedDate.getDate()).padStart(2, '0');
-                        const month = String(parsedDate.getMonth() + 1).padStart(2, '0');
-                        const year = parsedDate.getFullYear();
-                        ngaySinh = `${day}-${month}-${year}`;
-                    } else {
-                        results.failed++;
-                        results.errors.push({
-                            row: rowNum,
-                            maGiangVien,
-                            error: 'Ngày sinh không hợp lệ hoặc định dạng không được hỗ trợ. Hỗ trợ: YYYY-MM-DD, DD-MM-YYYY, DD/MM/YYYY, MM/DD/YYYY',
-                        });
-                        continue;
+                    // MM/DD/YYYY
+                    else if (/^(\d{1,2})[/](\d{1,2})[/](\d{4})$/.test(str)) {
+                        const [, m, d, y] = str.match(/^(\d{1,2})[/](\d{1,2})[/](\d{4})$/)!;
+                        parsed = new Date(+y, +m - 1, +d);
                     }
                 }
 
+                // ❌ Sai format hoặc parse lỗi
+                if (!parsed || isNaN(parsed.getTime())) {
+                    results.failedSheet1++;
+                    results.errors.push({
+                        sheet: 'Giảng viên',
+                        row: rowNum,
+                        maGiangVien,
+                        error: 'Ngày sinh không hợp lệ. Định dạng hỗ trợ: YYYY-MM-DD, DD-MM-YYYY, DD/MM/YYYY',
+                    });
+                    continue;
+                }
+
+                // ✅ OK
+                ngaySinh = parsed.toISOString().split('T')[0]; // YYYY-MM-DD
+
+
                 try {
-                    // 3. Tạo giảng viên
-                    const createDto: CreateGiangVienDto = {
+                    const dto: CreateGiangVienDto = {
                         maGiangVien,
                         hoTen,
                         ngaySinh,
@@ -1630,67 +1876,160 @@ export class DanhMucService {
                         diaChi,
                     };
 
-                    const giangVienMoi = await this.createGiangVien(createDto);
+                    // Tạo hoặc cập nhật (tùy logic business của bạn, ở đây giả sử upsert theo maGiangVien)
+                    let giangVien: GiangVien;
 
-                    // 4. Phân công môn học (nếu có mã môn học)
-                    if (maMonHoc) {
-                        // Tìm môn học theo mã
-                        const monHoc = await this.monHocRepository.findOne({
-                            where: { maMonHoc },
-                        });
-
-                        if (!monHoc) {
-                            // Không throw error mà chỉ ghi nhận warning
-                            results.errors.push({
-                                row: rowNum,
-                                maGiangVien,
-                                error: `Tạo giảng viên thành công nhưng mã môn học "${maMonHoc}" không tồn tại, không thể phân công môn học`,
-                            });
-                        } else {
-                            // Kiểm tra đã phân công chưa
-                            const existingPhanCong = await this.giangVienMonHocRepository.findOne({
-                                where: {
-                                    giangVien: { id: giangVienMoi.id },
-                                    monHoc: { id: monHoc.id },
-                                },
-                            });
-
-                            if (existingPhanCong) {
-                                results.errors.push({
-                                    row: rowNum,
-                                    maGiangVien,
-                                    error: `Tạo giảng viên thành công nhưng môn học "${maMonHoc}" đã được phân công cho giảng viên này`,
-                                });
-                            } else {
-                                // Thực hiện phân công
-                                const phanCongDto: PhanCongMonHocDto = {
-                                    giangVienId: giangVienMoi.id,
-                                    monHocId: monHoc.id,
-                                };
-
-                                await this.phanCongMonHoc(phanCongDto);
-                            }
-                        }
+                    const existing = await this.giangVienRepository.findOne({ where: { maGiangVien } });
+                    if (existing) {
+                        // Cập nhật nếu đã tồn tại (hoặc bạn có thể throw error nếu không cho phép update)
+                        giangVien = await this.giangVienRepository.save({ ...existing, ...dto });
+                    } else {
+                        giangVien = await this.createGiangVien(dto);
                     }
 
-                    results.success++;
-                } catch (error) {
-                    results.failed++;
-                    results.errors.push({
+                    createdGiangVienMap.set(maGiangVien, giangVien);
+                    results.successSheet1++;
+
+                    // ✅ LOG SUCCESS
+                    results.success.push({
+                        sheet: 'Giảng viên',
                         row: rowNum,
                         maGiangVien,
-                        error: error.message || 'Lỗi không xác định khi tạo giảng viên',
+                        message: `Tạo giảng viên thành công: ${maGiangVien}`,
+                    });
+                } catch (err: any) {
+                    results.failedSheet1++;
+                    results.errors.push({
+                        sheet: 'Giảng viên',
+                        row: rowNum,
+                        maGiangVien,
+                        error: err.message || 'Lỗi khi tạo giảng viên',
                     });
                 }
             }
 
+            // ────────────────────────────────────────────────
+            // XỬ LÝ SHEET 2: Phân công môn học (chỉ khi có giảng viên)
+            // ────────────────────────────────────────────────
+            if (wsPhanCong) {
+                const rowsSheet2 = wsPhanCong.getRows(2, wsPhanCong.rowCount - 1) || [];
+                results.totalRowsSheet2 = rowsSheet2.length;
+
+                for (const row of rowsSheet2) {
+                    if (!row || row.actualCellCount === 0) continue;
+
+                    const rowNum = row.number;
+                    const maGiangVien = (row.getCell(1).value?.toString() || '').trim();
+                    const maMonHoc = (row.getCell(2).value?.toString() || '').trim();
+
+                    if (!maGiangVien || !maMonHoc) {
+                        results.failedSheet2++;
+                        results.errors.push({
+                            sheet: 'Phân công môn học',
+                            row: rowNum,
+                            maGiangVien: maGiangVien || 'N/A',
+                            error: 'Thiếu Mã giảng viên hoặc Mã môn học',
+                        });
+                        continue;
+                    }
+
+                    // Kiểm tra giảng viên có tồn tại không (ưu tiên từ map vừa tạo, sau đó query DB)
+                    let giangVien: GiangVien | null = createdGiangVienMap.get(maGiangVien) || null;
+                    if (!giangVien) {
+                        giangVien = await this.giangVienRepository.findOne({
+                            where: { maGiangVien },
+                            relations: ['monHocs'], // nếu cần check trùng lặp
+                        });
+                    }
+
+                    if (!giangVien) {
+                        results.failedSheet2++;
+                        results.errors.push({
+                            sheet: 'Phân công môn học',
+                            row: rowNum,
+                            maGiangVien,
+                            error: `Mã giảng viên "${maGiangVien}" không tồn tại trong hệ thống`,
+                        });
+                        continue;
+                    }
+
+                    // Tìm môn học
+                    const monHoc = await this.monHocRepository.findOne({ where: { maMonHoc } });
+                    if (!monHoc) {
+                        results.failedSheet2++;
+                        results.errors.push({
+                            sheet: 'Phân công môn học',
+                            row: rowNum,
+                            maGiangVien,
+                            error: `Mã môn học "${maMonHoc}" không tồn tại`,
+                        });
+                        continue;
+                    }
+
+                    // Kiểm tra đã phân công chưa
+                    const alreadyAssigned = await this.giangVienMonHocRepository.findOne({
+                        where: {
+                            giangVien: { id: giangVien.id },
+                            monHoc: { id: monHoc.id },
+                        },
+                    });
+
+                    if (alreadyAssigned) {
+                        results.failedSheet2++;
+                        results.errors.push({
+                            sheet: 'Phân công môn học',
+                            row: rowNum,
+                            maGiangVien,
+                            error: `Môn học "${maMonHoc}" đã được phân công cho giảng viên này`,
+                        });
+                        continue;
+                    }
+
+                    try {
+                        const dto: PhanCongMonHocDto = {
+                            giangVienId: giangVien.id,
+                            monHocId: monHoc.id,
+                        };
+                        await this.phanCongMonHoc(dto);
+                        results.successSheet2++;
+
+                        // ✅ LOG SUCCESS
+                        results.success.push({
+                            sheet: 'Phân công môn học',
+                            row: rowNum,
+                            maGiangVien,
+                            maMonHoc,
+                            message: `Phân công thành công môn "${maMonHoc}" cho giảng viên "${maGiangVien}"`,
+                        });
+                    } catch (err: any) {
+                        results.failedSheet2++;
+                        results.errors.push({
+                            sheet: 'Phân công môn học',
+                            row: rowNum,
+                            maGiangVien,
+                            error: err.message || 'Lỗi khi phân công môn học',
+                        });
+                    }
+                }
+            }
+
+            const totalSuccess = results.successSheet1 + results.successSheet2;
+            const totalFailed = results.failedSheet1 + results.failedSheet2;
+            const totalRows = results.totalRowsSheet1 + results.totalRowsSheet2;
+
             return {
-                message: `Đã xử lý ${results.totalRows} dòng từ file Excel`,
-                totalRows: results.totalRows,
-                success: results.success,
-                failed: results.failed,
+                message: `Import hoàn tất. Thành công: ${totalSuccess}/${totalRows} dòng | Lỗi: ${totalFailed} dòng`,
+                totalRowsSheet1: results.totalRowsSheet1,
+                successSheet1: results.successSheet1,
+                failedSheet1: results.failedSheet1,
+                totalRowsSheet2: results.totalRowsSheet2,
+                successSheet2: results.successSheet2,
+                failedSheet2: results.failedSheet2,
                 errors: results.errors.length > 0 ? results.errors : [],
+                success: results.success.length > 0 ? results.success : [],
             };
+        } catch (err: any) {
+            throw new BadRequestException(`Lỗi khi đọc file Excel: ${err.message}`);
         } finally {
             // Xóa file tạm
             await fs.unlink(filePath).catch(() => { });
