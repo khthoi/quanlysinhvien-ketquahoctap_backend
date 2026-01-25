@@ -430,8 +430,12 @@ export class DaoTaoService {
   }
 
   async deleteHocKy(id: number) {
-    const hocKy = await this.hocKyRepo.findOneBy({ id });
+    const hocKy = await this.hocKyRepo.findOne({ where: { id }, relations: ['lopHocPhans'] });
     if (!hocKy) throw new NotFoundException('Học kỳ không tồn tại');
+
+    if (hocKy.lopHocPhans && hocKy.lopHocPhans.length > 0) {
+      throw new BadRequestException('Không thể xóa học kỳ đang có lớp học phần');
+    }
 
     await this.hocKyRepo.remove(hocKy);
     return { message: 'Xóa học kỳ thành công' };
@@ -529,12 +533,16 @@ export class DaoTaoService {
   async deleteChuongTrinh(id: number): Promise<void> {
     const ct = await this.chuongTrinhRepo.findOne({
       where: { id },
-      relations: ['apDungChuongTrinhs'],
+      relations: ['apDungChuongTrinhs', 'chiTietMonHocs'],
     });
     if (!ct) throw new NotFoundException('Chương trình đào tạo không tồn tại');
 
     if (ct.apDungChuongTrinhs?.length > 0) {
       throw new BadRequestException('Không thể xóa chương trình đang được áp dụng');
+    }
+
+    if (ct.chiTietMonHocs?.length > 0) {
+      await this.chiTietRepo.remove(ct.chiTietMonHocs);
     }
 
     await this.chuongTrinhRepo.remove(ct);

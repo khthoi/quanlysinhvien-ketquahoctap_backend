@@ -533,9 +533,7 @@ export class KetQuaService {
       where: { id: userId },
       relations: ['giangVien'],
     });
-
     if (!nguoiDung) throw new ForbiddenException('Không tìm thấy thông tin tài khoản');
-
     if (!nguoiDung.giangVien) {
       throw new ForbiddenException('Tài khoản chưa liên kết với hồ sơ giảng viên');
     }
@@ -543,8 +541,10 @@ export class KetQuaService {
       throw new ForbiddenException('Bạn không được phép nhập điểm cho lớp này');
     }
 
+    // Xóa toàn bộ điểm cũ của lớp học phần (để overwrite toàn bộ)
+    await this.ketQuaRepo.delete({ lopHocPhan: { id: lopHocPhanId } });
 
-    // Load tất cả đăng ký SV trong lớp
+    // Load tất cả đăng ký SV trong lớp → Map để tra cứu nhanh
     const dangKyMap = new Map<string, SinhVienLopHocPhan>();
     const dangKyList = await this.svLhpRepo.find({
       where: { lopHocPhan: { id: lopHocPhanId } },
@@ -552,18 +552,9 @@ export class KetQuaService {
     });
     dangKyList.forEach(dk => dangKyMap.set(dk.sinhVien.maSinhVien, dk));
 
-    // Load kết quả điểm hiện có để kiểm tra trùng
-    const existingKetQuaMap = new Map<string, KetQuaHocTap>();
-    const existingKetQua = await this.ketQuaRepo.find({
-      where: { lopHocPhan: { id: lopHocPhanId } },
-      relations: ['sinhVien'],
-    });
-    existingKetQua.forEach(kq => existingKetQuaMap.set(kq.sinhVien.maSinhVien, kq));
-
     // Đọc file Excel
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(filePath);
-
     const worksheet = workbook.getWorksheet(1);
     if (!worksheet) throw new BadRequestException('File không có sheet dữ liệu');
 
@@ -576,12 +567,11 @@ export class KetQuaService {
     const rows = worksheet.getRows(2, worksheet.rowCount - 1) || [];
 
     for (const row of rows) {
-
       if (!row || row.actualCellCount === 0) continue;
 
       const rowNum = row.number;
-
       const maSinhVien = row.getCell(2).value?.toString().trim(); // Cột 2: Mã sinh viên
+
       const diemQuaTrinh = parseFloat(row.getCell(6).value?.toString() || 'NaN');
       const diemThanhPhan = parseFloat(row.getCell(7).value?.toString() || 'NaN');
       const diemThi = parseFloat(row.getCell(8).value?.toString() || 'NaN');
@@ -593,15 +583,10 @@ export class KetQuaService {
       }
 
       try {
-        // Validate SV tồn tại và đăng ký lớp
+        // Validate sinh viên có đăng ký lớp không
         const dangKy = dangKyMap.get(maSinhVien);
         if (!dangKy) {
           throw new BadRequestException('Sinh viên không đăng ký lớp học phần này');
-        }
-
-        // Kiểm tra đã có điểm chưa
-        if (existingKetQuaMap.has(maSinhVien)) {
-          throw new BadRequestException('Sinh viên đã có điểm, không thể nhập lại');
         }
 
         // Validate điểm (0-10, không NaN)
@@ -615,7 +600,7 @@ export class KetQuaService {
           throw new BadRequestException('Điểm thi không hợp lệ (0-10)');
         }
 
-        // Tạo kết quả điểm
+        // Tạo mới kết quả điểm (sau khi đã xóa toàn bộ cũ)
         const ketQua = this.ketQuaRepo.create({
           lopHocPhan: lhp,
           sinhVien: dangKy.sinhVien,
@@ -623,9 +608,7 @@ export class KetQuaService {
           diemThanhPhan,
           diemThi,
         });
-
         await this.ketQuaRepo.save(ketQua);
-
         results.success++;
       } catch (error) {
         results.failed++;

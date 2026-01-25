@@ -697,6 +697,14 @@ export class GiangDayService {
     async update(id: number, dto: UpdateLopHocPhanDto) {
         const lhp = await this.findOne(id); // load đầy đủ entity
 
+        if (!lhp) {
+            throw new NotFoundException('Lớp học phần không tồn tại');
+        }
+
+        if (lhp.khoaDiem) {
+            throw new BadRequestException('Không thể cập nhật lớp học phần đã khóa điểm');
+        }
+
         /* ================================
            1. CẬP NHẬT FIELD SCALAR
         ================================= */
@@ -783,12 +791,20 @@ export class GiangDayService {
     async delete(id: number): Promise<void> {
         const lhp = await this.lopHocPhanRepo.findOne({
             where: { id },
-            relations: ['sinhVienLopHocPhans'],
+            relations: ['sinhVienLopHocPhans', 'ketQuaHocTaps'],
         });
         if (!lhp) throw new NotFoundException('Lớp học phần không tồn tại');
 
+        if (lhp.khoaDiem) {
+            throw new BadRequestException('Không thể xóa lớp học phần đã khóa điểm');
+        }
+
         if (lhp.sinhVienLopHocPhans?.length > 0) {
             throw new BadRequestException('Không thể xóa lớp học phần đang có sinh viên đăng ký');
+        }
+
+        if (lhp.ketQuaHocTaps?.length > 0) {
+            throw new BadRequestException('Không thể xóa lớp học phần đã có kết quả học tập');
         }
 
         await this.lopHocPhanRepo.remove(lhp);
@@ -808,6 +824,7 @@ export class GiangDayService {
         if (!lhp.nienKhoa) throw new BadRequestException('Lớp học phần không có niên khóa');
         if (!lhp.hocKy) throw new BadRequestException('Lớp học phần không có học kỳ');
         if (!lhp.nganh) throw new BadRequestException('Lớp học phần không có ngành');
+        if (lhp.khoaDiem) throw new BadRequestException('Lớp học phần đã khóa điểm, không thể đăng ký thêm sinh viên');
 
         // Load sinh viên
         const sinhVien = await this.sinhVienRepo.findOne({
@@ -989,6 +1006,12 @@ export class GiangDayService {
             throw new BadRequestException(
                 'Không thể xóa sinh viên khỏi lớp học phần vì sinh viên đã có điểm trong lớp này. ' +
                 'Vui lòng liên hệ phòng đào tạo nếu cần điều chỉnh.',
+            );
+        }
+
+        if (registration.lopHocPhan.khoaDiem) {
+            throw new BadRequestException(
+                'Không thể xóa sinh viên khỏi lớp học phần đã khóa điểm',
             );
         }
 
