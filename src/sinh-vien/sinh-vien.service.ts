@@ -769,7 +769,7 @@ export class SinhVienService {
                         const ketQuaMon = ketQuaTheoMon.get(monHocId)!;
 
                         if (ketQuaMon.diemTBCHPCaoNhatDaKhoaDiem! < 4.0) {
-                            lyDoKhongDat.push(`Môn ${tenMonHoc} điểm cao nhất ${ketQuaMon.diemTBCHPCaoNhatDaKhoaDiem!.toFixed(2)} < 4.0`);
+                            lyDoKhongDat.push(`Môn ${tenMonHoc} có điểm TBCHP cao nhất ${ketQuaMon.diemTBCHPCaoNhatDaKhoaDiem!.toFixed(2)} < 4.0`);
                             datTotNghiep = false;
                         }
                     }
