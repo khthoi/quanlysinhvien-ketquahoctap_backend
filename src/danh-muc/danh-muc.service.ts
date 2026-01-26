@@ -1702,7 +1702,7 @@ Chọn mã môn từ danh sách dropdown.
             totalRowsSheet2: 0,
             successSheet2: 0,
             failedSheet2: 0,
-            errors: [] as { sheet: string; row: number; maGiangVien?: string; error: string }[],
+            errors: [] as { sheet: string; row: number; maGiangVien?: string; maMonhoc?: string ;error: string }[],
             success: [] as { sheet: string; row: number; maGiangVien?: string; maMonHoc?: string; message: string }[],
         };
 
@@ -1922,16 +1922,23 @@ Chọn mã môn từ danh sách dropdown.
                     const maGiangVien = (row.getCell(1).value?.toString() || '').trim();
                     const maMonHoc = (row.getCell(2).value?.toString() || '').trim();
 
-                    if (!maGiangVien || !maMonHoc) {
+                    const missingFields: string[] = [];
+
+                    if (!maGiangVien) missingFields.push('Mã giảng viên');
+                    if (!maMonHoc) missingFields.push('Mã môn học');
+
+                    if (missingFields.length > 0) {
                         results.failedSheet2++;
                         results.errors.push({
                             sheet: 'Phân công môn học',
                             row: rowNum,
                             maGiangVien: maGiangVien || 'N/A',
-                            error: 'Thiếu Mã giảng viên hoặc Mã môn học',
+                            maMonhoc: maMonHoc || 'N/A',
+                            error: `Thiếu ${missingFields.join(' và ')}`
                         });
                         continue;
                     }
+
 
                     // Kiểm tra giảng viên có tồn tại không (ưu tiên từ map vừa tạo, sau đó query DB)
                     let giangVien: GiangVien | null = createdGiangVienMap.get(maGiangVien) || null;

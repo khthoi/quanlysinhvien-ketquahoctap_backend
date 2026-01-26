@@ -287,7 +287,6 @@ Trả về file Excel thống kê chi tiết kết quả xét tốt nghiệp.`,
   ) {
     const buffer = await this.sinhVienService.xetTotNghiepVaXuatExcel(
       dto.nienKhoaId,
-      dto.nganhId,
     );
 
     const fileName = `ThongKe_XetTotNghiep_${Date.now()}.xlsx`;
