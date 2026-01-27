@@ -34,6 +34,7 @@ import * as fs from 'fs/promises';
 import { NamHoc } from 'src/dao-tao/entity/nam-hoc.entity';
 import { ChuongTrinhDaoTao } from 'src/dao-tao/entity/chuong-trinh-dao-tao.entity';
 import { Lop } from 'src/danh-muc/entity/lop.entity';
+import { ImportLopHocPhanItemDto } from './dtos/import-lop-hoc-phan.dto';
 
 @Injectable()
 export class GiangDayService {
@@ -1859,7 +1860,7 @@ export class GiangDayService {
                         const soSVTrongLop = danhSachSiSo[sttLop - 1];
 
                         // Tạo mã lớp học phần
-                        const maLopHocPhan = `${monHoc.maMonHoc}_${nk.maNienKhoa}_${nganh.maNganh}_${sttLop}`;
+                        const maLopHocPhan = await this.timMaLopHocPhanChuaTonTai(monHoc.maMonHoc, nk.maNienKhoa, nganh.maNganh, sttLop);
 
                         // ─── PHÂN CÔNG GIẢNG VIÊN THEO NGUYÊN TẮC CÂN BẰNG TÍN CHỈ ───
                         let maGiangVien = '';
@@ -2157,23 +2158,34 @@ export class GiangDayService {
                         );
                     }
 
-                    // Tính tổng số SV đang DANG_HOC của ngành + niên khóa
-                    const tongSVHeThong = await this.sinhVienRepo.count({
-                        where: {
-                            lop: {
-                                nganh: { id: nganh.id },
-                                nienKhoa: { id: nienKhoa.id },
-                            },
-                            tinhTrang: TinhTrangHocTapEnum.DANG_HOC,
-                        },
-                    });
+                    // Tính tổng số SV đang DANG_HOC của ngành + niên khóa và chưa học môn này
+                    const tongSVHeThong = await this.sinhVienRepo.createQueryBuilder('sv')
+                        .leftJoin('sv.lop', 'lop')
+                        .leftJoin('lop.nganh', 'nganhSV')
+                        .leftJoin('lop.nienKhoa', 'nienKhoaSV')
+                        .where('nganhSV.id = :nganhId', { nganhId: nganh.id })
+                        .andWhere('nienKhoaSV.id = :nienKhoaId', { nienKhoaId: nienKhoa.id })
+                        .andWhere('sv.tinhTrang = :dangHoc', { dangHoc: TinhTrangHocTapEnum.DANG_HOC })
+                        .andWhere(qb => {
+                            const subQuery = qb.subQuery()
+                                .select('svlhp.sinh_vien_id')
+                                .from('sinh_vien_lop_hoc_phan', 'svlhp')
+                                .leftJoin('lop_hoc_phan', 'lhp', 'lhp.id = svlhp.lop_hoc_phan_id')
+                                .where('lhp.mon_hoc_id = :monHocId')
+                                .getQuery();
+                            return 'sv.id NOT IN ' + subQuery;
+                        })
+                        .setParameter('monHocId', monHoc.id)
+                        .getCount();
 
                     const tongSVExcel = excelSinhVienCountMap.get(groupKey) || 0;
 
-                    if (tongSVHeThong !== tongSVExcel) {
+                    if (tongSVHeThong < tongSVExcel) {
                         throw new BadRequestException(
-                            `Tổng số sinh viên ngành "${maNganh}", niên khóa "${maNienKhoa}", học môn "${maMonHoc}" `
-                            + `trong hệ thống là ${tongSVHeThong} nhưng trong file Excel là ${tongSVExcel}`
+                           `Số lượng sinh viên chưa học môn "${maMonHoc}" `
+                            + `thuộc ngành "${maNganh}", niên khóa "${maNienKhoa}" `
+                            + `trong hệ thống là ${tongSVHeThong}, `
+                            + `nhưng tổng số sinh viên đăng ký trong dữ liệu import là ${tongSVExcel}.`
                         );
                     }
 
@@ -2434,5 +2446,727 @@ export class GiangDayService {
             details: results.details,
             errors: results.errors.length > 0 ? results.errors : undefined,
         };
+    }
+
+    async importLopHocPhanTuJson(lopHocPhans: ImportLopHocPhanItemDto[]): Promise<{
+        message: string;
+        summary: { success: number; failed: number; total: number };
+        details: { index: number; maLopHocPhan: string; status: 'success' | 'failed'; message: string; soSinhVienDaDangKy?: number }[];
+        success?: { index: number; maLopHocPhan: string; message: string; soSinhVienDaDangKy: number }[];
+        errors?: { index: number; maLopHocPhan: string; error: string }[];
+    }> {
+        if (!lopHocPhans || lopHocPhans.length === 0) {
+            throw new BadRequestException('Danh sách lớp học phần không được để trống');
+        }
+
+        const results = {
+            success: 0,
+            failed: 0,
+            total: 0,
+            details: [] as { index: number; maLopHocPhan: string; status: 'success' | 'failed'; message: string; soSinhVienDaDangKy?: number }[],
+            successList: [] as { index: number; maLopHocPhan: string; message: string; soSinhVienDaDangKy: number }[],
+            errors: [] as { index: number; maLopHocPhan: string; error: string }[],
+        };
+
+        // Map theo dõi tín chỉ GV trong quá trình import (để tính cộng dồn)
+        const giangVienTinChiMap = new Map<string, number>();
+
+        const getTinChiHienTaiCuaGV = async (gvId: number, hocKyId: number): Promise<number> => {
+            const key = `${gvId}_${hocKyId}`;
+            if (!giangVienTinChiMap.has(key)) {
+                const tinChiTuDB = await this.tinhTinChiHienTaiCuaGV(gvId, hocKyId);
+                giangVienTinChiMap.set(key, tinChiTuDB);
+            }
+            return giangVienTinChiMap.get(key)!;
+        };
+
+        const capNhatTinChiGV = (gvId: number, hocKyId: number, soTinChiThem: number): void => {
+            const key = `${gvId}_${hocKyId}`;
+            const current = giangVienTinChiMap.get(key) || 0;
+            giangVienTinChiMap.set(key, current + soTinChiThem);
+        };
+
+        // Map theo dõi số lớp đã tạo cho mỗi môn + ngành + niên khóa + học kỳ
+        const soLopDaTaoMap = new Map<string, number>();
+        // Map theo dõi tổng số SV tham gia của từng nhóm ngành + khóa + môn trong JSON
+        const jsonSinhVienCountMap = new Map<string, number>();
+
+        // ----- TỔNG HỢP SỐ SV THEO NGÀNH-NK-MÔN TRONG JSON
+        for (const item of lopHocPhans) {
+            const maNganh = item.maNganh?.trim() || '';
+            const maNienKhoa = item.maNienKhoa?.trim() || '';
+            const maMonHoc = item.maMonHoc?.trim() || '';
+            const svJson = Number(item.soSinhVienSeThamGia || 0);
+
+            if (maNganh && maNienKhoa && maMonHoc && svJson > 0) {
+                const key = `${maNganh}__${maNienKhoa}__${maMonHoc}`;
+                jsonSinhVienCountMap.set(key, (jsonSinhVienCountMap.get(key) || 0) + svJson);
+            }
+        }
+
+        // ----- VALIDATE VỀ SAU: ĐẾN LƯỢT XỬ LÝ ITEM NÀO SẼ CHECK GROUP --------
+        const checkedMap = new Map<string, boolean>();
+
+        for (let index = 0; index < lopHocPhans.length; index++) {
+            const item = lopHocPhans[index];
+            results.total++;
+
+            // Đọc dữ liệu từ JSON
+            const maLopHocPhan = item.maLopHocPhan?.trim() || '';
+            const ghiChu = item.ghiChu?.trim() || '';
+            const maNganh = item.maNganh?.trim() || '';
+            const maNienKhoa = item.maNienKhoa?.trim() || '';
+            const maMonHoc = item.maMonHoc?.trim() || '';
+            const maNamHoc = item.maNamHoc?.trim() || '';
+            const hocKyValue = Number(item.hocKy) || 0;
+            const maGiangVien = item.maGiangVien?.trim() || '';
+            const soSinhVienSeThamGia = Number(item.soSinhVienSeThamGia) || 0;
+
+            // Validate dữ liệu cơ bản
+            const missingFields: string[] = [];
+
+            if (!maLopHocPhan) missingFields.push(`mã lớp học phần`);
+            if (!maNganh) missingFields.push(`mã ngành`);
+            if (!maNienKhoa) missingFields.push(`mã niên khóa`);
+            if (!maMonHoc) missingFields.push(`mã môn học`);
+            if (!maNamHoc) missingFields.push(`mã năm học`);
+            if (!hocKyValue) missingFields.push(`học kỳ`);
+
+            if (missingFields.length > 0) {
+                results.failed++;
+
+                const missingMessage = `Thiếu thông tin bắt buộc: ${missingFields.join(', ')}`;
+
+                results.errors.push({
+                    index: index + 1,
+                    maLopHocPhan: maLopHocPhan || 'N/A',
+                    error: missingMessage,
+                });
+
+                results.details.push({
+                    index: index + 1,
+                    maLopHocPhan: maLopHocPhan || 'N/A',
+                    status: 'failed',
+                    message: missingMessage,
+                });
+
+                continue;
+            }
+
+            const groupKey = `${maNganh}__${maNienKhoa}__${maMonHoc}`;
+
+            try {
+                // ----- VALIDATE SỐ SV GROUP -----
+                if (!checkedMap.has(groupKey)) {
+                    const nganh = await this.nganhRepo.findOneBy({ maNganh });
+                    if (!nganh) {
+                        throw new BadRequestException(
+                            `Mã ngành "${maNganh}" không tồn tại trong hệ thống, vui lòng kiểm tra lại`
+                        );
+                    }
+
+                    const nienKhoa = await this.nienKhoaRepo.findOneBy({ maNienKhoa });
+                    if (!nienKhoa) {
+                        throw new BadRequestException(
+                            `Mã niên khóa "${maNienKhoa}" không tồn tại trong hệ thống, vui lòng kiểm tra lại`
+                        );
+                    }
+
+                    const monHoc = await this.monHocRepo.findOneBy({ maMonHoc });
+                    if (!monHoc) {
+                        throw new BadRequestException(
+                            `Mã môn học "${maMonHoc}" không tồn tại trong hệ thống, vui lòng kiểm tra lại`
+                        );
+                    }
+
+                    // Tính tổng số SV đang DANG_HOC của ngành + niên khóa và chưa học môn này
+                    const tongSVHeThong = await this.sinhVienRepo.createQueryBuilder('sv')
+                        .leftJoin('sv.lop', 'lop')
+                        .leftJoin('lop.nganh', 'nganhSV')
+                        .leftJoin('lop.nienKhoa', 'nienKhoaSV')
+                        .where('nganhSV.id = :nganhId', { nganhId: nganh.id })
+                        .andWhere('nienKhoaSV.id = :nienKhoaId', { nienKhoaId: nienKhoa.id })
+                        .andWhere('sv.tinhTrang = :dangHoc', { dangHoc: TinhTrangHocTapEnum.DANG_HOC })
+                        .andWhere(qb => {
+                            const subQuery = qb.subQuery()
+                                .select('svlhp.sinh_vien_id')
+                                .from('sinh_vien_lop_hoc_phan', 'svlhp')
+                                .leftJoin('lop_hoc_phan', 'lhp', 'lhp.id = svlhp.lop_hoc_phan_id')
+                                .where('lhp.mon_hoc_id = :monHocId')
+                                .getQuery();
+                            return 'sv.id NOT IN ' + subQuery;
+                        })
+                        .setParameter('monHocId', monHoc.id)
+                        .getCount();
+
+                    const tongSVJson = jsonSinhVienCountMap.get(groupKey) || 0;
+
+                    if (tongSVHeThong < tongSVJson) {
+                        throw new BadRequestException(
+                            `Số lượng sinh viên chưa học môn "${maMonHoc}" `
+                            + `thuộc ngành "${maNganh}", niên khóa "${maNienKhoa}" `
+                            + `trong hệ thống là ${tongSVHeThong}, `
+                            + `nhưng tổng số sinh viên đăng ký trong dữ liệu import là ${tongSVJson}.`
+                        );
+                    }
+
+                    checkedMap.set(groupKey, true);
+                }
+
+                // 1. Kiểm tra mã lớp học phần trùng
+                const existMa = await this.lopHocPhanRepo.findOneBy({ maLopHocPhan });
+                if (existMa) {
+                    throw new BadRequestException(`Mã lớp học phần "${maLopHocPhan}" đã tồn tại trong hệ thống`);
+                }
+
+                // 2. Lấy thông tin môn học
+                const monHoc = await this.monHocRepo.findOneBy({ maMonHoc });
+                if (!monHoc) {
+                    throw new BadRequestException(`Môn học với mã "${maMonHoc}" không tồn tại`);
+                }
+
+                // 3. Lấy thông tin ngành
+                const nganh = await this.nganhRepo.findOneBy({ maNganh });
+                if (!nganh) {
+                    throw new BadRequestException(`Ngành với mã "${maNganh}" không tồn tại`);
+                }
+
+                // 4. Lấy thông tin niên khóa
+                const nienKhoa = await this.nienKhoaRepo.findOneBy({ maNienKhoa });
+                if (!nienKhoa) {
+                    throw new BadRequestException(`Niên khóa với mã "${maNienKhoa}" không tồn tại`);
+                }
+
+                // 5. Lấy thông tin năm học và học kỳ
+                const namHoc = await this.namHocRepo.findOneBy({ maNamHoc });
+                if (!namHoc) {
+                    throw new BadRequestException(`Năm học với mã "${maNamHoc}" không tồn tại`);
+                }
+
+                const hocKyEntity = await this.hocKyRepo.findOne({
+                    where: { namHoc: { id: namHoc.id }, hocKy: hocKyValue },
+                    relations: ['namHoc'],
+                });
+                if (!hocKyEntity) {
+                    throw new BadRequestException(`Học kỳ ${hocKyValue} của năm học "${maNamHoc}" không tồn tại`);
+                }
+
+                // 6. Kiểm tra giảng viên (nếu có)
+                let giangVien: any = null;
+                if (maGiangVien) {
+                    giangVien = await this.giangVienRepo.findOneBy({ maGiangVien });
+                    if (!giangVien) {
+                        throw new BadRequestException(`Giảng viên với mã "${maGiangVien}" không tồn tại`);
+                    }
+
+                    // Kiểm tra giảng viên có được phân công dạy môn này không
+                    const phanCong = await this.giangVienMonHocRepo.findOne({
+                        where: {
+                            giangVien: { id: giangVien.id },
+                            monHoc: { id: monHoc.id },
+                        },
+                    });
+                    if (!phanCong) {
+                        throw new BadRequestException(
+                            `Giảng viên "${maGiangVien}" chưa được phân công dạy môn "${maMonHoc}"`
+                        );
+                    }
+                }
+
+                // 7. Lấy CTDT áp dụng và kiểm tra môn học
+                const apDung = await this.apDungRepo.findOne({
+                    where: {
+                        nganh: { id: nganh.id },
+                        nienKhoa: { id: nienKhoa.id },
+                    },
+                    relations: ['chuongTrinh', 'chuongTrinh.chiTietMonHocs', 'chuongTrinh.chiTietMonHocs.monHoc'],
+                });
+
+                if (!apDung) {
+                    throw new BadRequestException(
+                        `Không có chương trình đào tạo nào được áp dụng cho ngành "${maNganh}" và niên khóa "${maNienKhoa}"`
+                    );
+                }
+
+                // 8. Tính thứ tự học kỳ và kiểm tra môn học có trong CTDT không
+                const namBatDauNK = nienKhoa.namBatDau;
+                const namBatDauNamHoc = namHoc.namBatDau;
+                let tongHocKyDaQua = 0;
+                for (let year = namBatDauNK; year < namBatDauNamHoc; year++) {
+                    const nh = await this.namHocRepo.findOne({ where: { namBatDau: year } });
+                    if (nh) {
+                        const soHK = await this.hocKyRepo.count({ where: { namHoc: { id: nh.id } } });
+                        tongHocKyDaQua += soHK;
+                    }
+                }
+
+                const thuTuHocKyCanXet = tongHocKyDaQua + hocKyValue;
+
+                const chiTietMon = apDung.chuongTrinh.chiTietMonHocs.find(
+                    ct => ct.monHoc.id === monHoc.id && ct.thuTuHocKy === thuTuHocKyCanXet
+                );
+
+                if (!chiTietMon) {
+                    throw new BadRequestException(
+                        `Môn học "${maMonHoc}" không nằm ở học kỳ thứ ${thuTuHocKyCanXet} trong chương trình đào tạo của ngành "${maNganh}" niên khóa "${maNienKhoa}"`
+                    );
+                }
+
+                // 9. Kiểm tra số lượng lớp học phần tối đa theo số sinh viên
+                const MAX_SV_MOT_LOP = 40;
+
+                const tongSinhVien = await this.sinhVienRepo.count({
+                    where: {
+                        lop: {
+                            nganh: { id: nganh.id },
+                            nienKhoa: { id: nienKhoa.id },
+                        },
+                        tinhTrang: TinhTrangHocTapEnum.DANG_HOC,
+                    },
+                });
+
+                if (tongSinhVien === 0) {
+                    throw new BadRequestException(
+                        `Ngành "${maNganh}" niên khóa "${maNienKhoa}" hiện chưa có sinh viên nào`
+                    );
+                }
+
+                const soLopToiDa = Math.ceil(tongSinhVien / MAX_SV_MOT_LOP);
+
+                // Lấy số lớp đã mở từ DB
+                const keyLop = `${monHoc.id}_${nganh.id}_${nienKhoa.id}_${hocKyEntity.id}`;
+                let soLopDaMo = soLopDaTaoMap.get(keyLop);
+                if (soLopDaMo === undefined) {
+                    soLopDaMo = await this.lopHocPhanRepo.count({
+                        where: {
+                            monHoc: { id: monHoc.id },
+                            nganh: { id: nganh.id },
+                            nienKhoa: { id: nienKhoa.id },
+                            hocKy: { id: hocKyEntity.id },
+                        },
+                    });
+                    soLopDaTaoMap.set(keyLop, soLopDaMo);
+                }
+
+                if (soLopDaMo >= soLopToiDa) {
+                    throw new BadRequestException(
+                        `Đã đạt giới hạn ${soLopToiDa} lớp cho môn "${maMonHoc}" (${tongSinhVien} SV, tối đa ${MAX_SV_MOT_LOP} SV/lớp). Hiện đã có ${soLopDaMo} lớp.`
+                    );
+                }
+
+                // 10. Kiểm tra giới hạn 12 tín chỉ của giảng viên
+                if (giangVien) {
+                    const tinChiHienTai = await getTinChiHienTaiCuaGV(giangVien.id, hocKyEntity.id);
+                    if (tinChiHienTai + monHoc.soTinChi > 12) {
+                        throw new BadRequestException(
+                            `Giảng viên "${maGiangVien}" đã dạy ${tinChiHienTai} tín chỉ trong học kỳ này. Thêm môn "${maMonHoc}" (${monHoc.soTinChi} TC) sẽ vượt quá 12 tín chỉ.`
+                        );
+                    }
+                }
+
+                // 11. Tạo lớp học phần
+                const newLhp = this.lopHocPhanRepo.create({
+                    maLopHocPhan,
+                    ghiChu: ghiChu || '',
+                    giangVien: giangVien ? { id: giangVien.id } : null,
+                    monHoc: { id: monHoc.id },
+                    hocKy: { id: hocKyEntity.id },
+                    nienKhoa: { id: nienKhoa.id },
+                    nganh: { id: nganh.id },
+                });
+
+                const savedLhp = await this.lopHocPhanRepo.save(newLhp);
+
+                // Cập nhật Map số lớp đã tạo
+                soLopDaTaoMap.set(keyLop, (soLopDaTaoMap.get(keyLop) || 0) + 1);
+
+                // Cập nhật tín chỉ GV
+                if (giangVien) {
+                    capNhatTinChiGV(giangVien.id, hocKyEntity.id, monHoc.soTinChi);
+                }
+
+                // 12. Lấy đúng số sinh viên sẽ tham gia lớp để thêm
+                const svChuaHoc = await this.sinhVienRepo.createQueryBuilder('sv')
+                    .leftJoin('sv.lop', 'lop')
+                    .leftJoin('lop.nganh', 'nganhSV')
+                    .leftJoin('lop.nienKhoa', 'nienKhoaSV')
+                    .where('nganhSV.id = :nganhId', { nganhId: nganh.id })
+                    .andWhere('nienKhoaSV.id = :nienKhoaId', { nienKhoaId: nienKhoa.id })
+                    .andWhere('sv.tinhTrang = :dangHoc', { dangHoc: TinhTrangHocTapEnum.DANG_HOC })
+                    .andWhere(qb => {
+                        const subQuery = qb.subQuery()
+                            .select('svlhp.sinh_vien_id')
+                            .from('sinh_vien_lop_hoc_phan', 'svlhp')
+                            .leftJoin('lop_hoc_phan', 'lhp', 'lhp.id = svlhp.lop_hoc_phan_id')
+                            .where('lhp.mon_hoc_id = :monHocId')
+                            .getQuery();
+                        return 'sv.id NOT IN ' + subQuery;
+                    })
+                    .setParameter('monHocId', monHoc.id)
+                    .orderBy('sv.maSinhVien', 'ASC')
+                    .take(soSinhVienSeThamGia > 0 ? soSinhVienSeThamGia : 40)
+                    .getMany();
+
+                let soSinhVienDaDangKy = 0;
+
+                for (const sv of svChuaHoc) {
+                    try {
+                        const registration = this.svLhpRepo.create({
+                            lopHocPhan: { id: savedLhp.id },
+                            sinhVien: { id: sv.id },
+                            ngayDangKy: new Date(),
+                            loaiThamGia: LoaiHinhThamGiaLopHocPhanEnum.CHINH_QUY,
+                        });
+                        await this.svLhpRepo.save(registration);
+                        soSinhVienDaDangKy++;
+                    } catch (err) {
+                        // Bỏ qua lỗi khi thêm sinh viên (có thể đã tồn tại)
+                        continue;
+                    }
+                }
+
+                const successMessage = `Tạo lớp học phần thành công. Đã thêm ${soSinhVienDaDangKy} sinh viên.`;
+
+                results.success++;
+                results.details.push({
+                    index: index + 1,
+                    maLopHocPhan,
+                    status: 'success',
+                    message: successMessage,
+                    soSinhVienDaDangKy,
+                });
+
+                // ✅ THÊM VÀO DANH SÁCH SUCCESS
+                results.successList.push({
+                    index: index + 1,
+                    maLopHocPhan,
+                    message: successMessage,
+                    soSinhVienDaDangKy,
+                });
+
+            } catch (error) {
+                results.failed++;
+                const errMsg = error instanceof BadRequestException || error instanceof NotFoundException
+                    ? error.message
+                    : 'Lỗi không xác định';
+
+                results.errors.push({
+                    index: index + 1,
+                    maLopHocPhan,
+                    error: errMsg,
+                });
+                results.details.push({
+                    index: index + 1,
+                    maLopHocPhan,
+                    status: 'failed',
+                    message: errMsg,
+                });
+            }
+        }
+
+        return {
+            message: `Đã xử lý ${results.total} lớp học phần từ JSON`,
+            summary: {
+                success: results.success,
+                failed: results.failed,
+                total: results.total,
+            },
+            details: results.details,
+            success: results.successList.length > 0 ? results.successList : undefined,
+            errors: results.errors.length > 0 ? results.errors : undefined,
+        };
+    }
+
+    async lenKeHoachTaoLhpJson(maNamHoc: string, hocKy: number): Promise<{
+        data: Array<{
+            stt: number;
+            maLopHocPhan: string;
+            ghiChu: string;
+            maNganh: string;
+            maNienKhoa: string;
+            maMonHoc: string;
+            maNamHoc: string;
+            hocKy: number;
+            soTinChi: number;
+            maGiangVien: string;
+            soSinhVienThamGia: number;
+        }>;
+        summary: {
+            tongLop: number;
+            tongSinhVien: number;
+            tongTinChi: number;
+        };
+    }> {
+        // 1. Tìm năm học by maNamHoc
+        const namHoc = await this.namHocRepo.findOne({ where: { maNamHoc } });
+        if (!namHoc) {
+            throw new NotFoundException(`Năm học với mã ${maNamHoc} không tồn tại`);
+        }
+        const namBatDauHoc = namHoc.namBatDau;
+
+        // 2. Lấy 4 niên khóa gần nhất
+        const nienKhoas = await this.nienKhoaRepo.find({
+            where: { namBatDau: In([namBatDauHoc - 3, namBatDauHoc - 2, namBatDauHoc - 1, namBatDauHoc]) },
+            order: { namBatDau: 'DESC' },
+        });
+        if (nienKhoas.length === 0) {
+            throw new BadRequestException('Không tìm thấy niên khóa nào phù hợp');
+        }
+
+        const planRows: Array<{
+            stt: number;
+            maLopHocPhan: string;
+            ghiChu: string;
+            maNganh: string;
+            maNienKhoa: string;
+            maMonHoc: string;
+            maNamHoc: string;
+            hocKy: number;
+            soTinChi: number;
+            maGiangVien: string;
+            soSinhVienThamGia: number;
+        }> = [];
+        let stt = 1;
+
+        // Map theo dõi tổng tín chỉ đã phân công cho mỗi GV theo từng học kỳ
+        const giangVienTinChiMap = new Map<string, number>();
+
+        // Hàm helper để lấy tín chỉ hiện tại của GV (từ DB + từ planRows đang xử lý)
+        const getTinChiHienTaiCuaGV = async (gvId: number, hocKyId: number): Promise<number> => {
+            const key = `${gvId}_${hocKyId}`;
+
+            // Nếu chưa có trong map, query từ DB và cache lại
+            if (!giangVienTinChiMap.has(key)) {
+                const tinChiTuDB = await this.tinhTinChiHienTaiCuaGV(gvId, hocKyId);
+                giangVienTinChiMap.set(key, tinChiTuDB);
+            }
+
+            return giangVienTinChiMap.get(key)!;
+        };
+
+        // Hàm helper để cập nhật tín chỉ sau khi phân công
+        const capNhatTinChiGV = (gvId: number, hocKyId: number, soTinChiThem: number): void => {
+            const key = `${gvId}_${hocKyId}`;
+            const current = giangVienTinChiMap.get(key) || 0;
+            giangVienTinChiMap.set(key, current + soTinChiThem);
+        };
+
+        for (const nk of nienKhoas) {
+            const namBatDauNK = nk.namBatDau;
+
+            // Tính tổng học kỳ đã qua
+            let tongHocKyDaQua = 0;
+            for (let year = namBatDauNK; year < namBatDauHoc; year++) {
+                const nh = await this.namHocRepo.findOne({ where: { namBatDau: year } });
+                if (nh) {
+                    const soHK = await this.hocKyRepo.count({ where: { namHoc: { id: nh.id } } });
+                    tongHocKyDaQua += soHK;
+                }
+            }
+
+            const thuTuHocKyCanXet = tongHocKyDaQua + hocKy;
+
+            // Lấy ngành thuộc niên khóa
+            const lops = await this.lopRepo.find({ where: { nienKhoa: { id: nk.id } }, relations: ['nganh'] });
+
+            // Lấy unique ngành theo ID
+            const nganhMap = new Map<number, typeof lops[0]['nganh']>();
+            for (const lop of lops) {
+                if (lop.nganh && !nganhMap.has(lop.nganh.id)) {
+                    nganhMap.set(lop.nganh.id, lop.nganh);
+                }
+            }
+            const nganhs = Array.from(nganhMap.values());
+
+            for (const nganh of nganhs) {
+                // Lấy CTDT áp dụng
+                const apDung = await this.apDungRepo.findOne({
+                    where: { nganh: { id: nganh.id }, nienKhoa: { id: nk.id } },
+                    relations: ['chuongTrinh'],
+                });
+                if (!apDung) continue;
+
+                // Lấy chi tiết môn
+                const chiTiets = await this.chiTietCTDTRepo.find({
+                    where: { chuongTrinh: { id: apDung.chuongTrinh.id }, thuTuHocKy: thuTuHocKyCanXet },
+                    relations: ['monHoc'],
+                });
+                if (chiTiets.length === 0) continue;
+
+                // Tìm học kỳ thực tế
+                const hocKyThucTe = await this.timHocKyTuThuTu(namBatDauNK, thuTuHocKyCanXet, this.lopHocPhanRepo.manager);
+                if (!hocKyThucTe) continue;
+
+                // Load relation namHoc nếu chưa có
+                if (!hocKyThucTe.namHoc) {
+                    const hocKyWithNamHoc = await this.hocKyRepo.findOne({
+                        where: { id: hocKyThucTe.id },
+                        relations: ['namHoc']
+                    });
+                    if (!hocKyWithNamHoc || !hocKyWithNamHoc.namHoc) continue;
+                    hocKyThucTe.namHoc = hocKyWithNamHoc.namHoc;
+                }
+
+                for (const ct of chiTiets) {
+                    const monHoc = ct.monHoc;
+
+                    // Query sinh viên CHƯA từng tham gia LHP của môn này
+                    const svChuaHoc = await this.sinhVienRepo.createQueryBuilder('sv')
+                        .leftJoin('sv.lop', 'lop')
+                        .leftJoin('lop.nganh', 'nganh')
+                        .leftJoin('lop.nienKhoa', 'nienKhoa')
+                        .where('nganh.id = :nganhId', { nganhId: nganh.id })
+                        .andWhere('nienKhoa.id = :nienKhoaId', { nienKhoaId: nk.id })
+                        .andWhere('sv.tinhTrang = :dangHoc', { dangHoc: TinhTrangHocTapEnum.DANG_HOC })
+                        .andWhere(qb => {
+                            const subQuery = qb.subQuery()
+                                .select('svlhp.sinh_vien_id')
+                                .from('sinh_vien_lop_hoc_phan', 'svlhp')
+                                .leftJoin('lop_hoc_phan', 'lhp', 'lhp.id = svlhp.lop_hoc_phan_id')
+                                .where('lhp.mon_hoc_id = :monHocId')
+                                .getQuery();
+                            return 'sv.id NOT IN ' + subQuery;
+                        })
+                        .setParameter('monHocId', monHoc.id)
+                        .getMany();
+
+                    const soSVChuaHoc = svChuaHoc.length;
+
+                    // Bỏ qua nếu không đủ mở ít nhất 1 lớp
+                    if (soSVChuaHoc < 20) {
+                        continue;
+                    }
+
+                    const giangViens = await this.layGiangVienPhanCongChoMon(
+                        monHoc.id,
+                        this.lopHocPhanRepo.manager
+                    );
+
+                    // Logic phân bổ
+                    let soLop: number;
+                    let danhSachSiSo: number[] = [];
+
+                    // Trường hợp 1: Chỉ đủ mở 1 lớp (20–39 SV)
+                    if (soSVChuaHoc < 40) {
+                        soLop = 1;
+                        danhSachSiSo = [soSVChuaHoc];
+                    }
+                    // Trường hợp 2: Có thể mở từ 2 lớp trở lên
+                    else {
+                        soLop = Math.ceil(soSVChuaHoc / 40);
+
+                        const base = Math.floor(soSVChuaHoc / soLop);
+                        const du = soSVChuaHoc % soLop;
+
+                        danhSachSiSo = new Array(soLop).fill(base);
+
+                        // Phân bổ phần dư cho các lớp đầu tiên
+                        for (let i = 0; i < du; i++) {
+                            danhSachSiSo[i]++;
+                        }
+
+                        // Kiểm tra an toàn: có lớp nào < 20 không?
+                        if (danhSachSiSo.some(siso => siso < 20)) {
+                            console.warn(`Cảnh báo: Có lớp < 20 sau khi chia - SV=${soSVChuaHoc}, soLop=${soLop}`);
+                        }
+                    }
+
+                    // Bây giờ tạo từng lớp học phần
+                    for (let sttLop = 1; sttLop <= soLop; sttLop++) {
+                        const soSVTrongLop = danhSachSiSo[sttLop - 1];
+
+                        // Tạo mã lớp học phần
+                        const maLopHocPhan = await this.timMaLopHocPhanChuaTonTai(
+                            monHoc.maMonHoc,
+                            nk.maNienKhoa,
+                            nganh.maNganh,
+                            sttLop
+                        );
+
+                        // PHÂN CÔNG GIẢNG VIÊN THEO NGUYÊN TẮC CÂN BẰNG TÍN CHỈ
+                        let maGiangVien = '';
+
+                        if (giangViens.length > 0) {
+                            // 1. Lấy tải hiện tại của từng giảng viên
+                            const giangVienWithLoad: {
+                                gv: typeof giangViens[0];
+                                tinChi: number;
+                            }[] = [];
+
+                            for (const gv of giangViens) {
+                                const tinChiHienTai = await getTinChiHienTaiCuaGV(gv.id, hocKyThucTe.id);
+                                giangVienWithLoad.push({
+                                    gv,
+                                    tinChi: tinChiHienTai
+                                });
+                            }
+
+                            // 2. Sắp xếp theo số tín chỉ tăng dần
+                            giangVienWithLoad.sort((a, b) => a.tinChi - b.tinChi);
+
+                            // 3. Chọn GV có ít tín chỉ nhất nhưng không vượt trần
+                            for (const item of giangVienWithLoad) {
+                                if (item.tinChi + monHoc.soTinChi <= 12) {
+                                    maGiangVien = item.gv.maGiangVien;
+                                    capNhatTinChiGV(item.gv.id, hocKyThucTe.id, monHoc.soTinChi);
+                                    break;
+                                }
+                            }
+                        }
+
+                        const ghiChu = `Đề xuất tạo lớp ${maLopHocPhan} - ${soSVTrongLop} SV - niên khoá ${nk.maNienKhoa} - ngành ${nganh.maNganh}`;
+
+                        planRows.push({
+                            stt: stt++,
+                            maLopHocPhan,
+                            ghiChu: ghiChu || '',
+                            maNganh: nganh.maNganh,
+                            maNienKhoa: nk.maNienKhoa,
+                            maMonHoc: monHoc.maMonHoc,
+                            maNamHoc: hocKyThucTe.namHoc.maNamHoc,
+                            hocKy: hocKyThucTe.hocKy,
+                            soTinChi: monHoc.soTinChi,
+                            maGiangVien,
+                            soSinhVienThamGia: soSVTrongLop,
+                        });
+                    }
+                }
+            }
+        }
+
+        // Tính tổng hợp
+        const summary = {
+            tongLop: planRows.length,
+            tongSinhVien: planRows.reduce((sum, row) => sum + row.soSinhVienThamGia, 0),
+            tongTinChi: planRows.reduce((sum, row) => sum + row.soTinChi, 0),
+        };
+
+        return {
+            data: planRows,
+            summary,
+        };
+    }
+
+    // Helper tìm mã lớp học phần chưa tồn tại
+    private async timMaLopHocPhanChuaTonTai(
+        maMonHoc: string,
+        maNienKhoa: string,
+        maNganh: string,
+        sttLopBatDau: number = 1
+    ): Promise<string> {
+        let sttLop = sttLopBatDau;
+        let maLopHocPhan = `${maMonHoc}_${maNienKhoa}_${maNganh}_${sttLop}`;
+
+        // Kiểm tra xem mã có tồn tại chưa
+        let existLhp = await this.lopHocPhanRepo.findOneBy({ maLopHocPhan });
+
+        // Nếu tồn tại, tăng số đuôi lên 1 và kiểm tra lại
+        while (existLhp) {
+            sttLop++;
+            maLopHocPhan = `${maMonHoc}_${maNienKhoa}_${maNganh}_${sttLop}`;
+            existLhp = await this.lopHocPhanRepo.findOneBy({ maLopHocPhan });
+        }
+
+        return maLopHocPhan;
     }
 }

@@ -46,6 +46,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { LenKeHoachTaoLhpDto } from './dtos/len-ke-hoach-tao-lhp.dto';
+import { ImportLopHocPhanJsonDto } from './dtos/import-lop-hoc-phan.dto';
 
 @ApiTags('Giảng dạy')
 @ApiBearerAuth()
@@ -322,6 +323,37 @@ export class GiangDayController {
     });
 
     return res.send(buffer);
+  }
+
+  @Post('len-ke-hoach-tao-lhp/json')
+  @ApiBearerAuth()
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  @ApiOperation({ summary: 'Lên kế hoạch tạo LHP (JSON)' })
+  async lenKeHoachTaoLhpJson(
+    @Body() dto: LenKeHoachTaoLhpDto,
+  ) {
+    return this.giangDayService.lenKeHoachTaoLhpJson(
+      dto.maNamHoc,
+      dto.hocKy,
+    );
+  }
+
+  @Post('lop-hoc-phan/import-tu-json')
+  @ApiBearerAuth()
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  @ApiOperation({
+    summary: 'Import hàng loạt lớp học phần từ JSON',
+    description: `Nhập danh sách lớp học phần dưới dạng JSON, 
+mỗi phần tử bao gồm: maLopHocPhan, ghiChu?, maNganh, maNienKhoa, maMonHoc, maNamHoc, hocKy, maGiangVien?, soSinhVienSeThamGia?`,
+  })
+  @ApiBody({
+    type: ImportLopHocPhanJsonDto,
+  })
+  @ApiResponse({ status: 200, description: 'Kết quả import lớp học phần từ JSON' })
+  async importLopHocPhanTuJson(
+    @Body() dto: ImportLopHocPhanJsonDto,
+  ) {
+    return this.giangDayService.importLopHocPhanTuJson(dto.lopHocPhans);
   }
 
   @Post('lop-hoc-phan/import-tu-excel')

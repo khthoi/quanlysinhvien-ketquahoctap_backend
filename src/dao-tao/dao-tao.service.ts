@@ -1155,6 +1155,121 @@ Công thức Excel tham khảo:
     };
   }
 
+  async exportChuongTrinhDaoTaoExcel(chuongTrinhId: number): Promise<Buffer> {
+    const data = await this.getTatCaMonHocTrongChuongTrinh(chuongTrinhId);
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('CTDT');
+
+    // Font mặc định cho toàn bộ file
+    worksheet.eachRow((row) => {
+      row.eachCell((cell) => {
+        cell.font = { name: 'Times New Roman', size: 12 };
+      });
+    });
+
+    // Header: Tiêu đề chính
+    worksheet.mergeCells('A1:G1');
+    const titleCell = worksheet.getCell('A1');
+    titleCell.value = 'CHI TIẾT CHƯƠNG TRÌNH ĐÀO TẠO';
+    titleCell.font = { name: 'Times New Roman', size: 16, bold: true };
+    titleCell.alignment = { vertical: 'middle', horizontal: 'center' };
+    worksheet.getRow(1).height = 30;
+
+    // Thông tin chương trình đào tạo
+    worksheet.getCell('A3').value = 'Mã chương trình:';
+    worksheet.getCell('B3').value = data.chuongTrinh.maChuongTrinh;
+    worksheet.getCell('A4').value = 'Tên chương trình:';
+    worksheet.getCell('B4').value = data.chuongTrinh.tenChuongTrinh;
+    worksheet.getCell('A5').value = 'Thời gian đào tạo:';
+    worksheet.getCell('B5').value = `${data.chuongTrinh.thoiGianDaoTao} năm`;
+    worksheet.getCell('A6').value = 'Ngành:';
+    worksheet.getCell('B6').value = data.chuongTrinh.nganh.tenNganh;
+
+    // Niên khóa áp dụng
+    worksheet.getCell('A8').value = 'Niên khóa áp dụng:';
+    worksheet.getCell('B8').value = data.apDung.map(ap => ap.nienKhoa.maNienKhoa).join(', ');
+
+    // Merge và style cho header thông tin
+    for (let row = 3; row <= 8; row++) {
+      worksheet.getCell(`A${row}`).font = { name: 'Times New Roman', size: 12, bold: true };
+      worksheet.getCell(`B${row}`).alignment = { vertical: 'middle', horizontal: 'left' };
+    }
+
+    // Bảng chi tiết môn học
+    const tableStartRow = 10;
+
+    // Header bảng
+    worksheet.getCell(`A${tableStartRow}`).value = 'STT';
+    worksheet.getCell(`B${tableStartRow}`).value = 'Thứ tự học kỳ';
+    worksheet.getCell(`C${tableStartRow}`).value = 'Mã môn học';
+    worksheet.getCell(`D${tableStartRow}`).value = 'Tên môn học';
+    worksheet.getCell(`E${tableStartRow}`).value = 'Số tín chỉ';
+    worksheet.getCell(`F${tableStartRow}`).value = 'Loại môn';
+    worksheet.getCell(`G${tableStartRow}`).value = 'Ghi chú';
+
+    const headerRow = worksheet.getRow(tableStartRow);
+    headerRow.eachCell((cell) => {
+      cell.font = { name: 'Times New Roman', size: 12, bold: true };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFD3D3D3' },
+      };
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' },
+      };
+    });
+    headerRow.height = 25;
+
+    // Dữ liệu bảng
+    data.monHocs.forEach((monHoc, index) => {
+      const rowIndex = tableStartRow + index + 1;
+      worksheet.getCell(`A${rowIndex}`).value = index + 1;
+      worksheet.getCell(`B${rowIndex}`).value = monHoc.thuTuHocKy;
+      worksheet.getCell(`C${rowIndex}`).value = monHoc.monHoc.maMonHoc;
+      worksheet.getCell(`D${rowIndex}`).value = monHoc.monHoc.tenMonHoc;
+      worksheet.getCell(`E${rowIndex}`).value = monHoc.monHoc.soTinChi || '';
+      worksheet.getCell(`F${rowIndex}`).value = monHoc.monHoc.loaiMon || ''; // Giả sử entity MonHoc có trường loaiMon
+      worksheet.getCell(`G${rowIndex}`).value = monHoc.ghiChu || '';
+
+      const row = worksheet.getRow(rowIndex);
+      row.eachCell((cell) => {
+        cell.alignment = { vertical: 'middle', horizontal: 'left' };
+        cell.border = {
+          top: { style: 'thin' },
+          left: { style: 'thin' },
+          bottom: { style: 'thin' },
+          right: { style: 'thin' },
+        };
+      });
+      row.height = 20;
+    });
+
+    // Auto-fit columns
+    worksheet.columns.forEach((column) => {
+      if (!column) return;
+      let maxLength = 0;
+      column.eachCell?.({ includeEmpty: true }, (cell) => {
+        const cellValue = cell.value ? cell.value.toString() : '';
+        if (cellValue.length > maxLength) {
+          maxLength = cellValue.length;
+        }
+      });
+      column.width = Math.min(maxLength + 2, 30); // Giới hạn max width
+    });
+
+    // Freeze header bảng
+    worksheet.views = [{ state: 'frozen', ySplit: tableStartRow }];
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    return Buffer.from(buffer);
+  }
+
   async getTatCaMonHocTrongChuongTrinhCuaSinhVien(userId: number) {
     // 1. Lấy thông tin người dùng và sinh viên
     const nguoiDung = await this.nguoiDungRepo.findOne({

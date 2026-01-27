@@ -186,6 +186,26 @@ export class DaoTaoController {
     res.send(buffer);
   }
 
+  @ApiOperation({ summary: 'Xuất file Excel của chương trình đào tạo' })
+  @ApiResponse({ status: 200, description: 'File Excel CTĐT' })
+  @ApiBearerAuth()
+  @Get('chuong-trinh/export-excel/:id')
+  async exportChuongTrinhDaoTao(@Param('id', ParseIntPipe) id: number, @Res() res: express.Response) {
+    const buffer = await this.daoTaoService.exportChuongTrinhDaoTaoExcel(id);
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=mau-nhap-chuong-trinh-dao-tao-${Date.now()}.xlsx`,
+    );
+
+    res.send(buffer);
+  }
+
   @ApiOperation({ summary: 'Lấy thông tin chi tiết một chương trình đào tạo' })
   @ApiParam({ name: 'id', type: Number, description: 'ID chương trình đào tạo' })
   @ApiResponse({ status: 200, description: 'Thông tin chương trình đào tạo' })
