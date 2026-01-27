@@ -35,6 +35,7 @@ import { NamHoc } from 'src/dao-tao/entity/nam-hoc.entity';
 import { ChuongTrinhDaoTao } from 'src/dao-tao/entity/chuong-trinh-dao-tao.entity';
 import { Lop } from 'src/danh-muc/entity/lop.entity';
 import { ImportLopHocPhanItemDto } from './dtos/import-lop-hoc-phan.dto';
+import { MIN } from 'class-validator';
 
 @Injectable()
 export class GiangDayService {
@@ -2292,6 +2293,7 @@ export class GiangDayService {
                 }
 
                 // 9. Kiểm tra số lượng lớp học phần tối đa theo số sinh viên
+                const MIN_SV_MOT_LOP = 20;
                 const MAX_SV_MOT_LOP = 40;
 
                 const tongSinhVien = await this.sinhVienRepo.count({
@@ -2329,7 +2331,7 @@ export class GiangDayService {
 
                 if (soLopDaMo >= soLopToiDa) {
                     throw new BadRequestException(
-                        `Đã đạt giới hạn ${soLopToiDa} lớp cho môn "${maMonHoc}" (${tongSinhVien} SV, tối đa ${MAX_SV_MOT_LOP} SV/lớp). Hiện đã có ${soLopDaMo} lớp.`
+                        `Đã đạt giới hạn ${soLopToiDa} lớp cho môn "${maMonHoc}" (${tongSinhVien} SV, tối thiểu ${MIN_SV_MOT_LOP} SV/lớp). Hiện đã có ${soLopDaMo} lớp.`
                     );
                 }
 
@@ -2714,6 +2716,7 @@ export class GiangDayService {
 
                 // 9. Kiểm tra số lượng lớp học phần tối đa theo số sinh viên
                 const MAX_SV_MOT_LOP = 40;
+                const MIN_SV_MOT_LOP = 20;
 
                 const tongSinhVien = await this.sinhVienRepo.count({
                     where: {
@@ -2731,7 +2734,7 @@ export class GiangDayService {
                     );
                 }
 
-                const soLopToiDa = Math.ceil(tongSinhVien / MAX_SV_MOT_LOP);
+                const soLopToiDa = Math.ceil(tongSinhVien / MIN_SV_MOT_LOP);
 
                 // Lấy số lớp đã mở từ DB
                 const keyLop = `${monHoc.id}_${nganh.id}_${nienKhoa.id}_${hocKyEntity.id}`;
@@ -2750,7 +2753,7 @@ export class GiangDayService {
 
                 if (soLopDaMo >= soLopToiDa) {
                     throw new BadRequestException(
-                        `Đã đạt giới hạn ${soLopToiDa} lớp cho môn "${maMonHoc}" (${tongSinhVien} SV, tối đa ${MAX_SV_MOT_LOP} SV/lớp). Hiện đã có ${soLopDaMo} lớp.`
+                        `Đã đạt giới hạn ${soLopToiDa} lớp cho môn "${maMonHoc}" (${tongSinhVien} SV, tối thiểu ${MIN_SV_MOT_LOP} SV/lớp). Hiện đã có ${soLopDaMo} lớp.`
                     );
                 }
 
