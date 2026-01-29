@@ -1033,7 +1033,7 @@ export class GiangDayService {
         vaiTro: VaiTroNguoiDungEnum,
         query: GetSinhVienTrongLopQueryDto,
     ) {
-        const { page = 1, limit = 10, search, maSinhVienSearch } = query;
+        const { page = 1, limit = 10, search, maSinhVienSearch, loaiThamGia } = query;
 
         // Load lớp học phần + giảng viên phụ trách (giữ nguyên như cũ)
         const lhp = await this.lopHocPhanRepo.findOne({
@@ -1081,6 +1081,11 @@ export class GiangDayService {
             .leftJoinAndSelect('lhp.ketQuaHocTaps', 'kq') // Load điểm nếu có
             .leftJoinAndSelect('kq.sinhVien', 'kq_sv')
             .where('svlhp.lop_hoc_phan_id = :lopHocPhanId', { lopHocPhanId });
+
+        // Lọc theo loại tham gia lớp học phần
+        if (loaiThamGia) {
+            qb.andWhere('svlhp.loaiThamGia = :loaiThamGia', { loaiThamGia });
+        }
 
         // Tìm kiếm mở rộng
         if (maSinhVienSearch) {

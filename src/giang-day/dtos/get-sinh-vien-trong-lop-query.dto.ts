@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, IsString } from 'class-validator';
 import { Transform } from 'class-transformer';
+import { LoaiHinhThamGiaLopHocPhanEnum } from '../enums/loai-hinh-tham-gia-lop-hoc-phan.enum';
 
 export class GetSinhVienTrongLopQueryDto {
   @ApiPropertyOptional({
@@ -18,6 +19,15 @@ export class GetSinhVienTrongLopQueryDto {
   @IsOptional()
   @IsString()
   maSinhVienSearch?: string; // ← Mới: tìm chính xác theo mã SV
+
+  @ApiPropertyOptional({
+    description: 'Lọc theo loại tham gia lớp học phần',
+    enum: LoaiHinhThamGiaLopHocPhanEnum,
+    example: LoaiHinhThamGiaLopHocPhanEnum.CHINH_QUY,
+  })
+  @IsOptional()
+  @IsEnum(LoaiHinhThamGiaLopHocPhanEnum)
+  loaiThamGia?: LoaiHinhThamGiaLopHocPhanEnum;
 
   @ApiPropertyOptional({ description: 'Trang số', example: 1 })
   @IsOptional()

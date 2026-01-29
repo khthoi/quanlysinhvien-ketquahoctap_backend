@@ -207,6 +207,12 @@ export class GiangDayController {
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'search', required: false, type: String, description: 'Tìm theo mã SV hoặc tên SV' })
   @ApiQuery({ name: 'maSinhVienSearch', required: false, type: String, description: 'Tìm chính xác theo mã sinh viên' })
+  @ApiQuery({
+    name: 'loaiThamGia',
+    required: false,
+    enum: ['CHINH_QUY', 'HOC_LAI', 'HOC_CAI_THIEN', 'HOC_BO_SUNG'],
+    description: 'Lọc theo loại tham gia lớp học phần',
+  })
   async getDanhSachSinhVien(
     @Param('lop_hoc_phan_id', ParseIntPipe) lopHocPhanId: number,
     @GetUser('userId') userId: number,

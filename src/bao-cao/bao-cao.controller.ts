@@ -32,6 +32,7 @@ import {
 } from './dtos/query-bao-cao.dto';
 import { DanhSachSinhVienReportDto } from './dtos/danh-sach-sinh-vien.dto';
 import { ThongKeTongQuanResponseDto } from './dtos/thong-ke-tong-quan.dto';
+import { DeXuatHocLaiDto, DeXuatHocLaiResponseDto } from './dtos/de-xuat-hoc-lai.dto';
 import { VaiTroNguoiDungEnum } from 'src/auth/enums/vai-tro-nguoi-dung.enum';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
@@ -361,5 +362,24 @@ Tự động tìm các lớp học phần cùng môn học, cùng ngành ở ni�
         });
       }
     }
+  }
+
+  @ApiOperation({
+    summary: 'Lấy danh sách sinh viên trượt và các lớp học phần đề xuất (JSON)',
+    description:
+      'Trả về dữ liệu JSON gồm danh sách sinh viên trượt và toàn bộ các lớp học phần đủ điều kiện để sinh viên đăng ký học lại, kèm theo lớp học phần đề xuất tốt nhất (best choice).',
+  })
+  @ApiBody({ type: DeXuatHocLaiDto })
+  @ApiResponse({ status: 200, type: DeXuatHocLaiResponseDto })
+  @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ hoặc không có sinh viên trượt' })
+  @ApiResponse({ status: 404, description: 'Năm học hoặc học kỳ không tồn tại' })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
+  @Post('de-xuat-hoc-lai/json')
+  @UseGuards(JwtAuthGuard)
+  @Roles(VaiTroNguoiDungEnum.ADMIN, VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  async getDeXuatHocLaiJson(
+    @Body() body: DeXuatHocLaiDto,
+  ): Promise<DeXuatHocLaiResponseDto> {
+    return this.baoCaoService.getDeXuatHocLaiJson(body.maNamHoc, body.hocKy);
   }
 }

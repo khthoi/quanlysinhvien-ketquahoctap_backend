@@ -406,6 +406,12 @@ export class SinhVienService {
             );
         }
 
+        // ❌ Không cho phép sửa sinh viên đã tốt nghiệp thành tình trạng khác
+        if (sv.tinhTrang === TinhTrangHocTapEnum.DA_TOT_NGHIEP && dto.tinhTrang !== undefined && dto.tinhTrang !== TinhTrangHocTapEnum.DA_TOT_NGHIEP) {
+            throw new BadRequestException(
+                'Không được phép thay đổi tình trạng sinh viên đã tốt nghiệp'
+            );
+        }
 
         if (dto.lopId) {
             const lop = await this.lopRepo.findOneBy({ id: dto.lopId });
@@ -431,6 +437,12 @@ export class SinhVienService {
     async thayDoiTinhTrang(sinhVienId: number, dto: ThayDoiTinhTrangDto) {
         const sv = await this.sinhVienRepo.findOneBy({ id: sinhVienId });
         if (!sv) throw new NotFoundException('Sinh viên không tồn tại');
+
+        if (sv.tinhTrang === TinhTrangHocTapEnum.DA_TOT_NGHIEP && dto.tinhTrang !== TinhTrangHocTapEnum.DA_TOT_NGHIEP) {
+            throw new BadRequestException(
+                'Không được phép thay đổi tình trạng sinh viên đã tốt nghiệp'
+            );
+        }
 
         sv.tinhTrang = dto.tinhTrang;
         return await this.sinhVienRepo.save(sv);

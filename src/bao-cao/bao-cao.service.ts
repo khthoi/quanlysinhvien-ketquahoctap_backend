@@ -24,6 +24,11 @@ import { NamHoc } from 'src/dao-tao/entity/nam-hoc.entity';
 import { VaiTroNguoiDungEnum } from 'src/auth/enums/vai-tro-nguoi-dung.enum';
 import { NguoiDung } from 'src/auth/entity/nguoi-dung.entity';
 import { GioiTinh } from 'src/danh-muc/enums/gioi-tinh.enum';
+import {
+    DeXuatHocLaiItemResponseDto,
+    DeXuatHocLaiLopHocPhanOptionDto,
+    DeXuatHocLaiResponseDto,
+} from './dtos/de-xuat-hoc-lai.dto';
 
 
 // Interface cho kết quả học tập theo môn học
@@ -1700,8 +1705,8 @@ export class BaoCaoService {
 
                 const diemTBCHP = this.tinhDiemTBCHP(kq.diemQuaTrinh, kq.diemThanhPhan, kq.diemThi);
 
-                // Sinh viên trượt nếu TBCHP <= 4.0
-                if (diemTBCHP <= 4.0) {
+                // Sinh viên trượt nếu TBCHP <= 4.0 và chỉ xét sinh viên có tình trạng ĐANG_HỌC
+                if (diemTBCHP <= 4.0 && kq.sinhVien.tinhTrang === TinhTrangHocTapEnum.DANG_HOC) {
                     const diemSo = this.diemHe10ToHe4(diemTBCHP);
                     const diemChu = this.diemTBCHPToDiemChu(diemTBCHP);
 
@@ -1744,50 +1749,52 @@ export class BaoCaoService {
 
             let daHocLaiThanhCongHoacDangHoc = false;
 
-            for (const svlhp of cacLopKhacCungMon) {
-                const lopKhac = svlhp.lopHocPhan;
-
-                // Kiểm tra kết quả học tập ở lớp khác này
-                const kqLopKhac = await this.ketQuaRepo.findOne({
+            if (cacLopKhacCungMon.length > 0) {
+                const lopHocPhanIds = cacLopKhacCungMon.map((s) => s.lopHocPhan.id);
+                const tatCaKetQuaLopKhac = await this.ketQuaRepo.find({
                     where: {
                         sinhVien: { id: sv.id },
-                        lopHocPhan: { id: lopKhac.id },
+                        lopHocPhan: { id: In(lopHocPhanIds) },
                     },
+                    relations: ['lopHocPhan'],
                 });
-
-                if (!kqLopKhac) {
-                    // Trường hợp 1: Sinh viên đang tham gia lớp khác nhưng CHƯA CÓ kết quả
-                    // → Đang học lại → Không cần đề xuất thêm
-                    daHocLaiThanhCongHoacDangHoc = true;
-                    break;
-                }
-
-                // Nếu lớp CHƯA khóa điểm → coi như đang học lại → không đề xuất
-                if (!lopKhac.khoaDiem) {
-                    daHocLaiThanhCongHoacDangHoc = true;
-                    break;
-                }
-
-                // Trường hợp lớp đã khóa điểm → mới xét kết quả
-                if (
-                    kqLopKhac.diemQuaTrinh !== null &&
-                    kqLopKhac.diemThanhPhan !== null &&
-                    kqLopKhac.diemThi !== null
-                ) {
-                    const diemTBCHPLopKhac = this.tinhDiemTBCHP(
-                        kqLopKhac.diemQuaTrinh,
-                        kqLopKhac.diemThanhPhan,
-                        kqLopKhac.diemThi
-                    );
-
-                    if (diemTBCHPLopKhac > 4.0) {
-                        // Đã học lại thành công → không đề xuất
-                        daHocLaiThanhCongHoacDangHoc = true;
-                        break;
+                const ketQuaByLopHocPhanId = new Map<number, KetQuaHocTap>();
+                for (const kq of tatCaKetQuaLopKhac) {
+                    if (kq.lopHocPhan?.id != null) {
+                        ketQuaByLopHocPhanId.set(kq.lopHocPhan.id, kq);
                     }
                 }
 
-                // Nếu có kết quả nhưng điểm vẫn <= 4.0 → Vẫn trượt → Tiếp tục xét
+                let coLopChuaKhoaHoacChuaCoKetQua = false;
+                const cacTBCHPDaKhoa: number[] = [];
+
+                for (const svlhp of cacLopKhacCungMon) {
+                    const lopKhac = svlhp.lopHocPhan;
+                    const kq = ketQuaByLopHocPhanId.get(lopKhac.id);
+
+                    if (!kq) {
+                        coLopChuaKhoaHoacChuaCoKetQua = true;
+                        break;
+                    }
+                    if (!lopKhac.khoaDiem) {
+                        coLopChuaKhoaHoacChuaCoKetQua = true;
+                        break;
+                    }
+                    if (kq.diemQuaTrinh !== null && kq.diemThanhPhan !== null && kq.diemThi !== null) {
+                        cacTBCHPDaKhoa.push(
+                            this.tinhDiemTBCHP(kq.diemQuaTrinh, kq.diemThanhPhan, kq.diemThi),
+                        );
+                    }
+                }
+
+                if (coLopChuaKhoaHoacChuaCoKetQua) {
+                    daHocLaiThanhCongHoacDangHoc = true;
+                } else if (cacTBCHPDaKhoa.length > 0) {
+                    const tbchpCaoNhat = Math.max(...cacTBCHPDaKhoa);
+                    if (tbchpCaoNhat > 4.0) {
+                        daHocLaiThanhCongHoacDangHoc = true;
+                    }
+                }
             }
 
             // Chỉ thêm vào danh sách nếu sinh viên THỰC SỰ cần học lại
@@ -1802,7 +1809,10 @@ export class BaoCaoService {
             );
         }
 
-        // 6. Tìm lớp học phần đề xuất cho mỗi sinh viên trượt
+        // 6. Tìm lớp học phần đề xuất cho mỗi sinh viên trượt (giới hạn sĩ số tối đa 40/lớp)
+        const MAX_SI_SO_LOP_HOC_PHAN = 40;
+        const reservedSlotsByLopHocPhanId = new Map<number, number>();
+
         const ketQuaDeXuat: Array<{
             stt: number;
             maSinhVien: string;
@@ -1821,6 +1831,12 @@ export class BaoCaoService {
         }> = [];
 
         let stt = 1;
+
+        const canAddToClass = (lhp: LopHocPhan): boolean => {
+            const siSo = lhp.sinhVienLopHocPhans?.length ?? 0;
+            const reserved = reservedSlotsByLopHocPhanId.get(lhp.id) ?? 0;
+            return siSo + reserved + 1 <= MAX_SI_SO_LOP_HOC_PHAN;
+        };
 
         for (const item of danhSachTruot) {
             const sv = item.sinhVien;
@@ -1857,11 +1873,10 @@ export class BaoCaoService {
                 order: { namBatDau: 'ASC' },
             });
 
-            let lopDeXuat: LopHocPhan | null = null;
-
-            // 1️⃣ Ưu tiên: niên khóa cao hơn + cùng ngành
+            // Thu thập tất cả LHP đủ điều kiện (cùng ngành trước, khác ngành sau) để chọn lớp có ít SV được gán nhất → dàn trải đều
+            const eligibleLopHocPhans: LopHocPhan[] = [];
             for (const nkCaoHon of nienKhoasCaoHon) {
-                const lhpDeXuat = await this.lopHocPhanRepo.findOne({
+                const lopCungNganh = await this.lopHocPhanRepo.find({
                     where: {
                         monHoc: { id: monHocId },
                         nganh: { id: nganhId },
@@ -1869,38 +1884,43 @@ export class BaoCaoService {
                         khoaDiem: false,
                         id: Not(lhpTruot.id),
                     },
-                    relations: ['monHoc', 'nganh', 'nienKhoa', 'hocKy', 'hocKy.namHoc'],
+                    relations: ['monHoc', 'nganh', 'nienKhoa', 'hocKy', 'hocKy.namHoc', 'sinhVienLopHocPhans'],
                     order: { ngayTao: 'DESC' },
                 });
-
-                if (lhpDeXuat) {
-                    lopDeXuat = lhpDeXuat;
-                    break;
+                for (const lhp of lopCungNganh) {
+                    if (eligibleLopHocPhans.every((e) => e.id !== lhp.id)) eligibleLopHocPhans.push(lhp);
+                }
+            }
+            for (const nkCaoHon of nienKhoasCaoHon) {
+                const lopKhacNganh = await this.lopHocPhanRepo.find({
+                    where: {
+                        monHoc: { id: monHocId },
+                        nganh: { id: Not(nganhId) },
+                        nienKhoa: { id: nkCaoHon.id },
+                        khoaDiem: false,
+                        id: Not(lhpTruot.id),
+                    },
+                    relations: ['monHoc', 'nganh', 'nienKhoa', 'hocKy', 'hocKy.namHoc', 'sinhVienLopHocPhans'],
+                    order: { ngayTao: 'DESC' },
+                });
+                for (const lhp of lopKhacNganh) {
+                    if (eligibleLopHocPhans.every((e) => e.id !== lhp.id)) eligibleLopHocPhans.push(lhp);
                 }
             }
 
-            // 2️⃣ Nếu không có: niên khóa cao hơn + khác ngành
-            if (!lopDeXuat) {
-                for (const nkCaoHon of nienKhoasCaoHon) {
-                    const lhpDeXuatKhacNganh = await this.lopHocPhanRepo.findOne({
-                        where: {
-                            monHoc: { id: monHocId },
-                            nganh: { id: Not(nganhId) },
-                            nienKhoa: { id: nkCaoHon.id },
-                            khoaDiem: false,
-                            id: Not(lhpTruot.id),
-                        },
-                        relations: ['monHoc', 'nganh', 'nienKhoa', 'hocKy', 'hocKy.namHoc'],
-                        order: { ngayTao: 'DESC' },
-                    });
+            const withCapacity = eligibleLopHocPhans.filter((lhp) => canAddToClass(lhp));
+            const lopDeXuat: LopHocPhan | null =
+                withCapacity.length === 0
+                    ? null
+                    : withCapacity.reduce((best, lhp) => {
+                          const r = reservedSlotsByLopHocPhanId.get(lhp.id) ?? 0;
+                          const bestR = reservedSlotsByLopHocPhanId.get(best.id) ?? 0;
+                          return r < bestR ? lhp : best;
+                      });
 
-                    if (lhpDeXuatKhacNganh) {
-                        lopDeXuat = lhpDeXuatKhacNganh;
-                        break;
-                    }
-                }
+            if (lopDeXuat) {
+                reservedSlotsByLopHocPhanId.set(lopDeXuat.id, (reservedSlotsByLopHocPhanId.get(lopDeXuat.id) ?? 0) + 1);
             }
-
 
             ketQuaDeXuat.push({
                 stt: stt++,
@@ -2066,6 +2086,304 @@ export class BaoCaoService {
         worksheet.views = [{ state: 'frozen', ySplit: 4 }];
 
         return await workbook.xlsx.writeBuffer() as unknown as Buffer;
+    }
+
+    async getDeXuatHocLaiJson(maNamHoc: string, hocKy: number): Promise<DeXuatHocLaiResponseDto> {
+        // 1. Validate năm học
+        const namHoc = await this.lopHocPhanRepo.manager.findOne(NamHoc, {
+            where: { maNamHoc },
+        });
+        if (!namHoc) {
+            throw new NotFoundException(`Năm học với mã "${maNamHoc}" không tồn tại`);
+        }
+
+        // 2. Validate học kỳ
+        const hocKyEntity = await this.lopHocPhanRepo.manager.findOne(HocKy, {
+            where: { namHoc: { id: namHoc.id }, hocKy },
+            relations: ['namHoc'],
+        });
+        if (!hocKyEntity) {
+            throw new NotFoundException(`Học kỳ ${hocKy} của năm học "${maNamHoc}" không tồn tại`);
+        }
+
+        // 3. Lấy tất cả lớp học phần thuộc năm học và học kỳ đó
+        const lopHocPhans = await this.lopHocPhanRepo.find({
+            where: {
+                hocKy: { id: hocKyEntity.id },
+                khoaDiem: true, // chỉ lấy lớp đã khóa điểm
+            },
+            relations: [
+                'monHoc',
+                'nganh',
+                'nienKhoa',
+                'ketQuaHocTaps',
+                'ketQuaHocTaps.sinhVien',
+                'ketQuaHocTaps.sinhVien.lop',
+                'ketQuaHocTaps.sinhVien.lop.nganh',
+                'ketQuaHocTaps.sinhVien.lop.nienKhoa',
+            ],
+        });
+
+        if (lopHocPhans.length === 0) {
+            throw new BadRequestException(`Không có lớp học phần nào trong học kỳ ${hocKy} năm học "${maNamHoc}"`);
+        }
+
+        // 4. Lấy danh sách sinh viên trượt (TBCHP <= 4.0)
+        const danhSachTruotTamThoi: {
+            sinhVien: SinhVien;
+            lopHocPhanTruot: LopHocPhan;
+            ketQua: KetQuaHocTap;
+            diemTBCHP: number;
+            diemSo: number;
+            diemChu: string;
+        }[] = [];
+
+        for (const lhp of lopHocPhans) {
+            for (const kq of lhp.ketQuaHocTaps) {
+                // Kiểm tra có đủ điểm không
+                if (kq.diemQuaTrinh === null || kq.diemThanhPhan === null || kq.diemThi === null) {
+                    continue;
+                }
+
+                const diemTBCHP = this.tinhDiemTBCHP(kq.diemQuaTrinh, kq.diemThanhPhan, kq.diemThi);
+
+                // Sinh viên trượt nếu TBCHP <= 4.0 và chỉ xét sinh viên có tình trạng ĐANG_HỌC
+                if (diemTBCHP <= 4.0 && kq.sinhVien.tinhTrang === TinhTrangHocTapEnum.DANG_HOC) {
+                    const diemSo = this.diemHe10ToHe4(diemTBCHP);
+                    const diemChu = this.diemTBCHPToDiemChu(diemTBCHP);
+
+                    danhSachTruotTamThoi.push({
+                        sinhVien: kq.sinhVien,
+                        lopHocPhanTruot: lhp,
+                        ketQua: kq,
+                        diemTBCHP,
+                        diemSo,
+                        diemChu,
+                    });
+                }
+            }
+        }
+
+        if (danhSachTruotTamThoi.length === 0) {
+            throw new BadRequestException(`Không có sinh viên nào trượt trong học kỳ ${hocKy} năm học "${maNamHoc}"`);
+        }
+
+        // 5. Loại bỏ sinh viên đã học lại thành công hoặc đang học lại môn đó
+        const danhSachTruot: typeof danhSachTruotTamThoi = [];
+
+        for (const item of danhSachTruotTamThoi) {
+            const sv = item.sinhVien;
+            const monHocId = item.lopHocPhanTruot.monHoc.id;
+            const lopHocPhanTruotId = item.lopHocPhanTruot.id;
+
+            const cacLopKhacCungMon = await this.svLhpRepo.find({
+                where: {
+                    sinhVien: { id: sv.id },
+                    lopHocPhan: {
+                        monHoc: { id: monHocId },
+                        id: Not(lopHocPhanTruotId),
+                    },
+                },
+                relations: ['lopHocPhan', 'lopHocPhan.monHoc', 'lopHocPhan.hocKy', 'lopHocPhan.hocKy.namHoc'],
+            });
+
+            let daHocLaiThanhCongHoacDangHoc = false;
+
+            if (cacLopKhacCungMon.length > 0) {
+                const lopHocPhanIds = cacLopKhacCungMon.map((s) => s.lopHocPhan.id);
+                const tatCaKetQuaLopKhac = await this.ketQuaRepo.find({
+                    where: {
+                        sinhVien: { id: sv.id },
+                        lopHocPhan: { id: In(lopHocPhanIds) },
+                    },
+                    relations: ['lopHocPhan'],
+                });
+                const ketQuaByLopHocPhanId = new Map<number, KetQuaHocTap>();
+                for (const kq of tatCaKetQuaLopKhac) {
+                    if (kq.lopHocPhan?.id != null) {
+                        ketQuaByLopHocPhanId.set(kq.lopHocPhan.id, kq);
+                    }
+                }
+
+                let coLopChuaKhoaHoacChuaCoKetQua = false;
+                const cacTBCHPDaKhoa: number[] = [];
+
+                for (const svlhp of cacLopKhacCungMon) {
+                    const lopKhac = svlhp.lopHocPhan;
+                    const kq = ketQuaByLopHocPhanId.get(lopKhac.id);
+
+                    if (!kq) {
+                        coLopChuaKhoaHoacChuaCoKetQua = true;
+                        break;
+                    }
+                    if (!lopKhac.khoaDiem) {
+                        coLopChuaKhoaHoacChuaCoKetQua = true;
+                        break;
+                    }
+                    if (kq.diemQuaTrinh !== null && kq.diemThanhPhan !== null && kq.diemThi !== null) {
+                        cacTBCHPDaKhoa.push(
+                            this.tinhDiemTBCHP(kq.diemQuaTrinh, kq.diemThanhPhan, kq.diemThi),
+                        );
+                    }
+                }
+
+                if (coLopChuaKhoaHoacChuaCoKetQua) {
+                    daHocLaiThanhCongHoacDangHoc = true;
+                } else if (cacTBCHPDaKhoa.length > 0) {
+                    const tbchpCaoNhat = Math.max(...cacTBCHPDaKhoa);
+                    if (tbchpCaoNhat > 4.0) {
+                        daHocLaiThanhCongHoacDangHoc = true;
+                    }
+                }
+            }
+
+            if (!daHocLaiThanhCongHoacDangHoc) {
+                danhSachTruot.push(item);
+            }
+        }
+
+        if (danhSachTruot.length === 0) {
+            throw new BadRequestException(
+                `Tất cả sinh viên trượt trong học kỳ ${hocKy} năm học "${maNamHoc}" đã đăng ký học lại hoặc đã học lại thành công`,
+            );
+        }
+
+        // 6. Tìm các lớp học phần có thể đăng ký + best choice (giới hạn sĩ số tối đa 40)
+        const MAX_SI_SO_LOP_HOC_PHAN = 40;
+        /** Map: lopHocPhanId -> số sinh viên (từ danh sách đề xuất) đã được gán vào lớp đó để tránh vượt sĩ số */
+        const reservedSlotsByLopHocPhanId = new Map<number, number>();
+
+        const items: DeXuatHocLaiItemResponseDto[] = [];
+
+        for (const item of danhSachTruot) {
+            const sv = item.sinhVien;
+            const lhpTruot = item.lopHocPhanTruot;
+            const monHocId = lhpTruot.monHoc.id;
+            const nganhId = sv.lop?.nganh?.id;
+            const nienKhoaSV = sv.lop?.nienKhoa;
+
+            const lopHocPhanOptions: DeXuatHocLaiLopHocPhanOptionDto[] = [];
+            const canAddToClass = (lhp: LopHocPhan): boolean => {
+                const siSo = lhp.sinhVienLopHocPhans?.length ?? 0;
+                const reserved = reservedSlotsByLopHocPhanId.get(lhp.id) ?? 0;
+                return siSo + reserved + 1 <= MAX_SI_SO_LOP_HOC_PHAN;
+            };
+
+            const addOptionOnly = (lhp: LopHocPhan) => {
+                if (lopHocPhanOptions.some((o) => o.lopHocPhanId === lhp.id)) return;
+                lopHocPhanOptions.push({
+                    lopHocPhanId: lhp.id,
+                    maLopHocPhan: lhp.maLopHocPhan,
+                    monHocId: lhp.monHoc.id,
+                    maMonHoc: lhp.monHoc.maMonHoc,
+                    tenMonHoc: lhp.monHoc.tenMonHoc,
+                    soTinChi: lhp.monHoc.soTinChi,
+                    nganhId: lhp.nganh.id,
+                    tenNganh: lhp.nganh.tenNganh,
+                    nienKhoaId: lhp.nienKhoa.id,
+                    tenNienKhoa: lhp.nienKhoa.tenNienKhoa,
+                    hocKyId: lhp.hocKy.id,
+                    hocKy: lhp.hocKy.hocKy,
+                    maNamHoc: lhp.hocKy.namHoc.maNamHoc,
+                    tenNamHoc: lhp.hocKy.namHoc.tenNamHoc,
+                    siSo: lhp.sinhVienLopHocPhans?.length ?? 0,
+                    laBestChoice: false,
+                });
+            };
+
+            if (nganhId && nienKhoaSV) {
+                const nienKhoasCaoHon = await this.nienKhoaRepo.find({
+                    where: {
+                        namBatDau: MoreThanOrEqual(nienKhoaSV.namBatDau + 1),
+                    },
+                    order: { namBatDau: 'ASC' },
+                });
+
+                for (const nkCaoHon of nienKhoasCaoHon) {
+                    const lopCungNganh = await this.lopHocPhanRepo.find({
+                        where: {
+                            monHoc: { id: monHocId },
+                            nganh: { id: nganhId },
+                            nienKhoa: { id: nkCaoHon.id },
+                            khoaDiem: false,
+                            id: Not(lhpTruot.id),
+                        },
+                        relations: ['monHoc', 'nganh', 'nienKhoa', 'hocKy', 'hocKy.namHoc', 'sinhVienLopHocPhans'],
+                        order: { ngayTao: 'DESC' },
+                    });
+                    for (const lhp of lopCungNganh) addOptionOnly(lhp);
+                }
+                for (const nkCaoHon of nienKhoasCaoHon) {
+                    const lopKhacNganh = await this.lopHocPhanRepo.find({
+                        where: {
+                            monHoc: { id: monHocId },
+                            nganh: { id: Not(nganhId) },
+                            nienKhoa: { id: nkCaoHon.id },
+                            khoaDiem: false,
+                            id: Not(lhpTruot.id),
+                        },
+                        relations: ['monHoc', 'nganh', 'nienKhoa', 'hocKy', 'hocKy.namHoc', 'sinhVienLopHocPhans'],
+                        order: { ngayTao: 'DESC' },
+                    });
+                    for (const lhp of lopKhacNganh) addOptionOnly(lhp);
+                }
+            }
+
+            // Best choice = lớp đủ chỗ và đang có ít SV được gán nhất → dàn trải đều (lẻ rải từng SV cho các lớp)
+            const eligibleOptions = lopHocPhanOptions.filter((opt) => {
+                const reserved = reservedSlotsByLopHocPhanId.get(opt.lopHocPhanId) ?? 0;
+                return opt.siSo + reserved + 1 <= MAX_SI_SO_LOP_HOC_PHAN;
+            });
+            const bestOption =
+                eligibleOptions.length === 0
+                    ? null
+                    : eligibleOptions.reduce((best, opt) => {
+                          const r = reservedSlotsByLopHocPhanId.get(opt.lopHocPhanId) ?? 0;
+                          const bestR = reservedSlotsByLopHocPhanId.get(best.lopHocPhanId) ?? 0;
+                          return r < bestR ? opt : best;
+                      });
+            const bestChoiceLopHocPhanId = bestOption?.lopHocPhanId ?? null;
+            if (bestChoiceLopHocPhanId !== null) {
+                reservedSlotsByLopHocPhanId.set(
+                    bestChoiceLopHocPhanId,
+                    (reservedSlotsByLopHocPhanId.get(bestChoiceLopHocPhanId) ?? 0) + 1,
+                );
+            }
+
+            const optionsWithBestFlag = lopHocPhanOptions.map((option) => ({
+                ...option,
+                laBestChoice: option.lopHocPhanId === bestChoiceLopHocPhanId,
+            }));
+
+            const bestChoice =
+                optionsWithBestFlag.find((option) => option.laBestChoice) ?? null;
+
+            items.push({
+                sinhVienId: sv.id,
+                maSinhVien: sv.maSinhVien,
+                hoTen: sv.hoTen,
+                gioiTinh: this.mapGioiTinh(sv.gioiTinh),
+                sdt: sv.sdt || '',
+                maLopHocPhanTruot: lhpTruot.maLopHocPhan,
+                diemQuaTrinh: item.ketQua.diemQuaTrinh,
+                diemThanhPhan: item.ketQua.diemThanhPhan,
+                diemThi: item.ketQua.diemThi,
+                diemTBCHP: item.diemTBCHP.toFixed(2),
+                diemSo: item.diemSo.toFixed(1),
+                diemChu: item.diemChu,
+                danhGia: 'TRƯỢT MÔN',
+                bestChoiceLopHocPhan: bestChoice,
+                cacLopHocPhanCoTheDangKy: optionsWithBestFlag,
+            });
+        }
+
+        return {
+            maNamHoc,
+            hocKy,
+            tenNamHoc: namHoc.tenNamHoc,
+            tongSinhVien: items.length,
+            items,
+        };
     }
 }
 
