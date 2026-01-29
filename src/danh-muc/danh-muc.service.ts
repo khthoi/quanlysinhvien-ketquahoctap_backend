@@ -253,14 +253,34 @@ export class DanhMucService {
                 const moTa = row.getCell(4).value?.toString().trim() || undefined;
                 const maKhoa = row.getCell(5).value?.toString().trim() || '';
 
-                // Validate cơ bản (thiếu trường bắt buộc)
-                if (!maNganh || !tenNganh || !maKhoa) {
-                    results.failed++;
+                // Validate từng trường bắt buộc, log mỗi lỗi riêng biệt (một dòng một lỗi)
+                let hasValidationError = false;
+                if (!maNganh) {
+                    results.errors.push({
+                        row: rowNum,
+                        maNganh: 'N/A',
+                        error: 'Thiếu trường bắt buộc: Mã ngành',
+                    });
+                    hasValidationError = true;
+                }
+                if (!tenNganh) {
                     results.errors.push({
                         row: rowNum,
                         maNganh: maNganh || 'N/A',
-                        error: 'Thiếu một hoặc nhiều trường bắt buộc (Mã ngành, Tên ngành, Mã khoa)',
+                        error: 'Thiếu trường bắt buộc: Tên ngành',
                     });
+                    hasValidationError = true;
+                }
+                if (!maKhoa) {
+                    results.errors.push({
+                        row: rowNum,
+                        maNganh: maNganh || 'N/A',
+                        error: 'Thiếu trường bắt buộc: Mã khoa',
+                    });
+                    hasValidationError = true;
+                }
+                if (hasValidationError) {
+                    results.failed++;
                     continue;
                 }
 
