@@ -28,6 +28,9 @@ import {
     DeXuatHocLaiItemResponseDto,
     DeXuatHocLaiLopHocPhanOptionDto,
     DeXuatHocLaiResponseDto,
+    KetQuaHocLaiDto,
+    LanHocLaiDto,
+    SinhVienDaHocLaiItemDto,
 } from './dtos/de-xuat-hoc-lai.dto';
 
 
@@ -2168,8 +2171,9 @@ export class BaoCaoService {
             throw new BadRequestException(`Không có sinh viên nào trượt trong học kỳ ${hocKy} năm học "${maNamHoc}"`);
         }
 
-        // 5. Loại bỏ sinh viên đã học lại thành công hoặc đang học lại môn đó
+        // 5. Loại bỏ sinh viên đã học lại thành công hoặc đang học lại; thu thập chi tiết sinh viên đã/đang học lại
         const danhSachTruot: typeof danhSachTruotTamThoi = [];
+        const danhSachDaHocLaiHoacDangHoc: SinhVienDaHocLaiItemDto[] = [];
 
         for (const item of danhSachTruotTamThoi) {
             const sv = item.sinhVien;
@@ -2188,6 +2192,7 @@ export class BaoCaoService {
             });
 
             let daHocLaiThanhCongHoacDangHoc = false;
+            const ketQuaByLopHocPhanId = new Map<number, KetQuaHocTap>();
 
             if (cacLopKhacCungMon.length > 0) {
                 const lopHocPhanIds = cacLopKhacCungMon.map((s) => s.lopHocPhan.id);
@@ -2198,7 +2203,6 @@ export class BaoCaoService {
                     },
                     relations: ['lopHocPhan'],
                 });
-                const ketQuaByLopHocPhanId = new Map<number, KetQuaHocTap>();
                 for (const kq of tatCaKetQuaLopKhac) {
                     if (kq.lopHocPhan?.id != null) {
                         ketQuaByLopHocPhanId.set(kq.lopHocPhan.id, kq);
@@ -2239,13 +2243,92 @@ export class BaoCaoService {
 
             if (!daHocLaiThanhCongHoacDangHoc) {
                 danhSachTruot.push(item);
+            } else {
+                // Sinh viên đã học lại / đang học lại: build chi tiết môn trượt + các lần học lại (LHP + kết quả)
+                const cacLanHocLai: LanHocLaiDto[] = [];
+                // Sắp xếp theo năm học, học kỳ (thứ tự tăng dần thời gian)
+                const sortedSvlhp = [...cacLopKhacCungMon].sort((a, b) => {
+                    const nkA = a.lopHocPhan.hocKy?.namHoc?.namBatDau ?? 0;
+                    const nkB = b.lopHocPhan.hocKy?.namHoc?.namBatDau ?? 0;
+                    if (nkA !== nkB) return nkA - nkB;
+                    return (a.lopHocPhan.hocKy?.hocKy ?? 0) - (b.lopHocPhan.hocKy?.hocKy ?? 0);
+                });
+                for (const svlhp of sortedSvlhp) {
+                    const lopKhac = svlhp.lopHocPhan;
+                    const kq = ketQuaByLopHocPhanId.get(lopKhac.id);
+                    let ketQuaDto: KetQuaHocLaiDto | null = null;
+                    if (kq) {
+                        const dqt = kq.diemQuaTrinh;
+                        const dtp = kq.diemThanhPhan;
+                        const dt = kq.diemThi;
+                        const tbchp =
+                            dqt != null && dtp != null && dt != null
+                                ? this.tinhDiemTBCHP(dqt, dtp, dt)
+                                : null;
+                        const diemChu = tbchp != null ? this.diemTBCHPToDiemChu(tbchp) : null;
+                        const diemSo = tbchp != null ? this.diemHe10ToHe4(tbchp) : null;
+                        ketQuaDto = {
+                            diemQuaTrinh: dqt ?? null,
+                            diemThanhPhan: dtp ?? null,
+                            diemThi: dt ?? null,
+                            diemTBCHP: tbchp,
+                            diemChu: diemChu,
+                            diemSo: diemSo,
+                            khoaDiem: lopKhac.khoaDiem,
+                        };
+                    } else {
+                        ketQuaDto = {
+                            diemQuaTrinh: null,
+                            diemThanhPhan: null,
+                            diemThi: null,
+                            diemTBCHP: null,
+                            diemChu: null,
+                            diemSo: null,
+                            khoaDiem: lopKhac.khoaDiem,
+                        };
+                    }
+                    const hocKyEntity = lopKhac.hocKy;
+                    const namHoc = hocKyEntity?.namHoc;
+                    const ngayBatDau = hocKyEntity?.ngayBatDau != null
+                        ? (typeof hocKyEntity.ngayBatDau === 'string' ? hocKyEntity.ngayBatDau : new Date(hocKyEntity.ngayBatDau).toISOString().split('T')[0])
+                        : null;
+                    const ngayKetThuc = hocKyEntity?.ngayKetThuc != null
+                        ? (typeof hocKyEntity.ngayKetThuc === 'string' ? hocKyEntity.ngayKetThuc : new Date(hocKyEntity.ngayKetThuc).toISOString().split('T')[0])
+                        : null;
+                    cacLanHocLai.push({
+                        lopHocPhanId: lopKhac.id,
+                        maLopHocPhan: lopKhac.maLopHocPhan,
+                        hocKy: hocKyEntity?.hocKy ?? 0,
+                        maNamHoc: namHoc?.maNamHoc ?? '',
+                        tenNamHoc: namHoc?.tenNamHoc ?? '',
+                        ngayBatDau: ngayBatDau ?? undefined,
+                        ngayKetThuc: ngayKetThuc ?? undefined,
+                        ketQuaHocTap: ketQuaDto,
+                    });
+                }
+                danhSachDaHocLaiHoacDangHoc.push({
+                    sinhVienId: sv.id,
+                    maSinhVien: sv.maSinhVien,
+                    hoTen: sv.hoTen,
+                    gioiTinh: this.mapGioiTinh(sv.gioiTinh),
+                    maMonHocTruot: item.lopHocPhanTruot.monHoc.maMonHoc,
+                    tenMonHocTruot: item.lopHocPhanTruot.monHoc.tenMonHoc,
+                    maLopHocPhanTruot: item.lopHocPhanTruot.maLopHocPhan,
+                    diemTBCHPTruot: item.diemTBCHP.toFixed(2),
+                    cacLanHocLai,
+                });
             }
         }
 
         if (danhSachTruot.length === 0) {
-            throw new BadRequestException(
-                `Tất cả sinh viên trượt trong học kỳ ${hocKy} năm học "${maNamHoc}" đã đăng ký học lại hoặc đã học lại thành công`,
-            );
+            return {
+                maNamHoc,
+                hocKy,
+                tenNamHoc: namHoc.tenNamHoc,
+                tongSinhVien: 0,
+                items: [],
+                sinhVienDaHocLaiHoacDangHoc: danhSachDaHocLaiHoacDangHoc,
+            };
         }
 
         // 6. Tìm các lớp học phần có thể đăng ký + best choice (giới hạn sĩ số tối đa 40)
@@ -2383,6 +2466,7 @@ export class BaoCaoService {
             tenNamHoc: namHoc.tenNamHoc,
             tongSinhVien: items.length,
             items,
+            sinhVienDaHocLaiHoacDangHoc: danhSachDaHocLaiHoacDangHoc.length > 0 ? danhSachDaHocLaiHoacDangHoc : undefined,
         };
     }
 }

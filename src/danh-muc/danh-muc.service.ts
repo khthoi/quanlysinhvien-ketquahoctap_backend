@@ -1077,14 +1077,21 @@ export class DanhMucService {
         return mapping[loaiMon] || loaiMon;
     }
 
-    // Thêm mới: version getAllMonHoc() có phân trang + search
+    // Thêm mới: version getAllMonHoc() có phân trang + search (môn học + mã/tên giảng viên), trả về thông tin giảng viên phụ trách
     async getAllMonHocWithPagination(query: PaginationQueryDto) {
         const { page = 1, limit = 10, search, loaiMon } = query;
+        const searchParam = search ? `%${search}%` : null;
 
-        const qb = this.monHocRepository.createQueryBuilder('monHoc');
+        const qb = this.monHocRepository
+            .createQueryBuilder('monHoc')
+            .leftJoinAndSelect('monHoc.giangVienMonHocs', 'gvmh')
+            .leftJoinAndSelect('gvmh.giangVien', 'gv');
 
-        if (search) {
-            qb.andWhere('LOWER(monHoc.tenMonHoc) LIKE LOWER(:search) OR LOWER(monHoc.maMonHoc) LIKE LOWER(:search)', { search: `%${search}%` });
+        if (searchParam) {
+            qb.andWhere(
+                '(LOWER(monHoc.tenMonHoc) LIKE LOWER(:search) OR LOWER(monHoc.maMonHoc) LIKE LOWER(:search) OR LOWER(gv.maGiangVien) LIKE LOWER(:search) OR LOWER(gv.hoTen) LIKE LOWER(:search))',
+                { search: searchParam },
+            );
         }
 
         if (loaiMon) {
@@ -1093,7 +1100,24 @@ export class DanhMucService {
 
         qb.orderBy('monHoc.tenMonHoc', 'ASC');
 
-        const total = await qb.getCount();
+        // Đếm số môn học phân biệt (tránh trùng khi join nhiều giảng viên)
+        const totalQb = this.monHocRepository
+            .createQueryBuilder('monHoc')
+            .leftJoin('monHoc.giangVienMonHocs', 'gvmh')
+            .leftJoin('gvmh.giangVien', 'gv');
+
+        if (searchParam) {
+            totalQb.andWhere(
+                '(LOWER(monHoc.tenMonHoc) LIKE LOWER(:search) OR LOWER(monHoc.maMonHoc) LIKE LOWER(:search) OR LOWER(gv.maGiangVien) LIKE LOWER(:search) OR LOWER(gv.hoTen) LIKE LOWER(:search))',
+                { search: searchParam },
+            );
+        }
+        if (loaiMon) {
+            totalQb.andWhere('monHoc.loaiMon = :loaiMon', { loaiMon });
+        }
+        const countResult = await totalQb.select('COUNT(DISTINCT monHoc.id)', 'cnt').getRawOne<{ cnt: string }>();
+        const total = countResult?.cnt != null ? parseInt(countResult.cnt, 10) : 0;
+
         const skip = (page - 1) * limit;
         qb.skip(skip).take(limit);
 

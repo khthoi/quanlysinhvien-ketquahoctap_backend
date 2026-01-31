@@ -465,7 +465,11 @@ export class DanhMucController {
     res.send(buffer);
   }
 
-  @ApiOperation({ summary: 'Lấy danh sách môn học có phân trang' })
+  @ApiOperation({
+    summary: 'Lấy danh sách môn học có phân trang',
+    description:
+      'Trả về danh sách môn học kèm thông tin giảng viên phụ trách. Tìm kiếm theo mã/tên môn học hoặc mã/tên giảng viên (query: search).',
+  })
   @ApiResponse({ status: 200, type: [MonHoc] })
   @ApiBearerAuth()
   @Get('mon-hoc/paginated')

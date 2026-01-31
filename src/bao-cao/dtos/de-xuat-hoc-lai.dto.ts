@@ -117,6 +117,94 @@ export class DeXuatHocLaiItemResponseDto {
     cacLopHocPhanCoTheDangKy: DeXuatHocLaiLopHocPhanOptionDto[];
 }
 
+/** Kết quả học tập tại một lớp học phần (có thể null nếu chưa chấm điểm) */
+export class KetQuaHocLaiDto {
+    @ApiProperty({ description: 'Điểm quá trình (10%)', nullable: true })
+    diemQuaTrinh: number | null;
+
+    @ApiProperty({ description: 'Điểm thành phần (30%)', nullable: true })
+    diemThanhPhan: number | null;
+
+    @ApiProperty({ description: 'Điểm thi (60%)', nullable: true })
+    diemThi: number | null;
+
+    @ApiProperty({ description: 'Điểm TBCHP (tính từ QT, TP, Thi); null nếu chưa đủ điểm' })
+    diemTBCHP: number | null;
+
+    @ApiProperty({ description: 'Điểm chữ (A, B+, ...); null nếu chưa có TBCHP' })
+    diemChu: string | null;
+
+    @ApiProperty({ description: 'Điểm số (hệ 4); null nếu chưa có TBCHP' })
+    diemSo: number | null;
+
+    @ApiProperty({ description: 'Lớp học phần đã khóa điểm chưa' })
+    khoaDiem: boolean;
+}
+
+/** Một lần học lại: lớp học phần đăng ký + kết quả (nếu có) */
+export class LanHocLaiDto {
+    @ApiProperty({ description: 'ID lớp học phần học lại' })
+    lopHocPhanId: number;
+
+    @ApiProperty({ description: 'Mã lớp học phần học lại' })
+    maLopHocPhan: string;
+
+    @ApiProperty({ description: 'Học kỳ của lớp học phần' })
+    hocKy: number;
+
+    @ApiProperty({ description: 'Mã năm học của lớp học phần' })
+    maNamHoc: string;
+
+    @ApiProperty({ description: 'Tên năm học' })
+    tenNamHoc: string;
+
+    @ApiProperty({ description: 'Ngày bắt đầu học kỳ của lớp học phần (ISO date)', required: false })
+    ngayBatDau?: string | null;
+
+    @ApiProperty({ description: 'Ngày kết thúc học kỳ của lớp học phần (ISO date)', required: false })
+    ngayKetThuc?: string | null;
+
+    @ApiProperty({
+        description: 'Kết quả học tập tại lớp này (null nếu chưa có điểm / chưa khóa điểm)',
+        type: () => KetQuaHocLaiDto,
+        nullable: true,
+    })
+    ketQuaHocTap: KetQuaHocLaiDto | null;
+}
+
+/** Sinh viên đã học lại / đang học lại: thông tin môn trượt + các lần học lại (LHP + kết quả) */
+export class SinhVienDaHocLaiItemDto {
+    @ApiProperty({ description: 'ID sinh viên' })
+    sinhVienId: number;
+
+    @ApiProperty({ description: 'Mã sinh viên' })
+    maSinhVien: string;
+
+    @ApiProperty({ description: 'Họ tên sinh viên' })
+    hoTen: string;
+
+    @ApiProperty({ description: 'Giới tính hiển thị', required: false })
+    gioiTinh?: string;
+
+    @ApiProperty({ description: 'Môn học trượt (mã)' })
+    maMonHocTruot: string;
+
+    @ApiProperty({ description: 'Môn học trượt (tên)' })
+    tenMonHocTruot: string;
+
+    @ApiProperty({ description: 'Mã lớp học phần mà sinh viên trượt' })
+    maLopHocPhanTruot: string;
+
+    @ApiProperty({ description: 'Điểm TBCHP khi trượt (học kỳ được xét)' })
+    diemTBCHPTruot: string;
+
+    @ApiProperty({
+        description: 'Các lần học lại: lớp học phần đã/đang học + kết quả (nếu có); có thể nhiều lần',
+        type: () => [LanHocLaiDto],
+    })
+    cacLanHocLai: LanHocLaiDto[];
+}
+
 export class DeXuatHocLaiResponseDto {
     @ApiProperty({ description: 'Mã năm học được thống kê' })
     maNamHoc: string;
@@ -135,4 +223,11 @@ export class DeXuatHocLaiResponseDto {
         type: () => [DeXuatHocLaiItemResponseDto],
     })
     items: DeXuatHocLaiItemResponseDto[];
+
+    @ApiProperty({
+        description: 'Danh sách sinh viên đã học lại / đang học lại (chi tiết môn trượt, LHP học lại, kết quả); có khi rỗng',
+        type: () => [SinhVienDaHocLaiItemDto],
+        required: false,
+    })
+    sinhVienDaHocLaiHoacDangHoc?: SinhVienDaHocLaiItemDto[];
 }
