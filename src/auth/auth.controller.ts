@@ -144,8 +144,9 @@ export class AuthController {
   @Post('reset-password')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(VaiTroNguoiDungEnum.ADMIN)
-  @ApiOperation({ summary: 'Reset mật khẩu người dùng khác (Admin)' })
+  @ApiOperation({ summary: 'Reset mật khẩu người dùng (Admin) - đặt mật khẩu mặc định và trả về' })
   @ApiBody({ type: ResetPasswordDto })
+  @ApiResponse({ status: 200, description: 'Reset thành công, trả về message và password (mật khẩu đã đổi)' })
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
   }
