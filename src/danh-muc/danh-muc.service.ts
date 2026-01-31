@@ -2104,15 +2104,29 @@ Chọn mã môn từ danh sách dropdown.
         return await this.giangVienRepository.save(giangVien);
     }
 
-    // Cập nhật giảng viên 
+    // Cập nhật giảng viên
     async updateGiangVien(id: number, updateGiangVienDto: UpdateGiangVienDto): Promise<GiangVien> {
         const giangVien = await this.getGiangVienById(id);
 
-        // Nếu cập nhật mã giảng viên, kiểm tra trùng
+        // Nếu cập nhật mã giảng viên, kiểm tra trùng và đồng bộ tên đăng nhập
         if (updateGiangVienDto.maGiangVien && updateGiangVienDto.maGiangVien !== giangVien.maGiangVien) {
             const existingMGV = await this.giangVienRepository.findOneBy({ maGiangVien: updateGiangVienDto.maGiangVien });
             if (existingMGV) {
                 throw new BadRequestException('Mã giảng viên đã được sử dụng');
+            }
+            // Đổi tên đăng nhập của tài khoản tương ứng sang mã giảng viên mới
+            const nguoiDung = await this.nguoiDungRepository.findOne({
+                where: { giangVien: { id } },
+            });
+            if (nguoiDung) {
+                const existingTenDangNhap = await this.nguoiDungRepository.findOne({
+                    where: { tenDangNhap: updateGiangVienDto.maGiangVien },
+                });
+                if (existingTenDangNhap && existingTenDangNhap.id !== nguoiDung.id) {
+                    throw new BadRequestException('Tên đăng nhập tương ứng với mã giảng viên mới đã được sử dụng');
+                }
+                nguoiDung.tenDangNhap = updateGiangVienDto.maGiangVien;
+                await this.nguoiDungRepository.save(nguoiDung);
             }
         }
 

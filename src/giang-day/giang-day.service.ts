@@ -1183,6 +1183,105 @@ export class GiangDayService {
         };
     }
 
+    /**
+     * Xuất file Excel mẫu nhập điểm cho một lớp học phần (theo id).
+     * File gồm: STT, mã sinh viên, họ tên, ngày sinh (dd/mm/yyyy), lớp niên chế, điểm 10%, 30%, 60%.
+     * Giảng viên chỉ được xuất lớp mình phụ trách.
+     */
+    async exportMauNhapDiemLopHocPhan(
+        lopHocPhanId: number,
+        userId: number,
+        vaiTro: VaiTroNguoiDungEnum,
+    ): Promise<{ buffer: Buffer; maLopHocPhan: string }> {
+        const lhp = await this.lopHocPhanRepo.findOne({
+            where: { id: lopHocPhanId },
+            relations: ['giangVien', 'monHoc'],
+        });
+        if (!lhp) throw new NotFoundException('Lớp học phần không tồn tại');
+        const maLopHocPhan = lhp.maLopHocPhan;
+
+        if (vaiTro === VaiTroNguoiDungEnum.GIANG_VIEN) {
+            const nguoiDung = await this.nguoiDungRepo.findOne({
+                where: { id: userId },
+                relations: ['giangVien'],
+            });
+            if (!nguoiDung?.giangVien || lhp.giangVien?.id !== nguoiDung.giangVien.id) {
+                throw new ForbiddenException('Bạn không được phân công phụ trách lớp học phần này');
+            }
+        }
+
+        const svlhpList = await this.svLhpRepo.find({
+            where: { lopHocPhan: { id: lopHocPhanId } },
+            relations: ['sinhVien', 'sinhVien.lop'],
+        });
+        svlhpList.sort((a, b) => (a.sinhVien?.hoTen ?? '').localeCompare(b.sinhVien?.hoTen ?? ''));
+
+        const ketQuaList = await this.ketQuaHocTapRepo.find({
+            where: { lopHocPhan: { id: lopHocPhanId } },
+            relations: ['sinhVien'],
+        });
+
+        const formatNgaySinh = (d: Date | string | null): string => {
+            if (!d) return '';
+            const date = typeof d === 'string' ? new Date(d) : d;
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const year = date.getFullYear();
+            return `${day}/${month}/${year}`;
+        };
+
+        const workbook = new ExcelJS.Workbook();
+        const sheet = workbook.addWorksheet('Nhap diem', {
+            views: [{ state: 'frozen', ySplit: 1 }],
+        });
+
+        const headers = [
+            'STT',
+            'Mã sinh viên',
+            'Họ và tên',
+            'Ngày sinh',
+            'Lớp niên chế',
+            'Điểm 10%',
+            'Điểm 30%',
+            'Điểm 60%',
+        ];
+        sheet.addRow(headers);
+        const headerRow = sheet.getRow(1);
+        headerRow.font = { bold: true };
+        headerRow.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FF4472C4' },
+        };
+        headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        headerRow.alignment = { horizontal: 'center', vertical: 'middle' };
+
+        let stt = 0;
+        for (const svlhp of svlhpList) {
+            const sv = svlhp.sinhVien;
+            const kq = ketQuaList.find(k => k.sinhVien.id === sv.id);
+            stt += 1;
+            const ngaySinhStr = formatNgaySinh(sv.ngaySinh);
+            const maLop = sv.lop?.maLop ?? '';
+            const diem10 = kq != null ? Number(kq.diemQuaTrinh) : '';
+            const diem30 = kq != null ? Number(kq.diemThanhPhan) : '';
+            const diem60 = kq != null ? Number(kq.diemThi) : '';
+            sheet.addRow([stt, sv.maSinhVien, sv.hoTen, ngaySinhStr, maLop, diem10, diem30, diem60]);
+        }
+
+        sheet.getColumn(1).width = 6;
+        sheet.getColumn(2).width = 14;
+        sheet.getColumn(3).width = 28;
+        sheet.getColumn(4).width = 15;
+        sheet.getColumn(5).width = 20;
+        sheet.getColumn(6).width = 12;
+        sheet.getColumn(7).width = 12;
+        sheet.getColumn(8).width = 12;
+
+        const buffer = await workbook.xlsx.writeBuffer();
+        return { buffer: buffer as unknown as Buffer, maLopHocPhan };
+    }
+
     async getLopHocPhanCuaGiangVien(userId: number, query: GetMyLopHocPhanQueryDto) {
         const {
             page = 1,

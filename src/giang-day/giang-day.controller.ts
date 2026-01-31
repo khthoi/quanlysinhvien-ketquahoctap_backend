@@ -222,6 +222,31 @@ export class GiangDayController {
     return this.giangDayService.getDanhSachSinhVien(lopHocPhanId, userId, vaiTro, query);
   }
 
+  @Get('lop-hoc-phan/:id/export-mau-nhap-diem')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO, VaiTroNguoiDungEnum.GIANG_VIEN)
+  @ApiOperation({
+    summary: 'Xuất file Excel mẫu nhập điểm cho lớp học phần',
+    description:
+      'Tải file Excel gồm STT, mã sinh viên, họ tên, ngày sinh (dd/mm/yyyy), lớp niên chế, điểm 10%, 30%, 60% để giảng viên nhập điểm.',
+  })
+  @ApiParam({ name: 'id', type: Number, description: 'ID lớp học phần' })
+  @ApiResponse({ status: 200, description: 'File Excel mẫu nhập điểm' })
+  async exportMauNhapDiem(
+    @Param('id', ParseIntPipe) id: number,
+    @GetUser('userId') userId: number,
+    @GetUser('vaiTro') vaiTro: VaiTroNguoiDungEnum,
+    @Res() res: express.Response,
+  ) {
+    const { buffer, maLopHocPhan } = await this.giangDayService.exportMauNhapDiemLopHocPhan(id, userId, vaiTro);
+    // Tên file theo mã lớp học phần (không dùng id). ASCII trong header, UTF-8 cho trình duyệt.
+    const filenameAscii = `Mau-nhap-diem-LHP-${maLopHocPhan}.xlsx`;
+    const filenameUtf8 = `Mẫu nhập điểm LHP ${maLopHocPhan}.xlsx`;
+    const contentDisposition = `attachment; filename="${filenameAscii}"; filename*=UTF-8''${encodeURIComponent(filenameUtf8)}`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', contentDisposition);
+    res.send(buffer);
+  }
+
   /* ==================== GIẢNG VIÊN XEM LỚP ĐƯỢC PHÂN CÔNG ==================== */
 
   @ApiOperation({ summary: 'Giảng viên hoặc cán bộ ĐT xem danh sách lớp học phần của mình' })
