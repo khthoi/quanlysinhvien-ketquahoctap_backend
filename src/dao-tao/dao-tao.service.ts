@@ -312,105 +312,75 @@ export class DaoTaoService {
     return await this.hocKyRepo.save(hocKyEntity);
   }
 
+  /**
+   * Cập nhật học kỳ: chỉ cho phép thay đổi ngày bắt đầu và/hoặc ngày kết thúc.
+   * Không cho phép đổi năm học hay thứ tự học kỳ.
+   */
   async updateHocKy(id: number, dto: UpdateHocKyDto) {
+    if (!dto.ngayBatDau && !dto.ngayKetThuc) {
+      throw new BadRequestException('Cần gửi ít nhất một trong hai: ngayBatDau hoặc ngayKetThuc');
+    }
+
     const hocKy = await this.hocKyRepo.findOne({
       where: { id },
       relations: ['namHoc'],
     });
     if (!hocKy) throw new NotFoundException('Học kỳ không tồn tại');
 
-    let finalNamHoc = hocKy.namHoc;
-    if (dto.namHocId && dto.namHocId !== hocKy.namHoc.id) {
-      const foundNamHoc = await this.namHocRepo.findOneBy({ id: dto.namHocId });
-      if (!foundNamHoc) throw new BadRequestException('Năm học không tồn tại');
-      finalNamHoc = foundNamHoc;
-    }
+    const namHoc = hocKy.namHoc;
 
-    // Validate ngày nếu có thay đổi
-    let finalBd = hocKy.ngayBatDau;
-    let finalKt = hocKy.ngayKetThuc;
-    if (dto.ngayBatDau) finalBd = new Date(dto.ngayBatDau);
-    if (dto.ngayKetThuc) finalKt = new Date(dto.ngayKetThuc);
+    // Ngày sau khi áp dụng DTO (giữ giá trị cũ nếu không gửi)
+    const finalBd = dto.ngayBatDau ? new Date(dto.ngayBatDau) : new Date(hocKy.ngayBatDau);
+    const finalKt = dto.ngayKetThuc ? new Date(dto.ngayKetThuc) : new Date(hocKy.ngayKetThuc);
 
-    const startOfNam = new Date(finalNamHoc.namBatDau, 0, 1);
-    const endOfNam = new Date(finalNamHoc.namKetThuc, 11, 31);
+    const startOfNam = new Date(namHoc.namBatDau, 0, 1);
+    const endOfNam = new Date(namHoc.namKetThuc, 11, 31);
 
+    // Nằm trong năm học
     if (finalBd < startOfNam) {
-      throw new BadRequestException(`Ngày bắt đầu phải từ 01/01/${finalNamHoc.namBatDau} trở đi`);
+      throw new BadRequestException(`Ngày bắt đầu phải từ 01/01/${namHoc.namBatDau} trở đi`);
     }
     if (finalKt > endOfNam) {
-      throw new BadRequestException(`Ngày kết thúc không được vượt quá 31/12/${finalNamHoc.namKetThuc}`);
+      throw new BadRequestException(`Ngày kết thúc không được vượt quá 31/12/${namHoc.namKetThuc}`);
     }
     if (finalBd >= finalKt) {
       throw new BadRequestException('Ngày bắt đầu phải nhỏ hơn ngày kết thúc');
     }
 
-    // Nếu đổi thứ tự học kỳ → kiểm tra trùng và liền kề
-    if (dto.hocKy !== undefined) {
-      if (dto.hocKy <= 0) throw new BadRequestException('Thứ tự học kỳ phải >= 1');
+    const currHocKyNumber = hocKy.hocKy;
+    const allHkInYear = await this.hocKyRepo.find({
+      where: { namHoc: { id: namHoc.id } },
+    });
 
-      const exist = await this.hocKyRepo.findOne({
-        where: { hocKy: dto.hocKy, namHoc: { id: finalNamHoc.id } },
-      });
-      if (exist && exist.id !== id) {
-        throw new BadRequestException(`Năm học này đã có học kỳ thứ ${dto.hocKy}`);
-      }
-
-      // ⭐ NEW VALIDATION: học kỳ lớn hơn phải bắt đầu sau khi học kỳ nhỏ hơn kết thúc
-      // Lấy danh sách học kỳ trong năm học
-      const allHkInYear = await this.hocKyRepo.find({
-        where: { namHoc: { id: finalNamHoc.id } },
-      });
-
-      // Xác định học kỳ trước và sau (nếu có)
-      const currHocKyNumber = dto.hocKy ?? hocKy.hocKy;
-
-      const hkTruoc = allHkInYear.find(h => h.hocKy === currHocKyNumber - 1);
-      const hkSau = allHkInYear.find(h => h.hocKy === currHocKyNumber + 1);
-
-      // Nếu có học kỳ trước → finalBd phải > hkTruoc.ngayKetThuc
-      if (hkTruoc) {
-        const endPrev = new Date(hkTruoc.ngayKetThuc);
-        if (finalBd <= endPrev) {
-          const ngayKT = endPrev.toLocaleDateString('vi-VN');
-          throw new BadRequestException(
-            `Học kỳ ${currHocKyNumber} phải bắt đầu sau ngày kết thúc của học kỳ ${hkTruoc.hocKy} (${ngayKT})`,
-          );
-        }
-      }
-
-      // Nếu có học kỳ sau → finalKt phải < hkSau.ngayBatDau
-      if (hkSau) {
-        const startNext = new Date(hkSau.ngayBatDau);
-        if (finalKt >= startNext) {
-          const ngayBD = startNext.toLocaleDateString('vi-VN');
-          throw new BadRequestException(
-            `Học kỳ ${currHocKyNumber} phải kết thúc trước ngày bắt đầu của học kỳ ${hkSau.hocKy} (${ngayBD})`,
-          );
-        }
-      }
-
-      const max = await this.hocKyRepo.findOne({
-        where: { namHoc: { id: finalNamHoc.id } },
-        order: { hocKy: 'DESC' },
-      });
-      const expected = max ? max.hocKy + 1 : 1;
-      if (dto.hocKy !== hocKy.hocKy && dto.hocKy !== expected) {
-        throw new BadRequestException(`Chỉ được đổi thành học kỳ thứ ${expected}`);
+    // Học kỳ liền trước: ngày bắt đầu phải sau ngày kết thúc của học kỳ trước
+    const hkTruoc = allHkInYear.find(h => h.hocKy === currHocKyNumber - 1);
+    if (hkTruoc) {
+      const endPrev = new Date(hkTruoc.ngayKetThuc);
+      if (finalBd <= endPrev) {
+        const ngayKT = endPrev.toLocaleDateString('vi-VN');
+        throw new BadRequestException(
+          `Học kỳ ${currHocKyNumber} phải bắt đầu sau ngày kết thúc của học kỳ ${hkTruoc.hocKy} (${ngayKT})`,
+        );
       }
     }
 
-    // Kiểm tra chồng thời gian với các học kỳ khác (trừ chính nó)
-    const others = await this.hocKyRepo.find({
-      where: { namHoc: { id: finalNamHoc.id } },
-    });
+    // Học kỳ liền sau: ngày kết thúc phải trước ngày bắt đầu của học kỳ sau
+    const hkSau = allHkInYear.find(h => h.hocKy === currHocKyNumber + 1);
+    if (hkSau) {
+      const startNext = new Date(hkSau.ngayBatDau);
+      if (finalKt >= startNext) {
+        const ngayBD = startNext.toLocaleDateString('vi-VN');
+        throw new BadRequestException(
+          `Học kỳ ${currHocKyNumber} phải kết thúc trước ngày bắt đầu của học kỳ ${hkSau.hocKy} (${ngayBD})`,
+        );
+      }
+    }
 
-    for (const other of others) {
+    // Không chồng thời gian với các học kỳ khác trong cùng năm (trừ chính nó)
+    for (const other of allHkInYear) {
       if (other.id === id) continue;
-
       const otherBd = new Date(other.ngayBatDau);
       const otherKt = new Date(other.ngayKetThuc);
-
       if (!(finalKt <= otherBd || finalBd >= otherKt)) {
         const otherngayBD = new Date(other.ngayBatDau).toLocaleDateString('vi-VN');
         const otherngayKT = new Date(other.ngayKetThuc).toLocaleDateString('vi-VN');
@@ -420,11 +390,8 @@ export class DaoTaoService {
       }
     }
 
-    // Cập nhật
-    if (dto.hocKy !== undefined) hocKy.hocKy = dto.hocKy;
     if (dto.ngayBatDau) hocKy.ngayBatDau = finalBd;
     if (dto.ngayKetThuc) hocKy.ngayKetThuc = finalKt;
-    if (dto.namHocId) hocKy.namHoc = finalNamHoc;
 
     return await this.hocKyRepo.save(hocKy);
   }

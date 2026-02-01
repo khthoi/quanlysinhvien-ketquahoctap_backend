@@ -563,6 +563,7 @@ export class GiangDayService {
             search,
             monHocId,
             giangVienId,
+            chuaCoGiangVien,
             hocKyId,
             nienKhoaId,
             nganhId,
@@ -580,7 +581,11 @@ export class GiangDayService {
             .leftJoinAndSelect('nganh.khoa', 'khoa');
 
         if (monHocId) qb.andWhere('monHoc.id = :monHocId', { monHocId });
-        if (giangVienId) qb.andWhere('giangVien.id = :giangVienId', { giangVienId });
+        if (chuaCoGiangVien) {
+            qb.andWhere('giangVien.id IS NULL');
+        } else if (giangVienId) {
+            qb.andWhere('giangVien.id = :giangVienId', { giangVienId });
+        }
         if (hocKyId) qb.andWhere('hocKy.id = :hocKyId', { hocKyId });
         if (nienKhoaId) qb.andWhere('nienKhoa.id = :nienKhoaId', { nienKhoaId });
         if (nganhId) qb.andWhere('nganh.id = :nganhId', { nganhId });

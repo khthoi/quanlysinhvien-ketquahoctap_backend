@@ -1,4 +1,4 @@
-import { IsOptional, IsInt, IsString, IsIn } from 'class-validator';
+import { IsOptional, IsInt, IsString, IsIn, IsBoolean } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -14,6 +14,12 @@ export class GetLopHocPhanQueryDto {
   @Transform(({ value }) => parseInt(value, 10))
   @IsInt()
   giangVienId?: number;
+
+  @ApiPropertyOptional({ description: 'Lọc LHP chưa có giảng viên phụ trách', example: true })
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true || value === '1')
+  @IsBoolean()
+  chuaCoGiangVien?: boolean;
 
   @ApiPropertyOptional({ description: 'ID học kỳ', example: 2 })
   @IsOptional()

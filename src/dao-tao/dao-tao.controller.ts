@@ -126,9 +126,26 @@ export class DaoTaoController {
     return this.daoTaoService.createHocKy(dto);
   }
 
-  @ApiOperation({ summary: 'Cập nhật học kỳ' })
+  @ApiOperation({ summary: 'Cập nhật học kỳ (chỉ ngày bắt đầu, ngày kết thúc)' })
   @ApiParam({ name: 'id', type: Number, description: 'ID học kỳ' })
-  @ApiBody({ type: UpdateHocKyDto })
+  @ApiBody({
+    type: UpdateHocKyDto,
+    description: 'Chỉ cho phép cập nhật ngày bắt đầu và/hoặc ngày kết thúc học kỳ',
+    examples: {
+      full: {
+        summary: 'Cập nhật cả hai ngày',
+        value: { ngayBatDau: '2025-09-01', ngayKetThuc: '2026-01-20' },
+      },
+      onlyStart: {
+        summary: 'Chỉ cập nhật ngày bắt đầu',
+        value: { ngayBatDau: '2025-09-05' },
+      },
+      onlyEnd: {
+        summary: 'Chỉ cập nhật ngày kết thúc',
+        value: { ngayKetThuc: '2026-01-25' },
+      },
+    },
+  })
   @ApiResponse({ status: 200, description: 'Học kỳ đã được cập nhật' })
   @Put('hoc-ky/:id')
   async updateHocKy(

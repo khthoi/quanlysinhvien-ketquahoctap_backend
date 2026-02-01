@@ -1354,7 +1354,7 @@ export class DanhMucService {
                     results.errors.push({
                         row: rowNum,
                         maMonHoc,
-                        error: error.message || 'Lỗi không xác định khi tạo môn học hoặc phân công giảng viên',
+                        error: error.message || 'Lỗi không xác định khi tạo môn học',
                     });
                 }
             }
