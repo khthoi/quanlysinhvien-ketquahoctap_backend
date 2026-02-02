@@ -47,7 +47,12 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import express from 'express';
-import { XetTotNghiepDto } from './dtos/xet-tot-nghiep.dto';
+import {
+  XetTotNghiepDto,
+  DuDoanXetTotNghiepResponseDto,
+  XacNhanXetTotNghiepResponseDto,
+  DanhSachTotNghiepResponseDto,
+} from './dtos/xet-tot-nghiep.dto';
 
 @ApiTags('Sinh viên')
 @ApiBearerAuth()
@@ -260,16 +265,79 @@ export class SinhVienController {
   //  return this.sinhVienService.updateMe(userId, dto);
   //}
 
+  /* ==================== XÉT TỐT NGHIỆP APIs ==================== */
+
   @ApiOperation({
-    summary: 'Xét tốt nghiệp theo niên khóa và ngành - Xuất file Excel',
-    description: `Xét tất cả sinh viên đang học (DANG_HOC) thuộc niên khóa và ngành. 
-Cập nhật trạng thái thành DA_TOT_NGHIEP cho những sinh viên đủ điều kiện.
-Trả về file Excel thống kê chi tiết kết quả xét tốt nghiệp.`,
+    summary: 'Dự đoán xét tốt nghiệp theo niên khóa (Preview)',
+    description: `Lấy danh sách tất cả sinh viên CHƯA tốt nghiệp trong niên khóa và đánh giá điều kiện tốt nghiệp của họ.
+KHÔNG thay đổi trạng thái sinh viên.
+Trả về JSON chứa:
+- Thống kê tổng quan (số đạt, không đạt, không đủ điều kiện)
+- Thống kê theo từng ngành
+- Danh sách chi tiết sinh viên với GPA, kết quả xét, xếp loại, lý do không đạt (nếu có)`,
   })
   @ApiBody({ type: XetTotNghiepDto })
   @ApiResponse({
     status: 200,
-    description: 'File Excel thống kê xét tốt nghiệp',
+    description: 'Thông tin dự đoán xét tốt nghiệp',
+    type: DuDoanXetTotNghiepResponseDto,
+  })
+  @Post('xet-tot-nghiep/du-doan')
+  @Roles(VaiTroNguoiDungEnum.ADMIN, VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  async duDoanXetTotNghiep(@Body() dto: XetTotNghiepDto) {
+    return this.sinhVienService.duDoanXetTotNghiep(dto.nienKhoaId);
+  }
+
+  @ApiOperation({
+    summary: 'Xác nhận xét tốt nghiệp theo niên khóa',
+    description: `Xét tốt nghiệp cho tất cả sinh viên đủ điều kiện trong niên khóa.
+CẬP NHẬT trạng thái sinh viên đạt thành DA_TOT_NGHIEP.
+Trả về JSON chứa:
+- Thống kê kết quả xét
+- Thống kê theo từng ngành
+- Danh sách sinh viên đã được cập nhật tình trạng tốt nghiệp`,
+  })
+  @ApiBody({ type: XetTotNghiepDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Kết quả xét tốt nghiệp',
+    type: XacNhanXetTotNghiepResponseDto,
+  })
+  @Post('xet-tot-nghiep/xac-nhan')
+  @Roles(VaiTroNguoiDungEnum.ADMIN, VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  async xacNhanXetTotNghiep(@Body() dto: XetTotNghiepDto) {
+    return this.sinhVienService.xacNhanXetTotNghiep(dto.nienKhoaId);
+  }
+
+  @ApiOperation({
+    summary: 'Lấy danh sách sinh viên đã tốt nghiệp theo niên khóa',
+    description: `Lấy danh sách tất cả sinh viên có trạng thái DA_TOT_NGHIEP trong niên khóa.
+Trả về JSON chứa:
+- Tổng số sinh viên tốt nghiệp
+- Thống kê theo từng ngành (số lượng, xếp loại)
+- Danh sách chi tiết sinh viên với thông tin cơ bản, GPA, xếp loại tốt nghiệp`,
+  })
+  @ApiBody({ type: XetTotNghiepDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách sinh viên đã tốt nghiệp',
+    type: DanhSachTotNghiepResponseDto,
+  })
+  @Post('xet-tot-nghiep/danh-sach')
+  @Roles(VaiTroNguoiDungEnum.ADMIN, VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  async getDanhSachTotNghiep(@Body() dto: XetTotNghiepDto) {
+    return this.sinhVienService.getDanhSachTotNghiep(dto.nienKhoaId);
+  }
+
+  @ApiOperation({
+    summary: 'Xuất Excel danh sách sinh viên đã tốt nghiệp theo niên khóa',
+    description: `Xuất file Excel danh sách sinh viên đã tốt nghiệp (DA_TOT_NGHIEP) trong niên khóa.
+KHÔNG có logic xét tốt nghiệp - chỉ xuất những sinh viên đã được xét tốt nghiệp trước đó.`,
+  })
+  @ApiBody({ type: XetTotNghiepDto })
+  @ApiResponse({
+    status: 200,
+    description: 'File Excel danh sách sinh viên tốt nghiệp',
     content: {
       'application/vnd.openxmlformats-officedocument. spreadsheetml.sheet': {
         schema: {
@@ -279,9 +347,9 @@ Trả về file Excel thống kê chi tiết kết quả xét tốt nghiệp.`,
       },
     },
   })
-  @Post('xet-tot-nghiep/thong-ke')
+  @Post('xet-tot-nghiep/xuat-excel')
   @Roles(VaiTroNguoiDungEnum.ADMIN, VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
-  async xetTotNghiepThongKe(
+  async xuatExcelTotNghiep(
     @Body() dto: XetTotNghiepDto,
     @Res() res: express.Response,
   ) {
@@ -289,7 +357,7 @@ Trả về file Excel thống kê chi tiết kết quả xét tốt nghiệp.`,
       dto.nienKhoaId,
     );
 
-    const fileName = `ThongKe_XetTotNghiep_${Date.now()}.xlsx`;
+    const fileName = `DanhSach_SinhVien_TotNghiep_${Date.now()}.xlsx`;
 
     res.setHeader(
       'Content-Type',

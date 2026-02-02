@@ -562,6 +562,27 @@ export class KetQuaService {
       success: 0,
       failed: 0,
       errors: [] as { row: number; maSinhVien: string; error: string }[],
+      successRows: [] as { row: number; maSinhVien: string; diemQuaTrinh: number; diemThanhPhan: number; diemThi: number }[],
+    };
+
+    // Helper function để parse điểm từ Excel (xử lý trường hợp "9.o", "9.e" -> 9)
+    const parseDiem = (value: any): number => {
+      if (value === null || value === undefined) return NaN;
+      
+      let strValue = value.toString().trim();
+      
+      // Xử lý trường hợp "9.o", "9.e", "9.O", "9.E" -> loại bỏ phần thập phân không hợp lệ
+      // Regex: số + dấu chấm + ký tự không phải số (o, e, O, E, ...)
+      const invalidDecimalMatch = strValue.match(/^(\d+)\.([a-zA-Z]+)$/);
+      if (invalidDecimalMatch) {
+        strValue = invalidDecimalMatch[1]; // Lấy phần số nguyên
+      }
+      
+      // Thay thế chữ "o" hoặc "O" thành số 0 nếu nằm trong phần thập phân hợp lệ
+      // Ví dụ: "9.o5" -> "9.05" (trường hợp người dùng gõ nhầm o thành 0)
+      strValue = strValue.replace(/([0-9])\.([oO])([0-9])/g, '$1.0$3');
+      
+      return parseFloat(strValue);
     };
 
     const rows = worksheet.getRows(2, worksheet.rowCount - 1) || [];
@@ -572,9 +593,9 @@ export class KetQuaService {
       const rowNum = row.number;
       const maSinhVien = row.getCell(2).value?.toString().trim(); // Cột 2: Mã sinh viên
 
-      const diemQuaTrinh = parseFloat(row.getCell(6).value?.toString() || 'NaN');
-      const diemThanhPhan = parseFloat(row.getCell(7).value?.toString() || 'NaN');
-      const diemThi = parseFloat(row.getCell(8).value?.toString() || 'NaN');
+      const diemQuaTrinh = parseDiem(row.getCell(6).value);
+      const diemThanhPhan = parseDiem(row.getCell(7).value);
+      const diemThi = parseDiem(row.getCell(8).value);
 
       if (!maSinhVien) {
         results.errors.push({ row: rowNum, maSinhVien: 'N/A', error: 'Thiếu mã sinh viên' });
@@ -610,6 +631,13 @@ export class KetQuaService {
         });
         await this.ketQuaRepo.save(ketQua);
         results.success++;
+        results.successRows.push({
+          row: rowNum,
+          maSinhVien,
+          diemQuaTrinh,
+          diemThanhPhan,
+          diemThi,
+        });
       } catch (error) {
         results.failed++;
         results.errors.push({

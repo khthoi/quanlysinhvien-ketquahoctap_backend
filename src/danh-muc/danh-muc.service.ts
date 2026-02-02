@@ -216,12 +216,14 @@ export class DanhMucService {
         success: number;
         failed: number;
         errors: { row: number; maNganh: string; error: string }[];
+        successRows: { row: number; maNganh: string; tenNganh: string }[];
     }> {
         const results = {
             totalRows: 0,
             success: 0,
             failed: 0,
             errors: [] as { row: number; maNganh: string; error: string }[],
+            successRows: [] as { row: number; maNganh: string; tenNganh: string }[],
         };
 
         try {
@@ -305,6 +307,11 @@ export class DanhMucService {
                     await this.createNganh(createDto);
 
                     results.success++;
+                    results.successRows.push({
+                        row: rowNum,
+                        maNganh,
+                        tenNganh,
+                    });
                 } catch (error) {
                     results.failed++;
                     results.errors.push({
@@ -321,6 +328,7 @@ export class DanhMucService {
                 success: results.success,
                 failed: results.failed,
                 errors: results.errors.length > 0 ? results.errors : [],
+                successRows: results.successRows,
             };
         } finally {
             // Xóa file tạm
@@ -679,12 +687,14 @@ export class DanhMucService {
         success: number;
         failed: number;
         errors: { row: number; maLop: string; error: string }[];
+        successRows: { row: number; maLop: string; tenLop: string }[];
     }> {
         const results = {
             totalRows: 0,
             success: 0,
             failed: 0,
             errors: [] as { row: number; maLop: string; error: string }[],
+            successRows: [] as { row: number; maLop: string; tenLop: string }[],
         };
 
         try {
@@ -759,6 +769,11 @@ export class DanhMucService {
                     await this.createLop(createLopDto);
 
                     results.success++;
+                    results.successRows.push({
+                        row: rowNum,
+                        maLop,
+                        tenLop,
+                    });
                 } catch (error) {
                     results.failed++;
                     results.errors.push({
@@ -775,6 +790,7 @@ export class DanhMucService {
                 success: results.success,
                 failed: results.failed,
                 errors: results.errors.length > 0 ? results.errors : [],
+                successRows: results.successRows,
             };
         } finally {
             // Xóa file tạm sau khi xử lý
@@ -1256,12 +1272,14 @@ export class DanhMucService {
         success: number;
         failed: number;
         errors: { row: number; maMonHoc: string; error: string }[];
+        successRows: { row: number; maMonHoc: string; tenMonHoc: string }[];
     }> {
         const results = {
             totalRows: 0,
             success: 0,
             failed: 0,
             errors: [] as { row: number; maMonHoc: string; error: string }[],
+            successRows: [] as { row: number; maMonHoc: string; tenMonHoc: string }[],
         };
 
         try {
@@ -1349,6 +1367,11 @@ export class DanhMucService {
                     await this.createMonHoc(createDto);
 
                     results.success++;
+                    results.successRows.push({
+                        row: rowNum,
+                        maMonHoc,
+                        tenMonHoc,
+                    });
                 } catch (error) {
                     results.failed++;
                     results.errors.push({
@@ -1365,6 +1388,7 @@ export class DanhMucService {
                 success: results.success,
                 failed: results.failed,
                 errors: results.errors.length > 0 ? results.errors : [],
+                successRows: results.successRows,
             };
         } finally {
             // Xóa file tạm
