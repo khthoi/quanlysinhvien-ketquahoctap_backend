@@ -239,9 +239,6 @@ export class ThongTinSinhVienTruotMonResponseDto {
     @ApiProperty({ description: 'Tổng số sinh viên trượt môn trong học kỳ này' })
     tongSinhVienTruot: number;
 
-    @ApiProperty({ description: 'Số sinh viên đã/đang học lại' })
-    soSinhVienDaHocLai: number;
-
     @ApiProperty({ description: 'Số sinh viên chưa học lại (cần đề xuất)' })
     soSinhVienChuaHocLai: number;
 

@@ -3136,7 +3136,6 @@ export class BaoCaoService {
         }
 
         // 8. Tính thống kê
-        const soSinhVienDaHocLai = danhSachSinhVienTruot.filter(sv => sv.daHocLai).length;
         const soSinhVienChuaHocLai = danhSachSinhVienTruot.filter(sv => !sv.daHocLai).length;
 
         return {
@@ -3144,7 +3143,6 @@ export class BaoCaoService {
             hocKy,
             tenNamHoc: namHoc.tenNamHoc,
             tongSinhVienTruot: danhSachSinhVienTruot.length,
-            soSinhVienDaHocLai,
             soSinhVienChuaHocLai,
             danhSachSinhVienTruot,
             danhSachSinhVienDaHocLai,
