@@ -1135,9 +1135,11 @@ export class SinhVienService {
 
     /**
      * Tính điểm TBCHP (Trung bình cộng học phần) theo hệ 10
+     * Làm tròn đến 2 chữ số thập phân
      */
     private tinhDiemTBCHP(kq: KetQuaHocTap): number {
-        return kq.diemQuaTrinh * 0.1 + kq.diemThanhPhan * 0.3 + kq.diemThi * 0.6;
+        const tbchp = kq.diemQuaTrinh * 0.1 + kq.diemThanhPhan * 0.3 + kq.diemThi * 0.6;
+        return Math.round(tbchp * 100) / 100; // Làm tròn đến 2 chữ số thập phân
     }
 
     /**

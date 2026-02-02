@@ -32,7 +32,7 @@ import {
 } from './dtos/query-bao-cao.dto';
 import { DanhSachSinhVienReportDto } from './dtos/danh-sach-sinh-vien.dto';
 import { ThongKeTongQuanResponseDto } from './dtos/thong-ke-tong-quan.dto';
-import { DeXuatHocLaiDto, DeXuatHocLaiResponseDto } from './dtos/de-xuat-hoc-lai.dto';
+import { DeXuatHocLaiDto, DeXuatHocLaiResponseDto, ThongTinSinhVienTruotMonResponseDto } from './dtos/de-xuat-hoc-lai.dto';
 import { VaiTroNguoiDungEnum } from 'src/auth/enums/vai-tro-nguoi-dung.enum';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
@@ -381,5 +381,26 @@ Tự động tìm các lớp học phần cùng môn học, cùng ngành ở ni�
     @Body() body: DeXuatHocLaiDto,
   ): Promise<DeXuatHocLaiResponseDto> {
     return this.baoCaoService.getDeXuatHocLaiJson(body.maNamHoc, body.hocKy);
+  }
+
+  @ApiOperation({
+    summary: 'Lấy thông tin sinh viên trượt môn và lịch sử học lại (JSON)',
+    description:
+      'Trả về dữ liệu JSON gồm danh sách sinh viên trượt môn trong học kỳ và năm học được chọn, ' +
+      'kèm theo thông tin chi tiết về lớp học phần, kết quả học tập, và lịch sử học lại của từng sinh viên. ' +
+      'API này tập trung vào thống kê và không đề xuất lớp học phần.',
+  })
+  @ApiBody({ type: DeXuatHocLaiDto })
+  @ApiResponse({ status: 200, type: ThongTinSinhVienTruotMonResponseDto })
+  @ApiResponse({ status: 400, description: 'Dữ liệu không hợp lệ hoặc không có lớp học phần' })
+  @ApiResponse({ status: 404, description: 'Năm học hoặc học kỳ không tồn tại' })
+  @ApiResponse({ status: 500, description: 'Lỗi server' })
+  @Post('thong-tin-sinh-vien-truot-mon')
+  @UseGuards(JwtAuthGuard)
+  @Roles(VaiTroNguoiDungEnum.ADMIN, VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  async getThongTinSinhVienTruotMon(
+    @Body() body: DeXuatHocLaiDto,
+  ): Promise<ThongTinSinhVienTruotMonResponseDto> {
+    return this.baoCaoService.getThongTinSinhVienTruotMon(body.maNamHoc, body.hocKy);
   }
 }
