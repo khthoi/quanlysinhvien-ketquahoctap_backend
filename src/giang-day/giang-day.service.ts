@@ -568,6 +568,7 @@ export class GiangDayService {
             nienKhoaId,
             nganhId,
             trangThai, // ← Lấy từ query
+            khoaDiem, // ← Lấy từ query
         } = query;
 
         const qb = this.lopHocPhanRepo
@@ -591,6 +592,10 @@ export class GiangDayService {
         if (nganhId) qb.andWhere('nganh.id = :nganhId', { nganhId });
         if (search) {
             qb.andWhere('LOWER(lhp.maLopHocPhan) LIKE LOWER(:search)', { search: `%${search}%` });
+        }
+        // Lọc theo khóa điểm nếu có truyền
+        if (khoaDiem !== undefined) {
+            qb.andWhere('lhp.khoaDiem = :khoaDiem', { khoaDiem });
         }
 
         qb.orderBy('namHoc.namBatDau', 'DESC')
@@ -1296,6 +1301,7 @@ export class GiangDayService {
             nganhId,
             nienKhoaId,
             trangThai,
+            khoaDiem, // ← Thêm tham số khoaDiem
             search, // ← Thêm tham số search
         } = query;
 
@@ -1327,6 +1333,11 @@ export class GiangDayService {
         if (monHocId) qb.andWhere('lhp.mon_hoc_id = :monHocId', { monHocId });
         if (nganhId) qb.andWhere('lhp.nganh_id = :nganhId', { nganhId });
         if (nienKhoaId) qb.andWhere('lhp.nien_khoa_id = :nienKhoaId', { nienKhoaId });
+
+        // ← THÊM LOGIC LỌC THEO KHÓA ĐIỂM
+        if (khoaDiem !== undefined) {
+            qb.andWhere('lhp.khoaDiem = :khoaDiem', { khoaDiem });
+        }
 
         // ← THÊM LOGIC TÌM KIẾM THEO MÃ LỚP HỌC PHẦN
         if (search) {

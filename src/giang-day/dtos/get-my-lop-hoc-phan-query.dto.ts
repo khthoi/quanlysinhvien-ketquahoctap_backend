@@ -1,4 +1,4 @@
-import { IsOptional, IsInt, Min, IsIn } from 'class-validator';
+import { IsOptional, IsInt, Min, IsIn, IsBoolean } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -50,4 +50,11 @@ export class GetMyLopHocPhanQueryDto {
   @IsOptional()
   @IsIn(['DANG_HOC', 'DA_KET_THUC', 'CHUA_BAT_DAU'])
   trangThai?: 'DANG_HOC' | 'DA_KET_THUC' | 'CHUA_BAT_DAU';
+
+  // ← THÊM LỌC THEO KHÓA ĐIỂM
+  @ApiPropertyOptional({ description: 'Lọc theo trạng thái khóa điểm', example: 'true' })
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  khoaDiem?: boolean;
 }
