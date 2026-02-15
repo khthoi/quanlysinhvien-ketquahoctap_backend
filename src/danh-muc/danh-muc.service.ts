@@ -1686,7 +1686,9 @@ Chọn mã môn từ danh sách dropdown.
             );
         }
 
-        qb.orderBy('gv.hoTen', 'ASC');
+        // Sort theo tên (chữ cuối): dùng addSelect + orderBy alias để tránh TypeORM parse nhầm
+        qb.addSelect("SUBSTRING_INDEX(gv.ho_ten, ' ', -1)", 'tenCuoi')
+            .orderBy('tenCuoi', 'ASC');
 
         // ---- Xử lý phân trang ----
         let normalizedPage = Number(page) || 1;
@@ -1700,19 +1702,21 @@ Chọn mã môn từ danh sách dropdown.
 
         const items = await qb.getMany();
 
-        // Transform data: thêm trường nguoiDung (hoặc null) vào mỗi giảng viên
-        const transformedData = items.map(gv => ({
-            ...gv,
-            nguoiDung: gv.nguoiDung
-                ? {
-                    id: gv.nguoiDung.id,
-                    tenDangNhap: gv.nguoiDung.tenDangNhap,
-                    vaiTro: gv.nguoiDung.vaiTro,
-                    ngayTao: gv.nguoiDung.ngayTao,
-                    // Thêm các trường khác nếu cần, nhưng tránh lộ thông tin nhạy cảm như matKhau
-                }
-                : null,
-        }));
+        // Transform: nguoiDung (hoặc null), bỏ cột phụ tenCuoi (dùng để sort)
+        const transformedData = items.map(gv => {
+            const { tenCuoi, ...rest } = gv as typeof gv & { tenCuoi?: string };
+            return {
+                ...rest,
+                nguoiDung: gv.nguoiDung
+                    ? {
+                        id: gv.nguoiDung.id,
+                        tenDangNhap: gv.nguoiDung.tenDangNhap,
+                        vaiTro: gv.nguoiDung.vaiTro,
+                        ngayTao: gv.nguoiDung.ngayTao,
+                    }
+                    : null,
+            };
+        });
 
         return {
             data: transformedData,

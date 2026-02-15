@@ -36,5 +36,6 @@ import { NguoiDung } from 'src/auth/entity/nguoi-dung.entity';
   ],
   controllers: [BaoCaoController],
   providers: [BaoCaoService],
+  exports: [BaoCaoService],
 })
 export class BaoCaoModule {}

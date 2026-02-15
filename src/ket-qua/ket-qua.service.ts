@@ -17,6 +17,8 @@ import { SinhVien } from 'src/sinh-vien/entity/sinh-vien.entity';
 import * as ExcelJS from 'exceljs';
 import * as fs from 'fs';
 import { KhenThuongKyLuat } from 'src/sinh-vien/entity/khenthuong-kyluat.entity';
+import { TinhTrangHocTapEnum } from 'src/sinh-vien/enums/tinh-trang-hoc-tap.enum';
+import { KetQuaSinhVienResponseDto } from './dtos/ket-qua-sinh-vien.dto';
 
 @Injectable()
 export class KetQuaService {
@@ -31,6 +33,8 @@ export class KetQuaService {
     private nguoiDungRepo: Repository<NguoiDung>,
     @InjectRepository(KhenThuongKyLuat)
     private khenThuongKyLuatRepo: Repository<KhenThuongKyLuat>,
+    @InjectRepository(SinhVien)
+    private sinhVienRepo: Repository<SinhVien>,
   ) { }
 
   // Tính điểm trung bình cộng học phần (thang 10)
@@ -366,7 +370,7 @@ export class KetQuaService {
       },
     };
   }
-  async getKetQuaCuaToi(userId: number) {
+  async getKetQuaCuaToi(userId: number): Promise<KetQuaSinhVienResponseDto> {
     // Lấy sinh viên từ userId
     const nguoiDung = await this.nguoiDungRepo.findOne({
       where: { id: userId },
@@ -378,13 +382,22 @@ export class KetQuaService {
 
     const sinhVienId = nguoiDung.sinhVien.id;
 
-    // Lấy tất cả kết quả của sinh viên
-    const ketQua = await this.ketQuaRepo.find({
+    // 1. Thông tin sinh viên
+    const sv = await this.sinhVienRepo.findOne({
+      where: { id: sinhVienId },
+      relations: ['lop', 'lop.nganh', 'lop.nienKhoa'],
+    });
+
+    if (!sv) {
+      throw new NotFoundException('Sinh viên không tồn tại');
+    }
+
+    // 2. Lấy tất cả kết quả học tập của sinh viên
+    const ketQuaAll = await this.ketQuaRepo.find({
       where: { sinhVien: { id: sinhVienId } },
       relations: [
         'lopHocPhan',
         'lopHocPhan.monHoc',
-        'lopHocPhan.giangVien',
         'lopHocPhan.hocKy',
         'lopHocPhan.hocKy.namHoc',
         'lopHocPhan.nienKhoa',
@@ -392,97 +405,329 @@ export class KetQuaService {
       ],
     });
 
-    // ===== LỌC CHỈ LẤY KẾT QUẢ TỪ LỚP HỌC PHẦN ĐÃ KHÓA ĐIỂM =====
-    const ketQuaDaKhoaDiem = ketQua.filter(kq => kq.lopHocPhan.khoaDiem === true);
+    // Lọc chỉ lấy các lớp học phần đã khóa điểm
+    const ketQua = ketQuaAll.filter(kq => kq.lopHocPhan.khoaDiem === true);
 
-    // Lấy thông tin khen thưởng kỷ luật của sinh viên
-    const khenThuongKyLuats = await this.khenThuongKyLuatRepo.find({
-      where: { sinhVien: { id: sinhVienId } },
-    });
+    // 3. Nhóm kết quả theo môn học để trả ra cho frontend
+    const ketQuaTheoMonMap = new Map<
+      number,
+      {
+        monHocId: number;
+        maMonHoc: string;
+        tenMonHoc: string;
+        soTinChi: number | null;
+        loaiMonHoc: string;
+        lopHocPhans: {
+          lopHocPhanId: number;
+          maLopHocPhan: string;
+          khoaDiem: boolean;
+          hocKy: number;
+          maNamHoc: string;
+          tenNamHoc: string;
+          ngayBatDau: Date;
+          ngayKetThuc: Date;
+          diemQuaTrinh: number | null;
+          diemThanhPhan: number | null;
+          diemThi: number | null;
+          tbchp: number | null;
+          diemHe4: number | null;
+          diemChu: string | null;
+        }[];
+      }
+    >();
 
-    // ===== NHÓM KẾT QUẢ THEO MÔN HỌC ĐỂ TÍNH GPA =====
-    const ketQuaTheoMon = new Map<number, { monHocId: number; diemTBCHPList: number[] }>();
+    for (const kq of ketQua) {
+      const lhp = kq.lopHocPhan;
+      const mon = lhp.monHoc;
+      const hk = lhp.hocKy;
+      const namHoc = hk?.namHoc;
 
-    for (const kq of ketQuaDaKhoaDiem) {
+      if (!mon || !hk || !namHoc) continue;
+
+      const monHocId = mon.id;
+      if (!ketQuaTheoMonMap.has(monHocId)) {
+        ketQuaTheoMonMap.set(monHocId, {
+          monHocId,
+          maMonHoc: mon.maMonHoc,
+          tenMonHoc: mon.tenMonHoc,
+          soTinChi: mon.soTinChi ?? null,
+          loaiMonHoc: mon.loaiMon,
+          lopHocPhans: [],
+        });
+      }
+
+      const tbchp = this.tinhTBCHP(kq);
+      const diemHe4 = tbchp !== null ? this.tinhDiemSo(tbchp) : null;
+      const diemChu = tbchp !== null ? this.tinhDiemChu(tbchp) : null;
+
+      ketQuaTheoMonMap.get(monHocId)!.lopHocPhans.push({
+        lopHocPhanId: lhp.id,
+        maLopHocPhan: lhp.maLopHocPhan,
+        khoaDiem: lhp.khoaDiem,
+        hocKy: hk.hocKy,
+        maNamHoc: namHoc.maNamHoc,
+        tenNamHoc: namHoc.tenNamHoc,
+        ngayBatDau: hk.ngayBatDau ?? new Date(),
+        ngayKetThuc: hk.ngayKetThuc ?? new Date(),
+        diemQuaTrinh: kq.diemQuaTrinh,
+        diemThanhPhan: kq.diemThanhPhan,
+        diemThi: kq.diemThi,
+        tbchp,
+        diemHe4,
+        diemChu,
+      });
+    }
+
+    // 4. Tính GPA (hệ 4) dựa trên điểm cao nhất của mỗi môn
+    const ketQuaTheoMonGpa = new Map<number, { monHocId: number; diemTBCHPList: number[] }>();
+
+    for (const kq of ketQua) {
       const monHocId = kq.lopHocPhan.monHoc.id;
       const tbchp = this.tinhTBCHP(kq);
 
-      if (!ketQuaTheoMon.has(monHocId)) {
-        ketQuaTheoMon.set(monHocId, {
+      if (!ketQuaTheoMonGpa.has(monHocId)) {
+        ketQuaTheoMonGpa.set(monHocId, {
           monHocId,
           diemTBCHPList: [],
         });
       }
 
       if (tbchp !== null) {
-        ketQuaTheoMon.get(monHocId)!.diemTBCHPList.push(tbchp);
+        ketQuaTheoMonGpa.get(monHocId)!.diemTBCHPList.push(tbchp);
       }
     }
 
-    // ===== TÍNH GPA HỆ 4 =====
-    // Lấy điểm TBCHP cao nhất của mỗi môn, quy đổi sang hệ 4, rồi tính trung bình
     let tongDiemHe4 = 0;
+    let tongDiemHe10 = 0;
     let soMonDuocXet = 0;
 
-    for (const [monHocId, data] of ketQuaTheoMon) {
+    for (const [, data] of ketQuaTheoMonGpa) {
       if (data.diemTBCHPList.length > 0) {
-        // Lấy điểm TBCHP cao nhất của môn này
         const diemCaoNhat = Math.max(...data.diemTBCHPList);
         const diemHe4 = this.diemHe10ToHe4(diemCaoNhat);
 
         tongDiemHe4 += diemHe4;
+        tongDiemHe10 += diemCaoNhat;
         soMonDuocXet++;
       }
     }
 
     const gpa = soMonDuocXet > 0 ? tongDiemHe4 / soMonDuocXet : null;
+    const tbchpHe10 = soMonDuocXet > 0 ? tongDiemHe10 / soMonDuocXet : null;
     const xepLoaiHocLuc = gpa !== null ? this.xepLoaiHocLuc(gpa) : null;
 
-    // Map kết quả học tập (chỉ lấy kết quả đã khóa điểm)
-    const mappedKetQua = ketQuaDaKhoaDiem.map(kq => {
+    // 5. Kết quả xét tốt nghiệp (chỉ trả nếu sinh viên đã tốt nghiệp)
+    let ketQuaXetTotNghiep: { gpa: number | null; xepLoaiTotNghiep: string | null } | null = null;
+
+    if (sv.tinhTrang === TinhTrangHocTapEnum.DA_TOT_NGHIEP && gpa !== null) {
+      ketQuaXetTotNghiep = {
+        gpa: Number(gpa.toFixed(2)),
+        xepLoaiTotNghiep: this.xepLoaiHocLuc(gpa),
+      };
+    }
+
+    // 6. Thông tin sinh viên trả về
+    const sinhVienInfo = {
+      id: sv.id,
+      maSinhVien: sv.maSinhVien,
+      hoTen: sv.hoTen,
+      ngaySinh: sv.ngaySinh ?? null,
+      gioiTinh: (sv as any).gioiTinh ?? null,
+      tinhTrang: sv.tinhTrang,
+      maLop: sv.lop?.maLop ?? null,
+      tenLop: sv.lop?.tenLop ?? null,
+      maNganh: sv.lop?.nganh?.maNganh ?? null,
+      tenNganh: sv.lop?.nganh?.tenNganh ?? null,
+      maNienKhoa: sv.lop?.nienKhoa?.maNienKhoa ?? null,
+      tenNienKhoa: sv.lop?.nienKhoa?.tenNienKhoa ?? null,
+    };
+
+    return {
+      sinhVien: sinhVienInfo,
+      ketQuaTheoMon: Array.from(ketQuaTheoMonMap.values()),
+      tbchpHe10: tbchpHe10 !== null ? Number(tbchpHe10.toFixed(2)) : null,
+      gpa: gpa !== null ? Number(gpa.toFixed(2)) : null,
+      xepLoaiHocLuc,
+      ketQuaXetTotNghiep,
+    };
+  }
+
+  /**
+   * LẤY KẾT QUẢ HỌC TẬP CỦA MỘT SINH VIÊN THEO ID
+   * - Chỉ lấy các lớp học phần đã khóa điểm (khoaDiem === true)
+   * - Nhóm kết quả theo môn học
+   * - Trong mỗi môn: liệt kê các lớp học phần đã khóa điểm và điểm số
+   * - Tính GPA (hệ 4) dựa trên điểm cao nhất của mỗi môn
+   * - Nếu sinh viên có tình trạng ĐÃ TỐT NGHIỆP → trả thêm kết quả xét tốt nghiệp, ngược lại null
+   */
+  async getKetQuaSinhVien(sinhVienId: number): Promise<KetQuaSinhVienResponseDto> {
+    // 1. Thông tin sinh viên
+    const sv = await this.sinhVienRepo.findOne({
+      where: { id: sinhVienId },
+      relations: ['lop', 'lop.nganh', 'lop.nienKhoa'],
+    });
+
+    if (!sv) {
+      throw new NotFoundException('Sinh viên không tồn tại');
+    }
+
+    // 2. Lấy tất cả kết quả học tập của sinh viên
+    const ketQuaAll = await this.ketQuaRepo.find({
+      where: { sinhVien: { id: sinhVienId } },
+      relations: [
+        'lopHocPhan',
+        'lopHocPhan.monHoc',
+        'lopHocPhan.hocKy',
+        'lopHocPhan.hocKy.namHoc',
+        'lopHocPhan.nienKhoa',
+        'lopHocPhan.nganh',
+      ],
+    });
+
+    // Lọc chỉ lấy các lớp học phần đã khóa điểm
+    const ketQua = ketQuaAll.filter(kq => kq.lopHocPhan.khoaDiem === true);
+
+    // 3. Nhóm kết quả theo môn học để trả ra cho frontend
+    const ketQuaTheoMonMap = new Map<
+      number,
+      {
+        monHocId: number;
+        maMonHoc: string;
+        tenMonHoc: string;
+        soTinChi: number | null;
+        loaiMonHoc: string;
+        lopHocPhans: {
+          lopHocPhanId: number;
+          maLopHocPhan: string;
+          khoaDiem: boolean;
+          hocKy: number;
+          maNamHoc: string;
+          tenNamHoc: string;
+          ngayBatDau: Date;
+          ngayKetThuc: Date;
+          diemQuaTrinh: number | null;
+          diemThanhPhan: number | null;
+          diemThi: number | null;
+          tbchp: number | null;
+          diemHe4: number | null;
+          diemChu: string | null;
+        }[];
+      }
+    >();
+
+    for (const kq of ketQua) {
+      const lhp = kq.lopHocPhan;
+      const mon = lhp.monHoc;
+      const hk = lhp.hocKy;
+      const namHoc = hk?.namHoc;
+
+      if (!mon || !hk || !namHoc) continue;
+
+      const monHocId = mon.id;
+      if (!ketQuaTheoMonMap.has(monHocId)) {
+        ketQuaTheoMonMap.set(monHocId, {
+          monHocId,
+          maMonHoc: mon.maMonHoc,
+          tenMonHoc: mon.tenMonHoc,
+          soTinChi: mon.soTinChi ?? null,
+          loaiMonHoc: mon.loaiMon,
+          lopHocPhans: [],
+        });
+      }
+
       const tbchp = this.tinhTBCHP(kq);
-      return {
-        id: kq.id,
-        lopHocPhan: {
-          maLopHocPhan: kq.lopHocPhan.maLopHocPhan,
-          monHoc: kq.lopHocPhan.monHoc,
-          giangVien: kq.lopHocPhan.giangVien
-            ? {
-              id: kq.lopHocPhan.giangVien.id,
-              hoTen: kq.lopHocPhan.giangVien.hoTen,
-            }
-            : null,
-          hocKy: kq.lopHocPhan.hocKy,
-          namHoc: kq.lopHocPhan.hocKy.namHoc,
-          nienKhoa: kq.lopHocPhan.nienKhoa,
-          nganh: kq.lopHocPhan.nganh,
-        },
+      const diemHe4 = tbchp !== null ? this.tinhDiemSo(tbchp) : null;
+      const diemChu = tbchp !== null ? this.tinhDiemChu(tbchp) : null;
+
+      ketQuaTheoMonMap.get(monHocId)!.lopHocPhans.push({
+        lopHocPhanId: lhp.id,
+        maLopHocPhan: lhp.maLopHocPhan,
+        khoaDiem: lhp.khoaDiem,
+        hocKy: hk.hocKy,
+        maNamHoc: namHoc.maNamHoc,
+        tenNamHoc: namHoc.tenNamHoc,
+        ngayBatDau: hk.ngayBatDau ?? new Date(),
+        ngayKetThuc: hk.ngayKetThuc ?? new Date(),
         diemQuaTrinh: kq.diemQuaTrinh,
         diemThanhPhan: kq.diemThanhPhan,
         diemThi: kq.diemThi,
-        TBCHP: tbchp,
-        DiemSo: this.tinhDiemSo(tbchp),
-        DiemChu: tbchp !== null ? this.tinhDiemChu(tbchp) : null,
-      };
-    });
+        tbchp,
+        diemHe4,
+        diemChu,
+      });
+    }
 
-    // Map khen thưởng kỷ luật (lấy các trường cần thiết)
-    const mappedKhenThuongKyLuat = khenThuongKyLuats.map(ktkl => ({
-      id: ktkl.id,
-      loai: ktkl.loai,
-      noiDung: ktkl.noiDung,
-      ngayQuyetDinh: ktkl.ngayQuyetDinh,
-    }));
+    // 4. Tính GPA (hệ 4) dựa trên điểm cao nhất của mỗi môn
+    const ketQuaTheoMonGpa = new Map<number, { monHocId: number; diemTBCHPList: number[] }>();
+
+    for (const kq of ketQua) {
+      const monHocId = kq.lopHocPhan.monHoc.id;
+      const tbchp = this.tinhTBCHP(kq);
+
+      if (!ketQuaTheoMonGpa.has(monHocId)) {
+        ketQuaTheoMonGpa.set(monHocId, {
+          monHocId,
+          diemTBCHPList: [],
+        });
+      }
+
+      if (tbchp !== null) {
+        ketQuaTheoMonGpa.get(monHocId)!.diemTBCHPList.push(tbchp);
+      }
+    }
+
+    let tongDiemHe4 = 0;
+    let tongDiemHe10 = 0;
+    let soMonDuocXet = 0;
+
+    for (const [, data] of ketQuaTheoMonGpa) {
+      if (data.diemTBCHPList.length > 0) {
+        const diemCaoNhat = Math.max(...data.diemTBCHPList);
+        const diemHe4 = this.diemHe10ToHe4(diemCaoNhat);
+
+        tongDiemHe4 += diemHe4;
+        tongDiemHe10 += diemCaoNhat;
+        soMonDuocXet++;
+      }
+    }
+
+    const gpa = soMonDuocXet > 0 ? tongDiemHe4 / soMonDuocXet : null;
+    const tbchpHe10 = soMonDuocXet > 0 ? tongDiemHe10 / soMonDuocXet : null;
+    const xepLoaiHocLuc = gpa !== null ? this.xepLoaiHocLuc(gpa) : null;
+
+    // 5. Kết quả xét tốt nghiệp (chỉ trả nếu sinh viên đã tốt nghiệp)
+    let ketQuaXetTotNghiep: { gpa: number | null; xepLoaiTotNghiep: string | null } | null = null;
+
+    if (sv.tinhTrang === TinhTrangHocTapEnum.DA_TOT_NGHIEP && gpa !== null) {
+      ketQuaXetTotNghiep = {
+        gpa: Number(gpa.toFixed(2)),
+        xepLoaiTotNghiep: this.xepLoaiHocLuc(gpa),
+      };
+    }
+
+    // 6. Thông tin sinh viên trả về
+    const sinhVienInfo = {
+      id: sv.id,
+      maSinhVien: sv.maSinhVien,
+      hoTen: sv.hoTen,
+      ngaySinh: sv.ngaySinh ?? null,
+      gioiTinh: (sv as any).gioiTinh ?? null,
+      tinhTrang: sv.tinhTrang,
+      maLop: sv.lop?.maLop ?? null,
+      tenLop: sv.lop?.tenLop ?? null,
+      maNganh: sv.lop?.nganh?.maNganh ?? null,
+      tenNganh: sv.lop?.nganh?.tenNganh ?? null,
+      maNienKhoa: sv.lop?.nienKhoa?.maNienKhoa ?? null,
+      tenNienKhoa: sv.lop?.nienKhoa?.tenNienKhoa ?? null,
+    };
 
     return {
-      ketQuaHocTap: mappedKetQua,
-      khenThuongKyLuat: mappedKhenThuongKyLuat,
-      thongKe: {
-        soMonHoanThanh: soMonDuocXet,
-        soKetQuaHocTap: ketQuaDaKhoaDiem.length,
-        gpa: gpa !== null ? Number(gpa.toFixed(2)) : null,
-        xepLoaiHocLuc,
-      },
+      sinhVien: sinhVienInfo,
+      ketQuaTheoMon: Array.from(ketQuaTheoMonMap.values()),
+      tbchpHe10: tbchpHe10 !== null ? Number(tbchpHe10.toFixed(2)) : null,
+      gpa: gpa !== null ? Number(gpa.toFixed(2)) : null,
+      xepLoaiHocLuc,
+      ketQuaXetTotNghiep,
     };
   }
 

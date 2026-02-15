@@ -47,6 +47,21 @@ import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { LenKeHoachTaoLhpDto } from './dtos/len-ke-hoach-tao-lhp.dto';
 import { ImportLopHocPhanJsonDto } from './dtos/import-lop-hoc-phan.dto';
+import { GetDanhSachYeuCauHocPhanResponseDto, GetDanhSachYeuCauHocPhanPaginatedResponseDto } from './dtos/get-danh-sach-yeu-cau-hoc-phan.dto';
+import {
+  DuyetYeuCauHocPhanDto,
+  TuChoiYeuCauHocPhanDto,
+  ChuyenTrangThaiDangXuLyDto,
+} from './dtos/xu-ly-yeu-cau-hoc-phan.dto';
+import { GetDanhSachYeuCauHocPhanQueryDto } from './dtos/get-danh-sach-yeu-cau-hoc-phan-query.dto';
+import {
+  GetDeXuatLopHocPhanChoHocLaiResponseDto,
+  TaoLopHocPhanChoHocLaiDto,
+} from './dtos/de-xuat-lop-hoc-phan-cho-hoc-lai.dto';
+import {
+  GetDeXuatLopHocPhanChoHocBoSungCaiThienResponseDto,
+  TaoLopHocPhanChoHocBoSungCaiThienDto,
+} from './dtos/de-xuat-lop-hoc-phan-cho-hoc-bo-sung-cai-thien.dto';
 
 @ApiTags('Giảng dạy')
 @ApiBearerAuth()
@@ -447,6 +462,210 @@ Hệ thống sẽ tự động:
     if (!file) throw new BadRequestException('Không có file được tải lên');
 
     return this.giangDayService.importLopHocPhanTuExcel(file.path);
+  }
+
+  /* ==================== ĐỀ XUẤT LỚP HỌC PHẦN CHO HỌC LẠI ==================== */
+
+  @ApiOperation({
+    summary: 'Lấy thông tin lớp học phần đề xuất cần tạo cho sinh viên trượt môn',
+    description:
+      'Lấy danh sách lớp học phần đề xuất cần tạo cho sinh viên trượt môn trong trường hợp không còn lớp học phần nào khả thi. ' +
+      'Hệ thống sẽ tự động: ' +
+      '1. Lấy tất cả sinh viên trượt môn trong năm học và học kỳ đó ' +
+      '2. Nhóm theo môn học ' +
+      '3. Sàng lọc sinh viên thực sự cần học lại (loại bỏ những người đã học lại thành công hoặc đang học lại) ' +
+      '4. Loại bỏ những sinh viên có lớp học phần khả thi có thể tham gia ' +
+      '5. Nhóm sinh viên theo ngành, niên khóa và tạo đề xuất lớp học phần (tối thiểu 1 sinh viên, tối đa 40 sinh viên mỗi lớp) ' +
+      '6. Phân công giảng viên dựa trên tải tín chỉ hiện tại',
+  })
+  @ApiParam({ name: 'ma-nam-hoc', required: true, type: String, description: 'Mã năm học (ví dụ: NH2023)' })
+  @ApiParam({ name: 'hocKy', required: true, type: Number, description: 'Học kỳ (ví dụ: 1)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách lớp học phần đề xuất cần tạo',
+    type: GetDeXuatLopHocPhanChoHocLaiResponseDto,
+  })
+  @Get('de-xuat-lop-hoc-phan-cho-hoc-lai/nam-hoc/:maNamHoc/hoc-ky/:hocKy')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  async getDeXuatLopHocPhanChoHocLai(
+    @Param('maNamHoc') maNamHoc: string,
+    @Param('hocKy', ParseIntPipe) hocKy: number,
+  ): Promise<GetDeXuatLopHocPhanChoHocLaiResponseDto> {
+    return this.giangDayService.getDeXuatLopHocPhanChoHocLai(maNamHoc, hocKy);
+  }
+
+  @ApiOperation({
+    summary: 'Tạo lớp học phần cho sinh viên trượt môn',
+    description:
+      'Tạo lớp học phần cho sinh viên trượt môn trong trường hợp không còn lớp học phần nào khả thi. ' +
+      'API này chỉ tạo lớp học phần, không tự động thêm sinh viên vào lớp (cần sử dụng chức năng riêng để thêm sinh viên). ' +
+      'Validation đầy đủ: ' +
+      '1. Kiểm tra môn học, ngành, niên khóa, học kỳ tồn tại ' +
+      '2. Kiểm tra giảng viên được phân công dạy môn này ' +
+      '3. Kiểm tra tải tín chỉ của giảng viên không vượt quá 12 tín chỉ ' +
+      '4. Kiểm tra mã lớp học phần chưa tồn tại',
+  })
+  @ApiBody({ type: TaoLopHocPhanChoHocLaiDto })
+  @ApiResponse({
+    status: 201,
+    description: 'Lớp học phần đã được tạo thành công',
+  })
+  @Post('tao-lop-hoc-phan-cho-hoc-lai')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  @HttpCode(HttpStatus.CREATED)
+  async taoLopHocPhanChoHocLai(
+    @Body() dto: TaoLopHocPhanChoHocLaiDto,
+  ) {
+    return this.giangDayService.taoLopHocPhanChoHocLai(dto);
+  }
+
+  /* ==================== ĐỀ XUẤT LỚP HỌC PHẦN CHO HỌC BỔ SUNG VÀ HỌC CẢI THIỆN ==================== */
+
+  @ApiOperation({
+    summary: 'Lấy thông tin lớp học phần đề xuất cần tạo cho sinh viên học bổ sung và học cải thiện',
+    description:
+      'Lấy danh sách lớp học phần đề xuất cần tạo cho sinh viên học bổ sung và học cải thiện trong trường hợp không có lớp học phần nào phù hợp để học ghép. ' +
+      'Hệ thống sẽ tự động: ' +
+      '1. Lấy tất cả yêu cầu học phần có trạng thái DANG_XU_LY ' +
+      '2. Lọc ra những yêu cầu không có lớp học phần đề xuất (lopHocPhanDeXuat: []) ' +
+      '3. Nhóm theo môn học ' +
+      '4. Với mỗi môn học, lấy tối đa 40 sinh viên (nếu có dưới 40 thì lấy hết, còn trên 40 thì lấy 40) ' +
+      '5. Nhóm sinh viên theo ngành, niên khóa và tạo đề xuất lớp học phần (tối đa 40 sinh viên mỗi lớp) ' +
+      '6. Sử dụng học kỳ mới nhất (học kỳ lớn nhất của năm học có năm bắt đầu lớn nhất) ' +
+      '7. Phân công giảng viên dựa trên tải tín chỉ hiện tại',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách lớp học phần đề xuất cần tạo',
+    type: GetDeXuatLopHocPhanChoHocBoSungCaiThienResponseDto,
+  })
+  @Get('de-xuat-lop-hoc-phan-cho-hoc-bo-sung-cai-thien')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  async getDeXuatLopHocPhanChoHocBoSungCaiThien(): Promise<GetDeXuatLopHocPhanChoHocBoSungCaiThienResponseDto> {
+    return this.giangDayService.getDeXuatLopHocPhanChoHocBoSungCaiThien();
+  }
+
+  @ApiOperation({
+    summary: 'Tạo lớp học phần cho sinh viên học bổ sung và học cải thiện',
+    description:
+      'Tạo lớp học phần cho sinh viên học bổ sung và học cải thiện trong trường hợp không còn lớp học phần nào khả thi. ' +
+      'API này chỉ tạo lớp học phần, không tự động thêm sinh viên vào lớp (cần sử dụng chức năng riêng để thêm sinh viên). ' +
+      'Validation đầy đủ: ' +
+      '1. Kiểm tra môn học, ngành, niên khóa, học kỳ tồn tại ' +
+      '2. Kiểm tra giảng viên được phân công dạy môn này ' +
+      '3. Kiểm tra tải tín chỉ của giảng viên không vượt quá 12 tín chỉ ' +
+      '4. Kiểm tra mã lớp học phần chưa tồn tại',
+  })
+  @ApiBody({ type: TaoLopHocPhanChoHocBoSungCaiThienDto })
+  @ApiResponse({
+    status: 201,
+    description: 'Lớp học phần đã được tạo thành công',
+  })
+  @Post('tao-lop-hoc-phan-cho-hoc-bo-sung-cai-thien')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  @HttpCode(HttpStatus.CREATED)
+  async taoLopHocPhanChoHocBoSungCaiThien(
+    @Body() dto: TaoLopHocPhanChoHocBoSungCaiThienDto,
+  ) {
+    return this.giangDayService.taoLopHocPhanChoHocBoSungCaiThien(dto);
+  }
+
+  /* ==================== YÊU CẦU HỌC PHẦN ==================== */
+
+  @ApiOperation({
+    summary: 'Lấy danh sách tất cả yêu cầu học phần (có phân trang, bộ lọc và tìm kiếm)',
+    description:
+      'Lấy danh sách tất cả yêu cầu học phần, chia thành 5 loại: chờ duyệt, đang xử lý, đã duyệt, từ chối, đã hủy. ' +
+      'Đối với yêu cầu chờ duyệt và đang xử lý, hệ thống sẽ đề xuất lớp học phần tốt nhất dựa trên các tiêu chí ưu tiên. ' +
+      'Hỗ trợ phân trang, lọc theo trạng thái, loại yêu cầu và tìm kiếm theo mã sinh viên hoặc tên sinh viên.',
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Trang số (mặc định: 1)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Số mục trên trang (mặc định: 10)' })
+  @ApiQuery({ name: 'trangThai', required: false, enum: ['CHO_DUYET', 'DANG_XU_LY', 'DA_DUYET', 'TU_CHOI', 'DA_HUY'], description: 'Lọc theo trạng thái' })
+  @ApiQuery({ name: 'loaiYeuCau', required: false, enum: ['HOC_CAI_THIEN', 'HOC_BO_SUNG'], description: 'Lọc theo loại yêu cầu' })
+  @ApiQuery({ name: 'search', required: false, type: String, description: 'Tìm kiếm theo mã sinh viên hoặc tên sinh viên' })
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách yêu cầu học phần',
+    type: GetDanhSachYeuCauHocPhanPaginatedResponseDto,
+  })
+  @Get('yeu-cau-hoc-phan')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  async getDanhSachYeuCauHocPhan(
+    @Query() query: GetDanhSachYeuCauHocPhanQueryDto,
+  ): Promise<GetDanhSachYeuCauHocPhanResponseDto | GetDanhSachYeuCauHocPhanPaginatedResponseDto> {
+    return this.giangDayService.getDanhSachYeuCauHocPhan(query);
+  }
+
+  @ApiOperation({
+    summary: 'Chuyển trạng thái yêu cầu sang DANG_XU_LY',
+    description: 'Chuyển trạng thái yêu cầu từ CHO_DUYET sang DANG_XU_LY để tránh xung đột khi xử lý',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Chuyển trạng thái thành công',
+  })
+  @Post('yeu-cau-hoc-phan/chuyen-trang-thai-dang-xu-ly')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  @HttpCode(HttpStatus.OK)
+  async chuyenTrangThaiDangXuLy(@Body() dto: ChuyenTrangThaiDangXuLyDto): Promise<void> {
+    return this.giangDayService.chuyenTrangThaiDangXuLy(dto.yeuCauId);
+  }
+
+  @ApiOperation({
+    summary: 'Duyệt yêu cầu học phần',
+    description: 'Duyệt yêu cầu học phần và gán sinh viên vào lớp học phần được duyệt',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Duyệt yêu cầu thành công',
+  })
+  @Post('yeu-cau-hoc-phan/duyet')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  @HttpCode(HttpStatus.OK)
+  async duyetYeuCauHocPhan(
+    @Body() dto: DuyetYeuCauHocPhanDto,
+    @GetUser('userId') userId: number,
+  ): Promise<void> {
+    return this.giangDayService.duyetYeuCauHocPhan(
+      dto.yeuCauId,
+      dto.lopHocPhanId,
+      userId,
+      dto.ghiChuPhongDaoTao,
+    );
+  }
+
+  @ApiOperation({
+    summary: 'Từ chối yêu cầu học phần',
+    description: 'Từ chối yêu cầu học phần của sinh viên',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Từ chối yêu cầu thành công',
+  })
+  @Post('yeu-cau-hoc-phan/tu-choi')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  @HttpCode(HttpStatus.OK)
+  async tuChoiYeuCauHocPhan(
+    @Body() dto: TuChoiYeuCauHocPhanDto,
+    @GetUser('userId') userId: number,
+  ): Promise<void> {
+    return this.giangDayService.tuChoiYeuCauHocPhan(dto.yeuCauId, userId, dto.ghiChuPhongDaoTao);
+  }
+
+  @ApiOperation({
+    summary: 'Xóa yêu cầu học phần',
+    description: 'Xóa yêu cầu học phần (chỉ có thể xóa yêu cầu có trạng thái DA_HUY)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Xóa yêu cầu thành công',
+  })
+  @Delete('yeu-cau-hoc-phan/:yeuCauId')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  @HttpCode(HttpStatus.OK)
+  async xoaYeuCauHocPhan(@Param('yeuCauId', ParseIntPipe) yeuCauId: number): Promise<void> {
+    return this.giangDayService.xoaYeuCauHocPhan(yeuCauId);
   }
 
 }

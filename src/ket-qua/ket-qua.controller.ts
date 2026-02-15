@@ -37,6 +37,7 @@ import { VaiTroNguoiDungEnum } from 'src/auth/enums/vai-tro-nguoi-dung.enum';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
+import { KetQuaSinhVienResponseDto } from './dtos/ket-qua-sinh-vien.dto';
 
 @ApiTags('Kết quả học tập')
 @ApiBearerAuth()
@@ -186,5 +187,28 @@ export class KetQuaController {
   @Roles(VaiTroNguoiDungEnum.SINH_VIEN)
   async getKetQuaCuaToi(@GetUser('userId') userId: number) {
     return this.ketQuaService.getKetQuaCuaToi(userId);
+  }
+
+  @ApiOperation({
+    summary: 'Lấy toàn bộ kết quả học tập của một sinh viên theo ID',
+    description:
+      'Trả về danh sách kết quả học tập được nhóm theo môn học, kèm GPA và (nếu đã tốt nghiệp) kết quả xét tốt nghiệp.',
+  })
+  @ApiParam({
+    name: 'sinh_vien_id',
+    type: Number,
+    description: 'ID của sinh viên',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Kết quả học tập chi tiết của sinh viên',
+    type: KetQuaSinhVienResponseDto,
+  })
+  @Get('sinh-vien/:sinh_vien_id')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  async getKetQuaSinhVien(
+    @Param('sinh_vien_id', ParseIntPipe) sinhVienId: number,
+  ) {
+    return this.ketQuaService.getKetQuaSinhVien(sinhVienId);
   }
 }

@@ -1250,11 +1250,6 @@ Công thức Excel tham khảo:
 
     const sinhVien = nguoiDung.sinhVien;
 
-    // Kiểm tra tình trạng học tập
-    if (sinhVien.tinhTrang !== TinhTrangHocTapEnum.DANG_HOC) {
-      throw new BadRequestException(`Sinh viên đang ở trạng thái ${sinhVien.tinhTrang}, không thể truy xuất chương trình đào tạo`);
-    }
-
     const nganhId = sinhVien.lop.nganh.id;
     const nienKhoaId = sinhVien.lop.nienKhoa.id;
 
@@ -1284,13 +1279,13 @@ Công thức Excel tham khảo:
     // 3. Lấy danh sách mã môn học trong CTDT
     const monHocIds = chuongTrinh.chiTietMonHocs.map(ct => ct.monHoc.id);
 
-    // 4. Lấy các lớp học phần liên quan (có thể đã học hoặc đang học)
+    // 4. Lấy các lớp học phần liên quan (chỉ cùng ngành và cùng niên khóa SV)
     // Chỉ lấy lớp thuộc các môn trong CTDT, cùng ngành, cùng niên khóa của SV
     const lopHocPhans = await this.lopHocPhanRepo.find({
       where: {
         monHoc: { id: In(monHocIds) },
         nganh: { id: nganhId },
-        nienKhoa: { id: nienKhoaId },
+        nienKhoa: { id: nienKhoaId }
       },
       relations: [
         'monHoc',
@@ -1311,7 +1306,9 @@ Công thức Excel tham khảo:
     // 5. Xác định lớp nào sinh viên đã đăng ký / đã học
     const lopDaDangKyIds = new Set(
       lopHocPhans
-        .filter(lhp => (lhp.sinhVienLopHocPhans ?? []).some(svlhp => svlhp.sinhVien.id === sinhVien.id))
+        .filter(lhp =>
+          (lhp.sinhVienLopHocPhans ?? []).some(svlhp => svlhp.sinhVien.id === sinhVien.id)
+        )
         .map(lhp => lhp.id)
     );
 

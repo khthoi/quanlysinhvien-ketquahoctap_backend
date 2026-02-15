@@ -53,6 +53,10 @@ import {
   XacNhanXetTotNghiepResponseDto,
   DanhSachTotNghiepResponseDto,
 } from './dtos/xet-tot-nghiep.dto';
+import { LoaiYeuCauHocPhanEnum } from 'src/giang-day/enums/yeu-cau-hoc-phan.enum';
+import { SuaYeuCauHocPhanDto } from './dtos/cap-nhat-yeu-cau-hoc-phan.dto';
+import { GetYeuCauDangKyQueryDto } from './dtos/get-yeu-cau-dang-ky-query.dto';
+import { GetYeuCauDangKyMeResponseDto, GetYeuCauDangKyResponseDto } from './dtos/get-yeu-cau-dang-ky-response.dto';
 
 @ApiTags('Sinh viên')
 @ApiBearerAuth()
@@ -154,6 +158,16 @@ export class SinhVienController {
     @Body() dto: UpdateSinhVienDto,
   ) {
     return this.sinhVienService.update(id, dto);
+  }
+
+  @ApiOperation({ summary: 'Xóa một sinh viên' })
+  @ApiParam({ name: 'id', type: Number, description: 'ID sinh viên' })
+  @ApiResponse({ status: 200, description: 'Xóa sinh viên và tài khoản thành công' })
+  @Delete(':id')
+  @Roles(VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
+  @HttpCode(HttpStatus.OK)
+  async remove(@Param('id', ParseIntPipe) id: number) {
+    return this.sinhVienService.remove(id);
   }
 
   @ApiOperation({ summary: 'Thay đổi tình trạng học tập của sinh viên (bảo lưu, nghỉ học, trở lại...)' })
@@ -387,5 +401,136 @@ KHÔNG có logic xét tốt nghiệp - chỉ xuất những sinh viên đã đư
     @Query() query: GetLichHocMeQueryDto,
   ) {
     return this.sinhVienService.getLichHocMe(userId, query);
+  }
+
+  /* ==================== YÊU CẦU ĐĂNG KÝ HỌC CẢI THIỆN / BỔ SUNG ==================== */
+
+  @ApiOperation({
+    summary: 'Sinh viên xem danh sách yêu cầu đăng ký của mình (có phân trang và bộ lọc)',
+    description: 'Lấy danh sách yêu cầu đăng ký học phần của sinh viên hiện tại (từ token) với phân trang, có thể lọc theo trạng thái và loại yêu cầu',
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number, description: 'Trang số (mặc định: 1)' })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Số mục trên trang (mặc định: 10)' })
+  @ApiQuery({ name: 'trangThai', required: false, enum: ['CHO_DUYET', 'DANG_XU_LY', 'DA_DUYET', 'TU_CHOI', 'DA_HUY'], description: 'Lọc theo trạng thái' })
+  @ApiQuery({ name: 'loaiYeuCau', required: false, enum: ['HOC_CAI_THIEN', 'HOC_BO_SUNG'], description: 'Lọc theo loại yêu cầu' })
+  @ApiResponse({
+    status: 200,
+    description: 'Danh sách yêu cầu đăng ký với phân trang',
+    type: GetYeuCauDangKyMeResponseDto,
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Tài khoản được liên kết với giảng viên hoặc không được liên kết với sinh viên nào',
+  })
+  @Get('yeu-cau-dang-ky/me')
+  @Roles(VaiTroNguoiDungEnum.SINH_VIEN)
+  async getYeuCauDangKyMe(
+    @GetUser('userId') userId: number,
+    @Query() query: GetYeuCauDangKyQueryDto,
+  ): Promise<GetYeuCauDangKyMeResponseDto> {
+    return this.sinhVienService.getYeuCauDangKyMe(userId, query);
+  }
+
+  @ApiOperation({
+    summary: 'Sinh viên gửi yêu cầu đăng ký học cải thiện / học bổ sung',
+    description:
+      'Sinh viên gửi yêu cầu đăng ký học cải thiện hoặc học bổ sung cho một môn học trong CTĐT. Hệ thống sẽ kiểm tra CTĐT, kết quả học tập, lộ trình học kỳ và các yêu cầu đã gửi trước đó.',
+  })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        monHocId: { type: 'number', description: 'ID môn học' },
+        loaiYeuCau: {
+          type: 'string',
+          enum: Object.values(LoaiYeuCauHocPhanEnum),
+          description: 'Loại yêu cầu: HOC_CAI_THIEN hoặc HOC_BO_SUNG',
+        },
+        lyDo: { type: 'string', nullable: true, description: 'Lý do gửi yêu cầu' },
+      },
+      required: ['monHocId', 'loaiYeuCau'],
+    },
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Yêu cầu đăng ký học phần đã được tạo và chờ xét duyệt',
+  })
+  @Post('yeu-cau-dang-ky/me')
+  @Roles(VaiTroNguoiDungEnum.SINH_VIEN)
+  async taoYeuCauDangKyHocPhan(
+    @GetUser('userId') userId: number,
+    @Body()
+    body: {
+      monHocId: number;
+      loaiYeuCau: LoaiYeuCauHocPhanEnum;
+      lyDo?: string;
+    },
+  ) {
+    const sinhVienId = await this.sinhVienService.getSinhVienIdFromUserId(userId);
+    return this.sinhVienService.taoYeuCauDangKyHocPhan(sinhVienId, body);
+  }
+
+  @ApiOperation({
+    summary: 'Sửa yêu cầu học phần',
+    description: 'Sửa yêu cầu học phần (chỉ có thể sửa yêu cầu có trạng thái CHO_DUYET)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Sửa yêu cầu thành công',
+  })
+  @Put('yeu-cau-hoc-phan/me')
+  @Roles(VaiTroNguoiDungEnum.SINH_VIEN)
+  @HttpCode(HttpStatus.OK)
+  async suaYeuCauHocPhan(
+    @GetUser('userId') userId: number,
+    @Body() dto: SuaYeuCauHocPhanDto,
+  ): Promise<void> {
+    const sinhVienId = await this.sinhVienService.getSinhVienIdFromUserId(userId);
+    return this.sinhVienService.suaYeuCauHocPhan(sinhVienId, dto.yeuCauId, {
+      monHocId: dto.monHocId,
+      loaiYeuCau: dto.loaiYeuCau,
+      ketQuaCuId: dto.ketQuaCuId,
+      lyDo: dto.lyDo,
+    });
+  }
+
+  @ApiOperation({
+    summary: 'Xóa yêu cầu học phần',
+    description: 'Xóa yêu cầu học phần (chỉ có thể xóa yêu cầu có trạng thái CHO_DUYET hoặc DA_HUY)',
+  })
+  @ApiParam({ name: 'yeuCauId', type: Number, description: 'ID yêu cầu học phần' })
+  @ApiResponse({
+    status: 200,
+    description: 'Xóa yêu cầu thành công',
+  })
+  @Delete('yeu-cau-hoc-phan/me/:yeuCauId')
+  @Roles(VaiTroNguoiDungEnum.SINH_VIEN)
+  @HttpCode(HttpStatus.OK)
+  async xoaYeuCauHocPhan(
+    @GetUser('userId') userId: number,
+    @Param('yeuCauId', ParseIntPipe) yeuCauId: number,
+  ): Promise<void> {
+    const sinhVienId = await this.sinhVienService.getSinhVienIdFromUserId(userId);
+    return this.sinhVienService.xoaYeuCauHocPhan(sinhVienId, yeuCauId);
+  }
+
+  @ApiOperation({
+    summary: 'Hủy yêu cầu học phần',
+    description: 'Hủy yêu cầu học phần (chỉ có thể hủy yêu cầu có trạng thái CHO_DUYET, trạng thái sẽ chuyển thành DA_HUY)',
+  })
+  @ApiParam({ name: 'yeuCauId', type: Number, description: 'ID yêu cầu học phần' })
+  @ApiResponse({
+    status: 200,
+    description: 'Hủy yêu cầu thành công',
+  })
+  @Put('yeu-cau-hoc-phan/me/:yeuCauId/huy')
+  @Roles(VaiTroNguoiDungEnum.SINH_VIEN)
+  @HttpCode(HttpStatus.OK)
+  async huyYeuCauHocPhan(
+    @GetUser('userId') userId: number,
+    @Param('yeuCauId', ParseIntPipe) yeuCauId: number,
+  ): Promise<void> {
+    const sinhVienId = await this.sinhVienService.getSinhVienIdFromUserId(userId);
+    return this.sinhVienService.huyYeuCauHocPhan(sinhVienId, yeuCauId);
   }
 }

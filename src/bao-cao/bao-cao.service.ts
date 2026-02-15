@@ -942,6 +942,27 @@ export class BaoCaoService {
         return 'Kém';
     }
 
+    /**
+     * Map chuỗi học lực sang bucket dùng cho thống kê GPA
+     * Chỉ quan tâm 4 mức: Trung bình, Khá, Giỏi, Xuất sắc
+     */
+    private mapHocLucToGpaBucket(
+        hocLuc: string,
+    ): 'trungBinh' | 'kha' | 'gioi' | 'xuatSac' | null {
+        switch (hocLuc) {
+            case 'Trung bình':
+                return 'trungBinh';
+            case 'Khá':
+                return 'kha';
+            case 'Giỏi':
+                return 'gioi';
+            case 'Xuất sắc':
+                return 'xuatSac';
+            default:
+                return null;
+        }
+    }
+
     private mapGioiTinh(gioiTinh: GioiTinh): string {
         const map = {
             [GioiTinh.NAM]: 'Nam',
@@ -1608,7 +1629,7 @@ export class BaoCaoService {
         res.end();
     }
     async thongKeTongQuan(): Promise<ThongKeTongQuanResponseDto> {
-        // 1. Sinh viên
+        // 1. Sinh viên theo tình trạng
         const theoTinhTrang = {
             dangHoc: await this.sinhVienRepo.count({
                 where: { tinhTrang: TinhTrangHocTapEnum.DANG_HOC },
@@ -1624,7 +1645,10 @@ export class BaoCaoService {
             }),
         };
 
-        const tongSinhVien = Object.values(theoTinhTrang).reduce((a, b) => a + b, 0);
+        const tongSinhVien = Object.values(theoTinhTrang).reduce(
+            (a, b) => a + b,
+            0,
+        );
 
         // 2. Các tổng cơ bản khác
         const tongGiangVien = await this.giangVienRepo.count();
@@ -1633,8 +1657,389 @@ export class BaoCaoService {
         const tongMonHoc = await this.monHocRepo.count();
         const tongLop = await this.lopRepo.count();
         const tongLopHocPhan = await this.lopHocPhanRepo.count();
-        const tongChuongTrinhDaoTao = await this.chuongTrinhDaoTaoRepo.count();
+        const tongChuongTrinhDaoTao =
+            await this.chuongTrinhDaoTaoRepo.count();
         const tongNienKhoa = await this.nienKhoaRepo.count();
+
+        // 3. Lớp học phần theo trạng thái khóa điểm
+        const tongLopHocPhanDaKhoaDiem = await this.lopHocPhanRepo.count({
+            where: { khoaDiem: true },
+        });
+        const tongLopHocPhanChuaKhoaDiem = await this.lopHocPhanRepo.count({
+            where: { khoaDiem: false },
+        });
+
+        // 3.bis. Lớp học phần đã/chưa khóa điểm theo từng học kỳ của từng năm học
+        const allLopHocPhan = await this.lopHocPhanRepo.find({
+            relations: ['hocKy', 'hocKy.namHoc'],
+        });
+        type HocKyCount = { hocKyId: number; hocKy: number; soLopDaKhoaDiem: number; soLopChuaKhoaDiem: number };
+        const lopHocPhanTheoNamHocMap = new Map<
+            number,
+            { namHocId: number; maNamHoc: string; tenNamHoc: string; hocKyMap: Map<number, HocKyCount> }
+        >();
+        for (const lhp of allLopHocPhan) {
+            const hk = lhp.hocKy;
+            if (!hk?.namHoc) continue;
+            const nh = hk.namHoc;
+            let namHocNode = lopHocPhanTheoNamHocMap.get(nh.id);
+            if (!namHocNode) {
+                namHocNode = {
+                    namHocId: nh.id,
+                    maNamHoc: nh.maNamHoc ?? '',
+                    tenNamHoc: nh.tenNamHoc ?? '',
+                    hocKyMap: new Map(),
+                };
+                lopHocPhanTheoNamHocMap.set(nh.id, namHocNode);
+            }
+            let hocKyNode = namHocNode.hocKyMap.get(hk.id);
+            if (!hocKyNode) {
+                hocKyNode = {
+                    hocKyId: hk.id,
+                    hocKy: hk.hocKy,
+                    soLopDaKhoaDiem: 0,
+                    soLopChuaKhoaDiem: 0,
+                };
+                namHocNode.hocKyMap.set(hk.id, hocKyNode);
+            }
+            if (lhp.khoaDiem) {
+                hocKyNode.soLopDaKhoaDiem += 1;
+            } else {
+                hocKyNode.soLopChuaKhoaDiem += 1;
+            }
+        }
+        const lopHocPhanTheoNamHoc = Array.from(lopHocPhanTheoNamHocMap.values())
+            .map((n) => ({
+                namHocId: n.namHocId,
+                maNamHoc: n.maNamHoc,
+                tenNamHoc: n.tenNamHoc,
+                theoHocKy: Array.from(n.hocKyMap.values()).sort((a, b) => a.hocKy - b.hocKy),
+            }))
+            .sort((a, b) => a.maNamHoc.localeCompare(b.maNamHoc));
+
+        // 4. Chương trình đào tạo theo ngành
+        const chuongTrinhDaoTaoTheoNganhRaw =
+            await this.chuongTrinhDaoTaoRepo
+                .createQueryBuilder('ct')
+                .leftJoin('ct.nganh', 'nganh')
+                .select('nganh.id', 'nganhId')
+                .addSelect('nganh.maNganh', 'maNganh')
+                .addSelect('nganh.tenNganh', 'tenNganh')
+                .addSelect('COUNT(ct.id)', 'soChuongTrinh')
+                .groupBy('nganh.id')
+                .addGroupBy('nganh.maNganh')
+                .addGroupBy('nganh.tenNganh')
+                .getRawMany();
+
+        const chuongTrinhDaoTaoTheoNganh = chuongTrinhDaoTaoTheoNganhRaw.map(
+            (row) => ({
+                nganhId: Number(row.nganhId),
+                maNganh: row.maNganh as string,
+                tenNganh: row.tenNganh as string,
+                soChuongTrinh: Number(row.soChuongTrinh),
+            }),
+        );
+
+        // 5. Môn học theo loại
+        const monHocTheoLoaiRaw = await this.monHocRepo
+            .createQueryBuilder('mon')
+            .select('mon.loaiMon', 'loaiMon')
+            .addSelect('COUNT(mon.id)', 'soMon')
+            .groupBy('mon.loaiMon')
+            .getRawMany();
+
+        const monHocTheoLoai = {
+            daiCuong: 0,
+            chuyenNganh: 0,
+            tuChon: 0,
+        };
+
+        monHocTheoLoaiRaw.forEach((row) => {
+            const count = Number(row.soMon);
+            const loaiMon = row.loaiMon as string;
+
+            if (loaiMon === 'DAI_CUONG') {
+                monHocTheoLoai.daiCuong = count;
+            } else if (loaiMon === 'CHUYEN_NGANH') {
+                monHocTheoLoai.chuyenNganh = count;
+            } else if (loaiMon === 'TU_CHON') {
+                monHocTheoLoai.tuChon = count;
+            }
+        });
+
+        // 6. Phân bổ GPA của sinh viên đã tốt nghiệp theo niên khóa / ngành / lớp niên chế
+        const sinhViensTotNghiep = await this.sinhVienRepo.find({
+            where: { tinhTrang: TinhTrangHocTapEnum.DA_TOT_NGHIEP },
+            relations: [
+                'lop',
+                'lop.nganh',
+                'lop.nienKhoa',
+                'ketQuaHocTaps',
+                'ketQuaHocTaps.lopHocPhan',
+                'ketQuaHocTaps.lopHocPhan.monHoc',
+            ],
+        });
+
+        type BucketKey = 'trungBinh' | 'kha' | 'gioi' | 'xuatSac';
+
+        const initBucket = () => ({
+            // Tổng số sinh viên thuộc niên khóa / ngành / lớp (bất kể tình trạng)
+            tongSinhVien: 0,
+            // Phân bổ GPA (chỉ tính cho sinh viên đã tốt nghiệp)
+            trungBinh: 0,
+            kha: 0,
+            gioi: 0,
+            xuatSac: 0,
+            // Số lượng sinh viên theo tình trạng học tập
+            dangHoc: 0,
+            baoLuu: 0,
+            thoiHoc: 0,
+        });
+
+        const gpaTheoNienKhoaMap = new Map<
+            number,
+            {
+                nienKhoaId: number;
+                maNienKhoa: string;
+                tenNienKhoa: string;
+                bucket: ReturnType<typeof initBucket>;
+                nganhMap: Map<
+                    number,
+                    {
+                        nganhId: number;
+                        maNganh: string;
+                        tenNganh: string;
+                        bucket: ReturnType<typeof initBucket>;
+                        lopMap: Map<
+                            number,
+                            {
+                                lopId: number;
+                                maLop: string;
+                                tenLop: string;
+                                bucket: ReturnType<typeof initBucket>;
+                            }
+                        >;
+                    }
+                >;
+            }
+        >();
+
+        for (const sv of sinhViensTotNghiep) {
+            const ketQuasDaKhoaDiem = (sv.ketQuaHocTaps || []).filter(
+                (kq) => kq.lopHocPhan?.khoaDiem === true,
+            );
+
+            if (!ketQuasDaKhoaDiem.length) {
+                continue;
+            }
+
+            // Gom kết quả theo môn, lấy TBCHP cao nhất của từng môn
+            const ketQuaTheoMon = new Map<
+                number,
+                { soTinChi: number; diemTBCHPMax: number }
+            >();
+
+            for (const kq of ketQuasDaKhoaDiem) {
+                const mon = kq.lopHocPhan.monHoc;
+                if (!mon) continue;
+
+                const monId = mon.id;
+                const diemTBCHP = this.tinhDiemTBCHP(
+                    kq.diemQuaTrinh,
+                    kq.diemThanhPhan,
+                    kq.diemThi,
+                );
+
+                const current = ketQuaTheoMon.get(monId);
+                if (!current || diemTBCHP > current.diemTBCHPMax) {
+                    ketQuaTheoMon.set(monId, {
+                        soTinChi: mon.soTinChi,
+                        diemTBCHPMax: diemTBCHP,
+                    });
+                }
+            }
+
+            if (!ketQuaTheoMon.size) {
+                continue;
+            }
+
+            let tongDiemHe4 = 0;
+            let soMonDuocXet = 0;
+
+            for (const { diemTBCHPMax } of ketQuaTheoMon.values()) {
+                const diemHe4 = this.diemHe10ToHe4(diemTBCHPMax);
+                tongDiemHe4 += diemHe4;
+                soMonDuocXet++;
+            }
+
+            const gpaHe4 = soMonDuocXet > 0 ? tongDiemHe4 / soMonDuocXet : 0;
+            const hocLuc = this.xepLoaiHocLuc(gpaHe4);
+            const bucketKey = this.mapHocLucToGpaBucket(
+                hocLuc,
+            ) as BucketKey | null;
+
+            // Chỉ thống kê 4 mức từ Trung bình trở lên
+            if (!bucketKey) {
+                continue;
+            }
+
+            const lop = sv.lop;
+            const nganh = lop?.nganh as any;
+            const nienKhoa = lop?.nienKhoa as any;
+
+            if (!lop || !nganh || !nienKhoa) {
+                continue;
+            }
+
+            // Node niên khóa
+            let nienKhoaNode = gpaTheoNienKhoaMap.get(nienKhoa.id);
+            if (!nienKhoaNode) {
+                nienKhoaNode = {
+                    nienKhoaId: nienKhoa.id,
+                    maNienKhoa: nienKhoa.maNienKhoa ?? '',
+                    tenNienKhoa: nienKhoa.tenNienKhoa ?? '',
+                    bucket: initBucket(),
+                    nganhMap: new Map(),
+                };
+                gpaTheoNienKhoaMap.set(nienKhoa.id, nienKhoaNode);
+            }
+
+            // Node ngành trong niên khóa
+            let nganhNode = nienKhoaNode.nganhMap.get(nganh.id);
+            if (!nganhNode) {
+                nganhNode = {
+                    nganhId: nganh.id,
+                    maNganh: nganh.maNganh ?? '',
+                    tenNganh: nganh.tenNganh ?? '',
+                    bucket: initBucket(),
+                    lopMap: new Map(),
+                };
+                nienKhoaNode.nganhMap.set(nganh.id, nganhNode);
+            }
+
+            // Node lớp trong ngành
+            let lopNode = nganhNode.lopMap.get(lop.id);
+            if (!lopNode) {
+                lopNode = {
+                    lopId: lop.id,
+                    maLop: lop.maLop,
+                    tenLop: lop.tenLop,
+                    bucket: initBucket(),
+                };
+                nganhNode.lopMap.set(lop.id, lopNode);
+            }
+
+            // Cập nhật bucket ở cả 3 cấp
+            // LƯU Ý: chỉ cập nhật các bucket GPA (trungBinh / kha / gioi / xuatSac)
+            // KHÔNG tăng tongSinhVien ở đây, để tongSinhVien phản ánh tổng số SV thực tế
+            // (sẽ được cập nhật ở vòng lặp tatCaSinhVien bên dưới)
+            [nienKhoaNode.bucket, nganhNode.bucket, lopNode.bucket].forEach(
+                (bucket) => {
+                    (bucket[bucketKey] as number) += 1;
+                },
+            );
+        }
+
+        // 6.bis. Thống kê số lượng sinh viên theo tình trạng học tập
+        // (đang học / bảo lưu / thôi học) theo niên khóa / ngành / lớp niên chế
+        const tatCaSinhVien = await this.sinhVienRepo.find({
+            relations: ['lop', 'lop.nganh', 'lop.nienKhoa'],
+        });
+
+        for (const sv of tatCaSinhVien) {
+            const lop = sv.lop;
+            const nganh = lop?.nganh as any;
+            const nienKhoa = lop?.nienKhoa as any;
+
+            if (!lop || !nganh || !nienKhoa) {
+                continue;
+            }
+
+            // Node niên khóa
+            let nienKhoaNode = gpaTheoNienKhoaMap.get(nienKhoa.id);
+            if (!nienKhoaNode) {
+                nienKhoaNode = {
+                    nienKhoaId: nienKhoa.id,
+                    maNienKhoa: nienKhoa.maNienKhoa ?? '',
+                    tenNienKhoa: nienKhoa.tenNienKhoa ?? '',
+                    bucket: initBucket(),
+                    nganhMap: new Map(),
+                };
+                gpaTheoNienKhoaMap.set(nienKhoa.id, nienKhoaNode);
+            }
+
+            // Node ngành trong niên khóa
+            let nganhNode = nienKhoaNode.nganhMap.get(nganh.id);
+            if (!nganhNode) {
+                nganhNode = {
+                    nganhId: nganh.id,
+                    maNganh: nganh.maNganh ?? '',
+                    tenNganh: nganh.tenNganh ?? '',
+                    bucket: initBucket(),
+                    lopMap: new Map(),
+                };
+                nienKhoaNode.nganhMap.set(nganh.id, nganhNode);
+            }
+
+            // Node lớp trong ngành
+            let lopNode = nganhNode.lopMap.get(lop.id);
+            if (!lopNode) {
+                lopNode = {
+                    lopId: lop.id,
+                    maLop: lop.maLop,
+                    tenLop: lop.tenLop,
+                    bucket: initBucket(),
+                };
+                nganhNode.lopMap.set(lop.id, lopNode);
+            }
+
+            // Tăng tổng sinh viên thuộc niên khóa / ngành / lớp này
+            [nienKhoaNode.bucket, nganhNode.bucket, lopNode.bucket].forEach(
+                (bucket) => {
+                    bucket.tongSinhVien += 1;
+                },
+            );
+
+            let field: 'dangHoc' | 'baoLuu' | 'thoiHoc' | null = null;
+            if (sv.tinhTrang === TinhTrangHocTapEnum.DANG_HOC) {
+                field = 'dangHoc';
+            } else if (sv.tinhTrang === TinhTrangHocTapEnum.BAO_LUU) {
+                field = 'baoLuu';
+            } else if (sv.tinhTrang === TinhTrangHocTapEnum.THOI_HOC) {
+                field = 'thoiHoc';
+            }
+
+            if (!field) {
+                continue;
+            }
+
+            [nienKhoaNode.bucket, nganhNode.bucket, lopNode.bucket].forEach(
+                (bucket) => {
+                    (bucket[field] as number) += 1;
+                },
+            );
+        }
+
+        const gpaTheoNienKhoa = Array.from(gpaTheoNienKhoaMap.values()).map(
+            (nk) => ({
+                nienKhoaId: nk.nienKhoaId,
+                maNienKhoa: nk.maNienKhoa,
+                tenNienKhoa: nk.tenNienKhoa,
+                ...nk.bucket,
+                theoNganh: Array.from(nk.nganhMap.values()).map((ng) => ({
+                    nganhId: ng.nganhId,
+                    maNganh: ng.maNganh,
+                    tenNganh: ng.tenNganh,
+                    ...ng.bucket,
+                    theoLop: Array.from(ng.lopMap.values()).map((lopNode) => ({
+                        lopId: lopNode.lopId,
+                        maLop: lopNode.maLop,
+                        tenLop: lopNode.tenLop,
+                        ...lopNode.bucket,
+                    })),
+                })),
+            }),
+        );
 
         return {
             sinhVien: {
@@ -1649,6 +2054,12 @@ export class BaoCaoService {
             tongLop,
             tongLopHocPhan,
             tongChuongTrinhDaoTao,
+            tongLopHocPhanDaKhoaDiem,
+            tongLopHocPhanChuaKhoaDiem,
+            lopHocPhanTheoNamHoc,
+            chuongTrinhDaoTaoTheoNganh,
+            monHocTheoLoai,
+            gpaTheoNienKhoa,
         };
     }
 
@@ -2635,27 +3046,28 @@ export class BaoCaoService {
             };
 
             if (nganhId && nienKhoaSV) {
-                // Lọc các niên khóa cao hơn từ allNienKhoas (thay vì query)
-                const nienKhoasCaoHon = allNienKhoas.filter(nk => nk.namBatDau >= nienKhoaSV.namBatDau + 1);
+                // Lọc các niên khóa bằng hoặc cao hơn từ allNienKhoas (thay vì query)
+                // Bao gồm cả niên khóa hiện tại để tìm các lớp học phần đề xuất đã được tạo
+                const nienKhoasBangHoacCaoHon = allNienKhoas.filter(nk => nk.namBatDau >= nienKhoaSV.namBatDau);
 
                 // Lấy danh sách lớp học phần cho môn học này từ Map
                 const allLhpForMonHoc = lopHocPhanByMonHocId.get(monHocId) || [];
 
-                // Lọc lớp học phần cùng ngành theo niên khóa cao hơn (thay vì query)
-                for (const nkCaoHon of nienKhoasCaoHon) {
+                // Lọc lớp học phần cùng ngành theo niên khóa bằng hoặc cao hơn (thay vì query)
+                for (const nkBangHoacCaoHon of nienKhoasBangHoacCaoHon) {
                     const lopCungNganh = allLhpForMonHoc.filter(lhp =>
                         lhp.nganh.id === nganhId &&
-                        lhp.nienKhoa.id === nkCaoHon.id &&
+                        lhp.nienKhoa.id === nkBangHoacCaoHon.id &&
                         lhp.id !== lhpTruot.id
                     );
                     for (const lhp of lopCungNganh) addOptionOnly(lhp);
                 }
 
-                // Lọc lớp học phần khác ngành theo niên khóa cao hơn (thay vì query)
-                for (const nkCaoHon of nienKhoasCaoHon) {
+                // Lọc lớp học phần khác ngành theo niên khóa bằng hoặc cao hơn (thay vì query)
+                for (const nkBangHoacCaoHon of nienKhoasBangHoacCaoHon) {
                     const lopKhacNganh = allLhpForMonHoc.filter(lhp =>
                         lhp.nganh.id !== nganhId &&
-                        lhp.nienKhoa.id === nkCaoHon.id &&
+                        lhp.nienKhoa.id === nkBangHoacCaoHon.id &&
                         lhp.id !== lhpTruot.id
                     );
                     for (const lhp of lopKhacNganh) addOptionOnly(lhp);
@@ -3137,6 +3549,10 @@ export class BaoCaoService {
 
         // 8. Tính thống kê
         const soSinhVienChuaHocLai = danhSachSinhVienTruot.filter(sv => !sv.daHocLai).length;
+
+        // Sắp xếp theo mã sinh viên tăng dần
+        danhSachSinhVienTruot.sort((a, b) => (a.maSinhVien || '').localeCompare(b.maSinhVien || ''));
+        danhSachSinhVienDaHocLai.sort((a, b) => (a.maSinhVien || '').localeCompare(b.maSinhVien || ''));
 
         return {
             maNamHoc,

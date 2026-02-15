@@ -17,9 +17,15 @@ import { ChiTietChuongTrinhDaoTao } from 'src/dao-tao/entity/chi-tiet-chuong-tri
 import { ApDungChuongTrinhDT } from 'src/dao-tao/entity/ap-dung-chuong-trinh-dt.entity';
 import { NamHoc } from 'src/dao-tao/entity/nam-hoc.entity';
 import { Lop } from 'src/danh-muc/entity/lop.entity';
+import { YeuCauHocPhan } from './entity/yeu-cau-hoc-phan.entity';
+import { ChuongTrinhDaoTao } from 'src/dao-tao/entity/chuong-trinh-dao-tao.entity';
+import { BaoCaoModule } from 'src/bao-cao/bao-cao.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([LopHocPhan, SinhVienLopHocPhan, GiangVien, GiangVienMonHoc, MonHoc, Nganh, NienKhoa, HocKy, SinhVien, KetQuaHocTap, NguoiDung, GiangVien, ApDungChuongTrinhDT, ChiTietChuongTrinhDaoTao, NamHoc, Lop])],
+  imports: [
+    TypeOrmModule.forFeature([LopHocPhan, SinhVienLopHocPhan, GiangVien, GiangVienMonHoc, MonHoc, Nganh, NienKhoa, HocKy, SinhVien, KetQuaHocTap, NguoiDung, GiangVien, ApDungChuongTrinhDT, ChiTietChuongTrinhDaoTao, NamHoc, Lop, YeuCauHocPhan, ChuongTrinhDaoTao]),
+    BaoCaoModule,
+  ],
   controllers: [GiangDayController],
   providers: [GiangDayService],
 })

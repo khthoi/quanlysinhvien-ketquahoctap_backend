@@ -7,9 +7,10 @@ import { SinhVienLopHocPhan } from 'src/giang-day/entity/sinhvien-lophocphan.ent
 import { LopHocPhan } from 'src/giang-day/entity/lop-hoc-phan.entity';
 import { NguoiDung } from 'src/auth/entity/nguoi-dung.entity';
 import { KhenThuongKyLuat } from 'src/sinh-vien/entity/khenthuong-kyluat.entity';
+import { SinhVien } from 'src/sinh-vien/entity/sinh-vien.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([KetQuaHocTap, SinhVienLopHocPhan, LopHocPhan, NguoiDung, KhenThuongKyLuat])],
+  imports: [TypeOrmModule.forFeature([KetQuaHocTap, SinhVienLopHocPhan, LopHocPhan, NguoiDung, KhenThuongKyLuat, KetQuaHocTap, LopHocPhan, SinhVien, NguoiDung, KhenThuongKyLuat])],
   controllers: [KetQuaController],
   providers: [KetQuaService],
 })

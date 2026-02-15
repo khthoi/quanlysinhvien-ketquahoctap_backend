@@ -1,0 +1,2683 @@
+================================================================================
+              TEST CASES - HỆ THỐNG QUẢN LÝ SINH VIÊN & KẾT QUẢ HỌC TẬP
+================================================================================
+
+Ngày tạo: 07/02/2026
+Tổng số test cases: 120+
+Người tạo: QA Team
+
+================================================================================
+                        MODULE 1: ĐĂNG NHẬP (Authentication)
+================================================================================
+
+--- TC-AUTH-001 ---
+Test Case Name: Đăng nhập thành công với tài khoản Admin
+Module / Function: Đăng nhập
+Pre-condition: Tài khoản Admin đã tồn tại trong hệ thống (vai trò ADMIN)
+Test Steps:
+  1. Truy cập trang đăng nhập Admin (frontend quản trị)
+  2. Nhập tên đăng nhập vào ô "Tên đăng nhập"
+  3. Nhập mật khẩu vào ô "Mật khẩu"
+  4. Nhấn nút "Đăng nhập"
+Test Data:
+  - Tên đăng nhập: admin
+  - Mật khẩu: 123456
+Expected Result:
+  - Hệ thống trả về access_token (JWT)
+  - Token được lưu vào cookie (access_token, max-age 7 ngày)
+  - Chuyển hướng sang trang Dashboard
+  - Hiển thị thông tin tổng quan hệ thống
+
+--- TC-AUTH-002 ---
+Test Case Name: Đăng nhập thành công với tài khoản Giảng viên
+Module / Function: Đăng nhập
+Pre-condition: Tài khoản Giảng viên đã tồn tại trong hệ thống (vai trò GIANG_VIEN)
+Test Steps:
+  1. Truy cập trang đăng nhập Admin (frontend quản trị)
+  2. Nhập tên đăng nhập của giảng viên
+  3. Nhập mật khẩu
+  4. Nhấn nút "Đăng nhập"
+Test Data:
+  - Tên đăng nhập: GV001
+  - Mật khẩu: 123456
+Expected Result:
+  - Đăng nhập thành công
+  - Token lưu vào cookie
+  - Chuyển hướng sang trang Dashboard của Giảng viên
+
+--- TC-AUTH-003 ---
+Test Case Name: Đăng nhập thành công với tài khoản Cán bộ phòng Đào tạo
+Module / Function: Đăng nhập
+Pre-condition: Tài khoản Cán bộ đã tồn tại (vai trò CAN_BO_PHONG_DAO_TAO)
+Test Steps:
+  1. Truy cập trang đăng nhập Admin
+  2. Nhập tên đăng nhập
+  3. Nhập mật khẩu
+  4. Nhấn nút "Đăng nhập"
+Test Data:
+  - Tên đăng nhập: canbo01
+  - Mật khẩu: 123456
+Expected Result:
+  - Đăng nhập thành công, chuyển hướng sang Dashboard
+
+--- TC-AUTH-004 ---
+Test Case Name: Đăng nhập thất bại - Sinh viên vào trang Admin
+Module / Function: Đăng nhập
+Pre-condition: Tài khoản Sinh viên đã tồn tại (vai trò SINH_VIEN)
+Test Steps:
+  1. Truy cập trang đăng nhập Admin (frontend quản trị)
+  2. Nhập tên đăng nhập sinh viên
+  3. Nhập mật khẩu
+  4. Nhấn nút "Đăng nhập"
+Test Data:
+  - Tên đăng nhập: SV001
+  - Mật khẩu: 123456
+Expected Result:
+  - Hệ thống hiển thị thông báo lỗi "Bạn không đủ quyền"
+  - Cookie access_token bị xóa
+  - Không chuyển hướng sang Dashboard
+
+--- TC-AUTH-005 ---
+Test Case Name: Đăng nhập thất bại - Sai mật khẩu
+Module / Function: Đăng nhập
+Pre-condition: Tài khoản đã tồn tại trong hệ thống
+Test Steps:
+  1. Truy cập trang đăng nhập
+  2. Nhập đúng tên đăng nhập
+  3. Nhập sai mật khẩu
+  4. Nhấn nút "Đăng nhập"
+Test Data:
+  - Tên đăng nhập: admin
+  - Mật khẩu: saimatkhau
+Expected Result:
+  - Hiển thị thông báo lỗi (VD: "Tên đăng nhập hoặc mật khẩu không đúng")
+  - Không tạo token
+  - Vẫn ở trang đăng nhập
+
+--- TC-AUTH-006 ---
+Test Case Name: Đăng nhập thất bại - Tên đăng nhập không tồn tại
+Module / Function: Đăng nhập
+Pre-condition: Không có tài khoản với tên đăng nhập nhập vào
+Test Steps:
+  1. Truy cập trang đăng nhập
+  2. Nhập tên đăng nhập không tồn tại
+  3. Nhập mật khẩu bất kỳ
+  4. Nhấn nút "Đăng nhập"
+Test Data:
+  - Tên đăng nhập: khongtontai123
+  - Mật khẩu: 123456
+Expected Result:
+  - Hiển thị thông báo lỗi đăng nhập
+  - Vẫn ở trang đăng nhập
+
+--- TC-AUTH-007 ---
+Test Case Name: Đăng nhập thất bại - Để trống tên đăng nhập
+Module / Function: Đăng nhập
+Pre-condition: Trang đăng nhập đã được tải
+Test Steps:
+  1. Truy cập trang đăng nhập
+  2. Để trống ô "Tên đăng nhập"
+  3. Nhập mật khẩu
+  4. Nhấn nút "Đăng nhập"
+Test Data:
+  - Tên đăng nhập: (trống)
+  - Mật khẩu: 123456
+Expected Result:
+  - Hiển thị lỗi validation inline: "Tên đăng nhập không được để trống"
+  - Không gửi request lên server
+
+--- TC-AUTH-008 ---
+Test Case Name: Đăng nhập thất bại - Để trống mật khẩu
+Module / Function: Đăng nhập
+Pre-condition: Trang đăng nhập đã được tải
+Test Steps:
+  1. Truy cập trang đăng nhập
+  2. Nhập tên đăng nhập
+  3. Để trống ô "Mật khẩu"
+  4. Nhấn nút "Đăng nhập"
+Test Data:
+  - Tên đăng nhập: admin
+  - Mật khẩu: (trống)
+Expected Result:
+  - Hiển thị lỗi validation inline: "Mật khẩu không được để trống"
+  - Không gửi request lên server
+
+--- TC-AUTH-009 ---
+Test Case Name: Đăng nhập thất bại - Mật khẩu quá ngắn (< 6 ký tự)
+Module / Function: Đăng nhập
+Pre-condition: Trang đăng nhập đã được tải
+Test Steps:
+  1. Truy cập trang đăng nhập
+  2. Nhập tên đăng nhập hợp lệ
+  3. Nhập mật khẩu ít hơn 6 ký tự
+  4. Nhấn nút "Đăng nhập"
+Test Data:
+  - Tên đăng nhập: admin
+  - Mật khẩu: 123
+Expected Result:
+  - Backend trả về lỗi validation "@MinLength(6)"
+  - Hiển thị thông báo lỗi
+
+--- TC-AUTH-010 ---
+Test Case Name: Đăng nhập phía Sinh viên thành công
+Module / Function: Đăng nhập (frontend CL_side)
+Pre-condition: Tài khoản Sinh viên đã tồn tại (vai trò SINH_VIEN)
+Test Steps:
+  1. Truy cập trang đăng nhập sinh viên (frontend CL_side)
+  2. Nhập tên đăng nhập sinh viên
+  3. Nhập mật khẩu
+  4. Nhấn nút "Đăng nhập"
+Test Data:
+  - Tên đăng nhập: SV001
+  - Mật khẩu: 123456
+Expected Result:
+  - Đăng nhập thành công
+  - Chuyển hướng sang trang Dashboard sinh viên
+
+--- TC-AUTH-011 ---
+Test Case Name: Đăng nhập phía Sinh viên thất bại - Tài khoản không phải sinh viên
+Module / Function: Đăng nhập (frontend CL_side)
+Pre-condition: Tài khoản là Giảng viên hoặc Admin
+Test Steps:
+  1. Truy cập trang đăng nhập sinh viên (frontend CL_side)
+  2. Nhập tên đăng nhập của giảng viên
+  3. Nhập mật khẩu đúng
+  4. Nhấn nút "Đăng nhập"
+Test Data:
+  - Tên đăng nhập: GV001
+  - Mật khẩu: 123456
+Expected Result:
+  - Hiển thị thông báo: "Bạn không phải đối tượng phù hợp"
+  - Không cho truy cập hệ thống sinh viên
+
+================================================================================
+                        MODULE 2: DASHBOARD (Tổng quan)
+================================================================================
+
+--- TC-DASH-001 ---
+Test Case Name: Hiển thị tổng quan hệ thống trên Dashboard
+Module / Function: Dashboard
+Pre-condition: Người dùng đã đăng nhập với vai trò ADMIN hoặc CAN_BO_PHONG_DAO_TAO
+Test Steps:
+  1. Đăng nhập vào hệ thống
+  2. Truy cập trang Dashboard (trang chủ)
+Test Data: Không cần dữ liệu đầu vào
+Expected Result:
+  - Hiển thị đúng số liệu thống kê tổng quan:
+    + Tổng Sinh viên, Tổng Giảng viên, Lớp học phần, Chương trình ĐT
+  - Hiển thị biểu đồ Sinh viên theo Tình trạng (Đang học, Bảo lưu, Thôi học, Đã tốt nghiệp)
+  - Hiển thị Cơ cấu Đào tạo (Khoa, Ngành, Niên khóa, Lớp, Môn học)
+
+--- TC-DASH-002 ---
+Test Case Name: Dashboard hiển thị Loading khi đang tải dữ liệu
+Module / Function: Dashboard
+Pre-condition: Người dùng đã đăng nhập
+Test Steps:
+  1. Truy cập trang Dashboard
+  2. Quan sát trạng thái khi đang tải dữ liệu
+Test Data: Không cần
+Expected Result:
+  - Hiển thị spinner loading với text "Đang tải dữ liệu..."
+  - Sau khi tải xong, spinner biến mất và hiển thị dữ liệu
+
+--- TC-DASH-003 ---
+Test Case Name: Dashboard hiển thị lỗi khi không thể tải dữ liệu
+Module / Function: Dashboard
+Pre-condition: API backend không hoạt động hoặc token hết hạn
+Test Steps:
+  1. Ngắt kết nối server backend
+  2. Truy cập trang Dashboard
+Test Data: Không cần
+Expected Result:
+  - Hiển thị thông báo lỗi: "Có lỗi xảy ra khi tải dữ liệu thống kê"
+  - Hiển thị nút "Thử lại"
+
+================================================================================
+                        MODULE 3: QUẢN LÝ KHOA
+================================================================================
+
+--- TC-KHOA-001 ---
+Test Case Name: Tạo mới Khoa thành công
+Module / Function: Quản lý Khoa
+Pre-condition: Người dùng đã đăng nhập với quyền Admin/Cán bộ. Mã khoa chưa tồn tại.
+Test Steps:
+  1. Truy cập trang "Quản lý Khoa"
+  2. Nhấn nút "Tạo mới Khoa"
+  3. Nhập đầy đủ thông tin: Mã Khoa, Tên Khoa, Ngày thành lập, Mô tả
+  4. Nhấn nút "Tạo mới"
+Test Data:
+  - Mã Khoa: CNTT
+  - Tên Khoa: Khoa Công nghệ Thông tin
+  - Ngày thành lập: 2020-01-15
+  - Mô tả: Khoa đào tạo về CNTT
+Expected Result:
+  - Hiển thị thông báo "Tạo mới khoa thành công"
+  - Khoa mới xuất hiện trong danh sách
+  - Modal đóng lại
+
+--- TC-KHOA-002 ---
+Test Case Name: Tạo mới Khoa thất bại - Để trống Mã Khoa
+Module / Function: Quản lý Khoa
+Pre-condition: Người dùng đã đăng nhập, modal tạo mới đang mở
+Test Steps:
+  1. Mở modal "Tạo mới Khoa"
+  2. Để trống ô "Mã Khoa"
+  3. Nhập các trường còn lại
+  4. Nhấn nút "Tạo mới"
+Test Data:
+  - Mã Khoa: (trống)
+  - Tên Khoa: Khoa Kinh tế
+  - Ngày thành lập: 2020-01-15
+  - Mô tả: Mô tả khoa
+Expected Result:
+  - Hiển thị lỗi validation: "Mã khoa không được để trống"
+  - Không gửi request, modal vẫn mở
+
+--- TC-KHOA-003 ---
+Test Case Name: Tạo mới Khoa thất bại - Để trống Tên Khoa
+Module / Function: Quản lý Khoa
+Pre-condition: Người dùng đã đăng nhập, modal tạo mới đang mở
+Test Steps:
+  1. Mở modal "Tạo mới Khoa"
+  2. Nhập Mã Khoa
+  3. Để trống ô "Tên Khoa"
+  4. Nhập các trường còn lại
+  5. Nhấn nút "Tạo mới"
+Test Data:
+  - Mã Khoa: KT
+  - Tên Khoa: (trống)
+  - Ngày thành lập: 2020-01-15
+  - Mô tả: Mô tả
+Expected Result:
+  - Hiển thị lỗi validation: "Tên khoa không được để trống"
+
+--- TC-KHOA-004 ---
+Test Case Name: Tạo mới Khoa thất bại - Để trống Ngày thành lập
+Module / Function: Quản lý Khoa
+Pre-condition: Người dùng đã đăng nhập, modal tạo mới đang mở
+Test Steps:
+  1. Mở modal "Tạo mới Khoa"
+  2. Nhập mã khoa, tên khoa, mô tả
+  3. Không chọn ngày thành lập
+  4. Nhấn nút "Tạo mới"
+Test Data:
+  - Mã Khoa: KT
+  - Tên Khoa: Khoa Kinh tế
+  - Ngày thành lập: (trống)
+  - Mô tả: Mô tả
+Expected Result:
+  - Hiển thị lỗi: "Ngày thành lập không được để trống"
+
+--- TC-KHOA-005 ---
+Test Case Name: Tạo mới Khoa thất bại - Để trống Mô tả
+Module / Function: Quản lý Khoa
+Pre-condition: Người dùng đã đăng nhập, modal tạo mới đang mở
+Test Steps:
+  1. Mở modal "Tạo mới Khoa"
+  2. Nhập mã khoa, tên khoa, ngày thành lập
+  3. Để trống mô tả
+  4. Nhấn nút "Tạo mới"
+Test Data:
+  - Mã Khoa: KT
+  - Tên Khoa: Khoa Kinh tế
+  - Ngày thành lập: 2020-01-15
+  - Mô tả: (trống)
+Expected Result:
+  - Hiển thị lỗi: "Mô tả không được để trống"
+
+--- TC-KHOA-006 ---
+Test Case Name: Tạo mới Khoa thất bại - Mã Khoa đã tồn tại
+Module / Function: Quản lý Khoa
+Pre-condition: Khoa với mã "CNTT" đã tồn tại trong hệ thống
+Test Steps:
+  1. Mở modal "Tạo mới Khoa"
+  2. Nhập mã khoa đã tồn tại
+  3. Nhấn nút "Tạo mới"
+Test Data:
+  - Mã Khoa: CNTT
+  - Tên Khoa: Khoa mới
+  - Ngày thành lập: 2020-01-15
+  - Mô tả: Mô tả
+Expected Result:
+  - Backend trả về lỗi, hiển thị thông báo lỗi (VD: "Mã khoa đã tồn tại")
+
+--- TC-KHOA-007 ---
+Test Case Name: Sửa Khoa thành công
+Module / Function: Quản lý Khoa
+Pre-condition: Tồn tại ít nhất 1 khoa trong danh sách
+Test Steps:
+  1. Truy cập trang "Quản lý Khoa"
+  2. Nhấn nút "Sửa" bên cạnh khoa cần chỉnh sửa
+  3. Thay đổi thông tin khoa
+  4. Nhấn nút "Cập nhật"
+Test Data:
+  - Tên Khoa (sửa): Khoa CNTT và Truyền thông
+  - Mô tả (sửa): Mô tả cập nhật
+Expected Result:
+  - Hiển thị thông báo "Cập nhật khoa thành công"
+  - Thông tin khoa được cập nhật trong danh sách
+
+--- TC-KHOA-008 ---
+Test Case Name: Xóa Khoa thành công
+Module / Function: Quản lý Khoa
+Pre-condition: Khoa tồn tại và không có ngành nào thuộc khoa đó
+Test Steps:
+  1. Truy cập trang "Quản lý Khoa"
+  2. Nhấn nút "Xóa" bên cạnh khoa cần xóa
+  3. Modal xác nhận hiện lên với thông tin khoa
+  4. Nhấn nút "Xóa" để xác nhận
+Test Data: Khoa cần xóa: KT - Khoa Kinh tế
+Expected Result:
+  - Hiển thị thông báo "Xóa khoa thành công"
+  - Khoa bị xóa khỏi danh sách
+
+--- TC-KHOA-009 ---
+Test Case Name: Xóa Khoa thất bại - Khoa đang có ngành
+Module / Function: Quản lý Khoa
+Pre-condition: Khoa có ngành đang liên kết
+Test Steps:
+  1. Nhấn nút "Xóa" bên cạnh khoa có ngành
+  2. Xác nhận xóa
+Test Data: Khoa: CNTT (có ngành KTPM, HTTT)
+Expected Result:
+  - Hiển thị thông báo lỗi (VD: "Không thể xóa khoa đang có ngành liên kết")
+
+--- TC-KHOA-010 ---
+Test Case Name: Tìm kiếm Khoa theo từ khóa
+Module / Function: Quản lý Khoa
+Pre-condition: Có dữ liệu khoa trong hệ thống
+Test Steps:
+  1. Truy cập trang "Quản lý Khoa"
+  2. Nhập từ khóa vào ô tìm kiếm
+  3. Nhấn Enter hoặc click icon tìm kiếm
+Test Data:
+  - Từ khóa tìm kiếm: "Công nghệ"
+Expected Result:
+  - Danh sách khoa được lọc, chỉ hiển thị khoa có tên/mã chứa "Công nghệ"
+  - Hiển thị đúng phân trang (Hiển thị X - Y trên Z kết quả)
+
+--- TC-KHOA-011 ---
+Test Case Name: Phân trang danh sách Khoa
+Module / Function: Quản lý Khoa
+Pre-condition: Có hơn 10 khoa trong hệ thống
+Test Steps:
+  1. Truy cập trang "Quản lý Khoa"
+  2. Quan sát phân trang ở cuối bảng
+  3. Nhấn sang trang 2
+Test Data: Không cần
+Expected Result:
+  - Hiển thị 10 khoa mỗi trang
+  - Khi chuyển trang, danh sách cập nhật đúng
+  - Hiển thị thông tin "Hiển thị X - Y trên Z kết quả"
+
+================================================================================
+                        MODULE 4: QUẢN LÝ NIÊN KHÓA
+================================================================================
+
+--- TC-NK-001 ---
+Test Case Name: Tạo mới Niên khóa thành công
+Module / Function: Quản lý Niên khóa
+Pre-condition: Người dùng đã đăng nhập, mã niên khóa chưa tồn tại
+Test Steps:
+  1. Truy cập trang "Quản lý Niên khóa"
+  2. Nhấn nút "Tạo mới Niên khóa"
+  3. Nhập đầy đủ thông tin
+  4. Nhấn nút "Tạo mới"
+Test Data:
+  - Mã Niên khóa: NK2024
+  - Tên Niên khóa: Niên khóa 2024-2028
+  - Năm bắt đầu: 2024
+  - Năm kết thúc: 2028
+  - Mô tả: Niên khóa khóa 2024
+Expected Result:
+  - Hiển thị "Tạo mới niên khóa thành công"
+  - Niên khóa mới xuất hiện trong danh sách
+
+--- TC-NK-002 ---
+Test Case Name: Tạo mới Niên khóa thất bại - Để trống các trường bắt buộc
+Module / Function: Quản lý Niên khóa
+Pre-condition: Người dùng đã đăng nhập
+Test Steps:
+  1. Mở modal tạo niên khóa
+  2. Để trống tất cả các trường
+  3. Nhấn nút "Tạo mới"
+Test Data: Tất cả trường để trống
+Expected Result:
+  - Hiển thị lỗi validation cho từng trường:
+    + "Mã niên khóa không được để trống"
+    + "Tên niên khóa không được để trống"
+    + "Vui lòng nhập năm bắt đầu"
+    + "Vui lòng nhập năm kết thúc"
+    + "Mô tả không được để trống"
+
+--- TC-NK-003 ---
+Test Case Name: Tạo mới Niên khóa thất bại - Năm bắt đầu không hợp lệ
+Module / Function: Quản lý Niên khóa
+Pre-condition: Người dùng đã đăng nhập
+Test Steps:
+  1. Mở modal tạo niên khóa
+  2. Nhập năm bắt đầu ngoài phạm vi 1900-2100
+  3. Nhấn nút "Tạo mới"
+Test Data:
+  - Năm bắt đầu: 1800
+Expected Result:
+  - Hiển thị lỗi: "Năm bắt đầu phải là số từ 1900 đến 2100"
+
+--- TC-NK-004 ---
+Test Case Name: Tạo mới Niên khóa thất bại - Năm kết thúc nhỏ hơn năm bắt đầu
+Module / Function: Quản lý Niên khóa
+Pre-condition: Người dùng đã đăng nhập
+Test Steps:
+  1. Mở modal tạo niên khóa
+  2. Nhập năm bắt đầu > năm kết thúc
+  3. Nhấn nút "Tạo mới"
+Test Data:
+  - Năm bắt đầu: 2025
+  - Năm kết thúc: 2020
+Expected Result:
+  - Hiển thị lỗi: "Năm kết thúc phải lớn hơn hoặc bằng năm bắt đầu"
+
+--- TC-NK-005 ---
+Test Case Name: Sửa Niên khóa thành công
+Module / Function: Quản lý Niên khóa
+Pre-condition: Tồn tại ít nhất 1 niên khóa
+Test Steps:
+  1. Nhấn nút "Sửa" bên cạnh niên khóa
+  2. Thay đổi thông tin
+  3. Nhấn nút "Cập nhật"
+Test Data:
+  - Tên Niên khóa (sửa): Niên khóa 2024-2029
+  - Năm kết thúc (sửa): 2029
+Expected Result:
+  - Hiển thị "Cập nhật niên khóa thành công"
+  - Thông tin được cập nhật
+
+--- TC-NK-006 ---
+Test Case Name: Xóa Niên khóa thành công
+Module / Function: Quản lý Niên khóa
+Pre-condition: Niên khóa tồn tại, không có liên kết với lớp niên chế
+Test Steps:
+  1. Nhấn nút "Xóa"
+  2. Xác nhận xóa
+Test Data: Niên khóa: NK2024
+Expected Result:
+  - Hiển thị "Xóa niên khóa thành công"
+  - Niên khóa bị xóa khỏi danh sách
+
+--- TC-NK-007 ---
+Test Case Name: Tìm kiếm Niên khóa
+Module / Function: Quản lý Niên khóa
+Pre-condition: Có dữ liệu niên khóa
+Test Steps:
+  1. Nhập từ khóa tìm kiếm
+  2. Nhấn Enter
+Test Data: Từ khóa: "2024"
+Expected Result:
+  - Hiển thị các niên khóa có chứa "2024" trong mã hoặc tên
+
+================================================================================
+                        MODULE 5: QUẢN LÝ NGÀNH
+================================================================================
+
+--- TC-NGANH-001 ---
+Test Case Name: Tạo mới Ngành thành công
+Module / Function: Quản lý Ngành
+Pre-condition: Có ít nhất 1 Khoa, mã ngành chưa tồn tại
+Test Steps:
+  1. Truy cập trang "Quản lý Ngành"
+  2. Nhấn nút "Tạo mới Ngành"
+  3. Nhập đầy đủ thông tin và chọn Khoa
+  4. Nhấn nút "Tạo mới"
+Test Data:
+  - Mã Ngành: KTPM
+  - Tên Ngành: Kỹ thuật Phần mềm
+  - Mô tả: Ngành KTPM thuộc khoa CNTT
+  - Khoa: CNTT - Khoa CNTT
+Expected Result:
+  - Hiển thị "Tạo mới ngành thành công"
+  - Ngành mới xuất hiện trong danh sách
+
+--- TC-NGANH-002 ---
+Test Case Name: Tạo mới Ngành thất bại - Không chọn Khoa
+Module / Function: Quản lý Ngành
+Pre-condition: Người dùng đã đăng nhập
+Test Steps:
+  1. Mở modal "Tạo mới Ngành"
+  2. Nhập mã ngành, tên ngành, mô tả
+  3. Không chọn Khoa
+  4. Nhấn "Tạo mới"
+Test Data:
+  - Mã Ngành: HTTT
+  - Tên Ngành: Hệ thống Thông tin
+  - Mô tả: ...
+  - Khoa: (không chọn)
+Expected Result:
+  - Hiển thị lỗi: "Vui lòng chọn khoa"
+
+--- TC-NGANH-003 ---
+Test Case Name: Sửa Ngành thành công
+Module / Function: Quản lý Ngành
+Pre-condition: Tồn tại ít nhất 1 ngành
+Test Steps:
+  1. Nhấn nút "Sửa" bên cạnh ngành
+  2. Thay đổi thông tin
+  3. Nhấn "Cập nhật"
+Test Data:
+  - Tên Ngành (sửa): Kỹ thuật Phần mềm và Ứng dụng
+Expected Result:
+  - Hiển thị "Cập nhật ngành thành công"
+
+--- TC-NGANH-004 ---
+Test Case Name: Xóa Ngành thành công
+Module / Function: Quản lý Ngành
+Pre-condition: Ngành tồn tại, không có liên kết lớp
+Test Steps:
+  1. Nhấn nút "Xóa"
+  2. Xác nhận xóa trong modal
+Test Data: Ngành cần xóa: HTTT
+Expected Result:
+  - Hiển thị "Xóa ngành thành công"
+
+--- TC-NGANH-005 ---
+Test Case Name: Lọc Ngành theo Khoa
+Module / Function: Quản lý Ngành
+Pre-condition: Có nhiều ngành thuộc nhiều khoa khác nhau
+Test Steps:
+  1. Truy cập trang "Quản lý Ngành"
+  2. Chọn Khoa trong bộ lọc (SearchableSelect)
+  3. Nhấn nút "Lọc"
+Test Data: Khoa lọc: CNTT
+Expected Result:
+  - Danh sách chỉ hiển thị ngành thuộc khoa CNTT
+
+--- TC-NGANH-006 ---
+Test Case Name: Nhập Ngành từ Excel thành công
+Module / Function: Quản lý Ngành - Import Excel
+Pre-condition: Có file Excel đúng định dạng (.xlsx)
+Test Steps:
+  1. Nhấn nút "Nhập từ Excel"
+  2. Tải file mẫu (tùy chọn)
+  3. Kéo thả hoặc chọn file Excel chứa dữ liệu ngành
+  4. Nhấn nút "Xác nhận"
+Test Data: File Excel chứa 5 ngành hợp lệ
+Expected Result:
+  - Hiển thị kết quả import: Tổng 5 dòng, 5 thành công, 0 thất bại
+  - Tab "Thành công" hiển thị chi tiết các ngành đã import
+
+--- TC-NGANH-007 ---
+Test Case Name: Nhập Ngành từ Excel - Có lỗi một số dòng
+Module / Function: Quản lý Ngành - Import Excel
+Pre-condition: File Excel chứa cả dữ liệu hợp lệ và không hợp lệ
+Test Steps:
+  1. Nhấn "Nhập từ Excel"
+  2. Chọn file Excel có lỗi
+  3. Nhấn "Xác nhận"
+Test Data: File chứa 5 dòng: 3 hợp lệ, 2 trùng mã ngành
+Expected Result:
+  - Thống kê: 3 thành công, 2 thất bại
+  - Tab "Thất bại" hiển thị chi tiết lỗi từng dòng (dòng, mã ngành, mô tả lỗi)
+
+--- TC-NGANH-008 ---
+Test Case Name: Nhập Ngành từ Excel thất bại - File không đúng định dạng
+Module / Function: Quản lý Ngành - Import Excel
+Pre-condition: Không có
+Test Steps:
+  1. Nhấn "Nhập từ Excel"
+  2. Chọn file không phải .xlsx (VD: .csv, .pdf)
+Test Data: File: data.csv
+Expected Result:
+  - Hiển thị lỗi: "Chỉ chấp nhận file Excel (.xlsx)"
+
+================================================================================
+                        MODULE 6: QUẢN LÝ MÔN HỌC
+================================================================================
+
+--- TC-MH-001 ---
+Test Case Name: Tạo mới Môn học thành công
+Module / Function: Quản lý Môn học
+Pre-condition: Mã môn học chưa tồn tại
+Test Steps:
+  1. Truy cập "Quản lý Môn học"
+  2. Nhấn "Tạo mới Môn học"
+  3. Nhập đầy đủ thông tin
+  4. Nhấn "Tạo mới"
+Test Data:
+  - Mã Môn học: LTCS
+  - Tên Môn học: Lập trình Cơ sở
+  - Loại Môn: Đại Cương
+  - Số Tín chỉ: 3
+  - Mô tả: Môn học cơ sở về lập trình
+Expected Result:
+  - Hiển thị "Tạo mới môn học thành công"
+  - Môn học mới xuất hiện trong danh sách
+
+--- TC-MH-002 ---
+Test Case Name: Tạo mới Môn học thất bại - Để trống Mã Môn học
+Module / Function: Quản lý Môn học
+Pre-condition: Người dùng đã đăng nhập
+Test Steps:
+  1. Mở modal "Tạo mới Môn học"
+  2. Để trống Mã Môn học
+  3. Nhấn "Tạo mới"
+Test Data:
+  - Mã Môn học: (trống)
+Expected Result:
+  - Hiển thị lỗi: "Mã môn học không được để trống"
+
+--- TC-MH-003 ---
+Test Case Name: Tạo mới Môn học thất bại - Không chọn Loại Môn
+Module / Function: Quản lý Môn học
+Pre-condition: Người dùng đã đăng nhập
+Test Steps:
+  1. Mở modal "Tạo mới Môn học"
+  2. Nhập các trường nhưng không chọn Loại Môn
+  3. Nhấn "Tạo mới"
+Test Data:
+  - Loại Môn: (không chọn)
+Expected Result:
+  - Hiển thị lỗi: "Vui lòng chọn loại môn"
+
+--- TC-MH-004 ---
+Test Case Name: Tạo mới Môn học thất bại - Số tín chỉ <= 0
+Module / Function: Quản lý Môn học
+Pre-condition: Người dùng đã đăng nhập
+Test Steps:
+  1. Mở modal "Tạo mới Môn học"
+  2. Nhập số tín chỉ = 0 hoặc âm
+  3. Nhấn "Tạo mới"
+Test Data:
+  - Số Tín chỉ: 0
+Expected Result:
+  - Hiển thị lỗi: "Số tín chỉ phải lớn hơn 0"
+
+--- TC-MH-005 ---
+Test Case Name: Sửa Môn học thành công
+Module / Function: Quản lý Môn học
+Pre-condition: Tồn tại ít nhất 1 môn học
+Test Steps:
+  1. Nhấn nút "Sửa" bên cạnh môn học
+  2. Thay đổi tên môn, loại môn, số tín chỉ
+  3. Nhấn "Cập nhật"
+Test Data:
+  - Tên Môn học (sửa): Lập trình Cơ sở nâng cao
+  - Số Tín chỉ (sửa): 4
+Expected Result:
+  - Hiển thị "Cập nhật môn học thành công"
+
+--- TC-MH-006 ---
+Test Case Name: Xóa Môn học thành công
+Module / Function: Quản lý Môn học
+Pre-condition: Môn học không có lớp học phần liên kết
+Test Steps:
+  1. Nhấn nút "Xóa"
+  2. Xác nhận xóa
+Test Data: Môn: LTCS
+Expected Result:
+  - Hiển thị "Xóa môn học thành công"
+
+--- TC-MH-007 ---
+Test Case Name: Nhập Môn học từ Excel thành công
+Module / Function: Quản lý Môn học - Import Excel
+Pre-condition: File Excel .xlsx đúng định dạng
+Test Steps:
+  1. Nhấn "Nhập từ Excel"
+  2. Tải file mẫu
+  3. Chọn file đã điền dữ liệu
+  4. Nhấn "Xác nhận"
+Test Data: File chứa 10 môn học hợp lệ
+Expected Result:
+  - Kết quả: 10 thành công, 0 thất bại
+
+--- TC-MH-008 ---
+Test Case Name: Xuất Môn học ra Excel
+Module / Function: Quản lý Môn học - Export Excel
+Pre-condition: Có dữ liệu môn học trong hệ thống
+Test Steps:
+  1. Nhấn nút "Xuất Excel"
+  2. Chờ quá trình xuất hoàn tất
+Test Data: Không cần
+Expected Result:
+  - File Excel được tải về máy
+  - File chứa đầy đủ thông tin các môn học
+
+================================================================================
+                        MODULE 7: QUẢN LÝ GIẢNG VIÊN
+================================================================================
+
+--- TC-GV-001 ---
+Test Case Name: Thêm Giảng viên thành công
+Module / Function: Quản lý Giảng viên
+Pre-condition: Mã giảng viên và email chưa tồn tại
+Test Steps:
+  1. Truy cập "Quản lý Giảng viên"
+  2. Nhấn "Thêm Giảng Viên"
+  3. Nhập đầy đủ thông tin
+  4. Nhấn "Thêm mới"
+Test Data:
+  - Mã GV: GV001
+  - Họ và Tên: Nguyễn Văn A
+  - Ngày Sinh: 1985-05-20
+  - Email: nguyenvana@edu.vn
+  - SĐT: 0912345678
+  - Giới tính: Nam
+  - Địa chỉ: TP. Hồ Chí Minh
+Expected Result:
+  - Hiển thị "Thêm giảng viên thành công"
+  - Giảng viên mới xuất hiện trong danh sách
+  - Hệ thống tự động tạo tài khoản đăng nhập
+
+--- TC-GV-002 ---
+Test Case Name: Thêm Giảng viên thất bại - Để trống Mã GV
+Module / Function: Quản lý Giảng viên
+Pre-condition: Người dùng đã đăng nhập
+Test Steps:
+  1. Mở modal "Thêm Giảng Viên"
+  2. Để trống ô "Mã Giảng Viên"
+  3. Nhấn "Thêm mới"
+Test Data:
+  - Mã GV: (trống)
+Expected Result:
+  - Hiển thị lỗi validation tại trường Mã Giảng Viên
+
+--- TC-GV-003 ---
+Test Case Name: Thêm Giảng viên thất bại - Email không hợp lệ
+Module / Function: Quản lý Giảng viên
+Pre-condition: Người dùng đã đăng nhập
+Test Steps:
+  1. Mở modal "Thêm Giảng Viên"
+  2. Nhập email sai format
+  3. Nhấn "Thêm mới"
+Test Data:
+  - Email: emailkhonghople
+Expected Result:
+  - Hiển thị lỗi validation tại trường Email
+
+--- TC-GV-004 ---
+Test Case Name: Thêm Giảng viên thất bại - SĐT không hợp lệ
+Module / Function: Quản lý Giảng viên
+Pre-condition: Người dùng đã đăng nhập
+Test Steps:
+  1. Mở modal "Thêm Giảng Viên"
+  2. Nhập SĐT sai format
+  3. Nhấn "Thêm mới"
+Test Data:
+  - SĐT: abc123
+Expected Result:
+  - Hiển thị lỗi validation tại trường SĐT
+
+--- TC-GV-005 ---
+Test Case Name: Xem chi tiết Giảng viên
+Module / Function: Quản lý Giảng viên
+Pre-condition: Tồn tại ít nhất 1 giảng viên
+Test Steps:
+  1. Nhấn nút "Xem chi tiết" (icon mắt) bên cạnh giảng viên
+  2. Modal chi tiết hiện lên
+Test Data: Không cần
+Expected Result:
+  - Modal hiển thị đầy đủ: Mã GV, Họ tên, Ngày sinh, Giới tính, Email, SĐT, Địa chỉ
+  - Hiển thị danh sách "Môn học được phân công" với bảng: Mã môn, Tên môn, Loại môn, Số tín chỉ
+
+--- TC-GV-006 ---
+Test Case Name: Sửa thông tin Giảng viên thành công
+Module / Function: Quản lý Giảng viên
+Pre-condition: Tồn tại ít nhất 1 giảng viên
+Test Steps:
+  1. Nhấn nút "Sửa"
+  2. Thay đổi thông tin
+  3. Nhấn "Cập nhật"
+Test Data:
+  - SĐT (sửa): 0987654321
+  - Địa chỉ (sửa): Hà Nội
+Expected Result:
+  - Hiển thị "Cập nhật giảng viên thành công"
+
+--- TC-GV-007 ---
+Test Case Name: Xóa Giảng viên thành công
+Module / Function: Quản lý Giảng viên
+Pre-condition: Giảng viên không có lớp học phần đang giảng dạy
+Test Steps:
+  1. Nhấn nút "Xóa"
+  2. Xác nhận xóa
+Test Data: GV cần xóa: GV002
+Expected Result:
+  - Hiển thị "Xóa giảng viên thành công"
+
+--- TC-GV-008 ---
+Test Case Name: Nhập Giảng viên từ Excel thành công
+Module / Function: Quản lý Giảng viên - Import Excel
+Pre-condition: File Excel .xlsx đúng cấu trúc (2 sheet: Giảng viên + Phân công môn học)
+Test Steps:
+  1. Nhấn "Nhập từ Excel"
+  2. Tải file mẫu
+  3. Điền dữ liệu vào 2 sheet
+  4. Upload file
+  5. Nhấn xác nhận
+Test Data: Sheet 1: 5 GV, Sheet 2: 10 phân công môn học
+Expected Result:
+  - Hiển thị kết quả chi tiết cho cả 2 sheet
+  - Thống kê thành công/thất bại cho mỗi sheet
+
+================================================================================
+                        MODULE 8: QUẢN LÝ SINH VIÊN
+================================================================================
+
+--- TC-SV-001 ---
+Test Case Name: Tạo mới Sinh viên thành công
+Module / Function: Quản lý Sinh viên
+Pre-condition: Mã SV chưa tồn tại, có ít nhất 1 lớp niên chế
+Test Steps:
+  1. Truy cập "Quản lý Sinh viên"
+  2. Nhấn "Tạo mới Sinh viên"
+  3. Nhập đầy đủ thông tin
+  4. Nhấn "Tạo mới"
+Test Data:
+  - Mã SV: SV001
+  - Họ và Tên: Trần Văn B
+  - Ngày sinh: 2003-08-15
+  - Giới tính: Nam
+  - Địa chỉ: TP. HCM
+  - Email: tranvanb@email.com
+  - SĐT: 0901234567
+  - Ngày nhập học: 2021-09-01
+  - Tình trạng: Đang học
+  - Lớp: KTPM01 - Lớp KTPM 01
+Expected Result:
+  - Hiển thị "Tạo mới sinh viên thành công"
+  - Hệ thống tự tạo tài khoản đăng nhập cho sinh viên
+
+--- TC-SV-002 ---
+Test Case Name: Tạo mới Sinh viên thất bại - Để trống trường bắt buộc
+Module / Function: Quản lý Sinh viên
+Pre-condition: Người dùng đã đăng nhập
+Test Steps:
+  1. Mở modal "Tạo mới Sinh viên"
+  2. Để trống tất cả trường
+  3. Nhấn "Tạo mới"
+Test Data: Tất cả trường trống
+Expected Result:
+  - Hiển thị lỗi validation cho từng trường:
+    + Mã SV, Họ tên, Ngày sinh, Giới tính, Địa chỉ, Email, SĐT, Ngày nhập học, Tình trạng, Lớp
+
+--- TC-SV-003 ---
+Test Case Name: Sửa Sinh viên thành công
+Module / Function: Quản lý Sinh viên
+Pre-condition: Tồn tại ít nhất 1 sinh viên có tình trạng khác "Đã tốt nghiệp"
+Test Steps:
+  1. Nhấn nút "Sửa" bên cạnh sinh viên
+  2. Thay đổi thông tin
+  3. Nhấn "Cập nhật"
+Test Data:
+  - Tình trạng (sửa): Bảo lưu
+  - Địa chỉ (sửa): Đà Nẵng
+Expected Result:
+  - Hiển thị "Cập nhật sinh viên thành công"
+  - Thông tin được cập nhật
+
+--- TC-SV-004 ---
+Test Case Name: Sửa Sinh viên - Sinh viên đã tốt nghiệp (chỉ xem, không cho sửa)
+Module / Function: Quản lý Sinh viên
+Pre-condition: Sinh viên có tình trạng "DA_TOT_NGHIEP"
+Test Steps:
+  1. Nhấn nút "Sửa" bên cạnh sinh viên đã tốt nghiệp
+  2. Quan sát modal
+Test Data: Sinh viên tình trạng "Đã tốt nghiệp"
+Expected Result:
+  - Modal hiển thị thông tin chỉ đọc (readonly)
+  - Hiển thị cảnh báo: "Thông tin về sinh viên đã tốt nghiệp có giá trị về mặt pháp lý, không thể sửa."
+  - Chỉ có nút "Đóng", không có nút "Cập nhật"
+
+--- TC-SV-005 ---
+Test Case Name: Xem chi tiết Sinh viên
+Module / Function: Quản lý Sinh viên
+Pre-condition: Tồn tại ít nhất 1 sinh viên
+Test Steps:
+  1. Nhấn nút "Xem chi tiết" (icon mắt)
+Test Data: Không cần
+Expected Result:
+  - Modal hiển thị đầy đủ: Mã SV, Họ tên, Ngày sinh, Giới tính, Email, SĐT, 
+    Ngày nhập học, Tình trạng (badge màu), Lớp, Ngành, Niên khóa, Địa chỉ
+
+--- TC-SV-006 ---
+Test Case Name: Xóa Sinh viên thành công
+Module / Function: Quản lý Sinh viên
+Pre-condition: Sinh viên tồn tại, không có ràng buộc
+Test Steps:
+  1. Nhấn nút "Xóa"
+  2. Xác nhận
+Test Data: SV: SV002
+Expected Result:
+  - Hiển thị "Xóa sinh viên thành công"
+
+--- TC-SV-007 ---
+Test Case Name: Nhập Sinh viên từ Excel thành công
+Module / Function: Quản lý Sinh viên - Import Excel
+Pre-condition: File Excel đúng format
+Test Steps:
+  1. Nhấn "Nhập từ Excel"
+  2. Chọn file
+  3. Xác nhận
+Test Data: File chứa 20 sinh viên hợp lệ
+Expected Result:
+  - 20 thành công, 0 thất bại
+
+--- TC-SV-008 ---
+Test Case Name: Tìm kiếm Sinh viên theo từ khóa
+Module / Function: Quản lý Sinh viên
+Pre-condition: Có dữ liệu sinh viên
+Test Steps:
+  1. Nhập từ khóa vào ô tìm kiếm
+  2. Nhấn Enter
+Test Data: Từ khóa: "Trần Văn"
+Expected Result:
+  - Hiển thị danh sách sinh viên có họ tên chứa "Trần Văn"
+
+================================================================================
+                   MODULE 9: QUẢN LÝ NĂM HỌC & HỌC KỲ
+================================================================================
+
+--- TC-NHHK-001 ---
+Test Case Name: Tạo mới Năm học thành công
+Module / Function: Quản lý Năm học & Học kỳ
+Pre-condition: Mã năm học chưa tồn tại
+Test Steps:
+  1. Truy cập "Quản lý Năm học & Học kỳ"
+  2. Nhấn "Tạo mới Năm học"
+  3. Nhập đầy đủ thông tin
+  4. Nhấn "Tạo mới"
+Test Data:
+  - Mã Năm học: NH2024
+  - Tên Năm học: Năm học 2024-2025
+  - Năm bắt đầu: 2024
+  - Năm kết thúc: 2025
+Expected Result:
+  - Hiển thị "Tạo mới năm học thành công"
+
+--- TC-NHHK-002 ---
+Test Case Name: Tạo mới Học kỳ thành công
+Module / Function: Quản lý Năm học & Học kỳ
+Pre-condition: Tồn tại ít nhất 1 năm học
+Test Steps:
+  1. Nhấn "Tạo mới Học kỳ"
+  2. Chọn năm học
+  3. Nhập học kỳ (1 hoặc 2), ngày bắt đầu, ngày kết thúc
+  4. Nhấn "Tạo mới"
+Test Data:
+  - Năm học: NH2024 - Năm học 2024-2025
+  - Học kỳ: 1
+  - Ngày bắt đầu: 2024-09-01
+  - Ngày kết thúc: 2025-01-15
+Expected Result:
+  - Hiển thị "Tạo mới học kỳ thành công"
+
+--- TC-NHHK-003 ---
+Test Case Name: Sửa Học kỳ (chỉ ngày bắt đầu, ngày kết thúc)
+Module / Function: Quản lý Năm học & Học kỳ
+Pre-condition: Tồn tại ít nhất 1 học kỳ
+Test Steps:
+  1. Nhấn nút "Sửa" bên cạnh học kỳ
+  2. Thay đổi ngày bắt đầu/kết thúc
+  3. Nhấn "Cập nhật"
+Test Data:
+  - Ngày bắt đầu (sửa): 2024-09-05
+  - Ngày kết thúc (sửa): 2025-01-20
+Expected Result:
+  - Hiển thị "Cập nhật học kỳ thành công"
+
+--- TC-NHHK-004 ---
+Test Case Name: Xóa Năm học thành công
+Module / Function: Quản lý Năm học & Học kỳ
+Pre-condition: Năm học không có học kỳ hoặc lớp học phần liên kết
+Test Steps:
+  1. Nhấn "Xóa" bên cạnh năm học
+  2. Xác nhận
+Test Data: Năm học: NH2024
+Expected Result:
+  - Hiển thị "Xóa năm học thành công"
+
+================================================================================
+                   MODULE 10: QUẢN LÝ LỚP NIÊN CHẾ
+================================================================================
+
+--- TC-LNC-001 ---
+Test Case Name: Tạo mới Lớp niên chế thành công
+Module / Function: Quản lý Lớp niên chế
+Pre-condition: Có ít nhất 1 Khoa, 1 Ngành và 1 Niên khóa
+Test Steps:
+  1. Truy cập "Quản lý Lớp niên chế"
+  2. Nhấn "Tạo mới Lớp"
+  3. Nhập Mã lớp, Tên lớp, chọn Khoa → Ngành → Niên khóa
+  4. Nhấn "Tạo mới"
+Test Data:
+  - Mã Lớp: KTPM01
+  - Tên Lớp: Lớp KTPM 01
+  - Khoa: CNTT
+  - Ngành: KTPM
+  - Niên khóa: NK2024
+Expected Result:
+  - Hiển thị "Tạo mới lớp thành công"
+  - Lớp mới xuất hiện trong danh sách
+
+--- TC-LNC-002 ---
+Test Case Name: Tạo mới Lớp thất bại - Không chọn Ngành
+Module / Function: Quản lý Lớp niên chế
+Pre-condition: Người dùng đã đăng nhập
+Test Steps:
+  1. Mở modal tạo lớp
+  2. Nhập mã, tên lớp nhưng không chọn ngành
+  3. Nhấn "Tạo mới"
+Test Data:
+  - Ngành: (không chọn)
+Expected Result:
+  - Hiển thị lỗi validation tại trường Ngành
+
+--- TC-LNC-003 ---
+Test Case Name: Sửa Lớp niên chế thành công
+Module / Function: Quản lý Lớp niên chế
+Pre-condition: Tồn tại ít nhất 1 lớp
+Test Steps:
+  1. Nhấn "Sửa"
+  2. Thay đổi thông tin
+  3. Nhấn "Cập nhật"
+Test Data:
+  - Tên Lớp (sửa): Lớp KTPM 01 - K24
+Expected Result:
+  - Cập nhật thành công
+
+--- TC-LNC-004 ---
+Test Case Name: Xóa Lớp niên chế thành công
+Module / Function: Quản lý Lớp niên chế
+Pre-condition: Lớp không có sinh viên
+Test Steps:
+  1. Nhấn "Xóa"
+  2. Xác nhận
+Test Data: Lớp: KTPM02
+Expected Result:
+  - Hiển thị "Xóa lớp thành công"
+
+--- TC-LNC-005 ---
+Test Case Name: Nhập Lớp niên chế từ Excel
+Module / Function: Quản lý Lớp niên chế - Import Excel
+Pre-condition: File Excel đúng format
+Test Steps:
+  1. Nhấn "Nhập từ Excel"
+  2. Chọn file
+  3. Xác nhận
+Test Data: File chứa 5 lớp hợp lệ
+Expected Result:
+  - Import thành công
+
+================================================================================
+                   MODULE 11: QUẢN LÝ LỚP HỌC PHẦN
+================================================================================
+
+--- TC-LHP-001 ---
+Test Case Name: Xem danh sách Lớp học phần
+Module / Function: Quản lý Lớp học phần
+Pre-condition: Có dữ liệu lớp học phần
+Test Steps:
+  1. Truy cập "Quản lý Lớp học phần"
+  2. Quan sát bảng danh sách
+Test Data: Không cần
+Expected Result:
+  - Hiển thị đúng các cột: Mã LHP, Môn học, GV, Ngành, Niên khóa, Sĩ số, 
+    Trạng thái (badge màu: xanh=Đang diễn ra, đỏ=Đã kết thúc, vàng=Chưa bắt đầu), 
+    Khóa điểm (badge: đỏ=Đã khóa, xanh=Chưa khóa)
+  - Phân trang hoạt động đúng (10 items/trang)
+
+--- TC-LHP-002 ---
+Test Case Name: Xem chi tiết Lớp học phần
+Module / Function: Quản lý Lớp học phần
+Pre-condition: Tồn tại ít nhất 1 LHP
+Test Steps:
+  1. Nhấn nút "Xem chi tiết" (icon mắt) bên cạnh LHP
+  2. Quan sát modal chi tiết
+Test Data: Không cần
+Expected Result:
+  - Modal hiển thị đầy đủ: Mã LHP, Trạng thái, Môn học (mã + tên), Số tín chỉ, 
+    GV (mã + tên), Email GV, Ngành (mã + tên), Khoa (mã + tên), 
+    Niên khóa, Học kỳ + Năm học, Thời gian HK, Sĩ số, Khóa điểm, Ngày tạo, Ghi chú
+
+--- TC-LHP-003 ---
+Test Case Name: Sửa Lớp học phần - Thay đổi Giảng viên thành công
+Module / Function: Quản lý Lớp học phần
+Pre-condition: LHP tồn tại, có GV phù hợp (được phân công môn học tương ứng)
+Test Steps:
+  1. Nhấn "Sửa" bên cạnh LHP từ dropdown
+  2. Trong modal sửa, chọn giảng viên khác từ danh sách
+  3. Kiểm tra panel thông tin tín chỉ giảng dạy hiển thị
+  4. Nhấn "Cập nhật"
+Test Data:
+  - Giảng viên mới: GV003 - Nguyễn Văn C (tổng tín chỉ <= 12)
+Expected Result:
+  - Hiển thị "Cập nhật lớp học phần thành công"
+  - GV mới được cập nhật trong danh sách
+
+--- TC-LHP-004 ---
+Test Case Name: Sửa LHP - GV vượt quá 12 tín chỉ trong học kỳ
+Module / Function: Quản lý Lớp học phần
+Pre-condition: GV mới đã có >= 10 tín chỉ trong học kỳ này
+Test Steps:
+  1. Nhấn "Sửa" bên cạnh LHP (VD: môn 3 tín chỉ)
+  2. Chọn GV đã dạy 10+ tín chỉ trong HK
+  3. Quan sát panel cảnh báo tín chỉ
+  4. Thử nhấn "Cập nhật"
+Test Data:
+  - GV mới: GV005 (đang dạy 10 tín chỉ trong HK)
+  - Lớp hiện tại: 3 tín chỉ → Tổng = 13 > 12
+Expected Result:
+  - Panel cảnh báo đỏ: "Vượt quá giới hạn tín chỉ" với chi tiết tổng tín chỉ
+  - Nút "Cập nhật" bị disabled (opacity-50, cursor-not-allowed)
+  - Không thể gửi request
+
+--- TC-LHP-005 ---
+Test Case Name: Sửa LHP - Chỉ hiển thị GV phân công môn tương ứng
+Module / Function: Quản lý Lớp học phần
+Pre-condition: LHP tồn tại, có và không có GV được phân công môn
+Test Steps:
+  1. Nhấn "Sửa" bên cạnh LHP
+  2. Kiểm tra danh sách GV trong trường "Giảng viên"
+Test Data: LHP dạy môn LTCS
+Expected Result:
+  - Chỉ hiển thị GV có trong danh sách giangVienMonHocs với monHoc.id trùng khớp
+  - GV không được phân công môn này không xuất hiện trong dropdown
+  - Nếu không có GV nào → Hiển thị "Không có giảng viên nào phụ trách môn học này"
+
+--- TC-LHP-006 ---
+Test Case Name: Sửa LHP - Để trống Mã LHP
+Module / Function: Quản lý Lớp học phần
+Pre-condition: Modal sửa LHP đang mở
+Test Steps:
+  1. Xóa trắng ô "Mã Lớp Học Phần"
+  2. Nhấn "Cập nhật"
+Test Data:
+  - Mã LHP: (trống)
+Expected Result:
+  - Hiển thị lỗi: "Mã lớp học phần không được để trống"
+
+--- TC-LHP-007 ---
+Test Case Name: Xóa Lớp học phần thành công
+Module / Function: Quản lý Lớp học phần
+Pre-condition: LHP tồn tại, không có sinh viên đăng ký
+Test Steps:
+  1. Nhấn dropdown hành động → "Xóa" bên cạnh LHP
+  2. Modal xác nhận hiện ra
+  3. Nhấn "Xóa" để xác nhận
+Test Data: LHP: LHP001
+Expected Result:
+  - Hiển thị "Xóa lớp học phần thành công"
+  - LHP biến mất khỏi danh sách
+
+--- TC-LHP-008 ---
+Test Case Name: Lọc Lớp học phần theo Trạng thái
+Module / Function: Quản lý Lớp học phần
+Pre-condition: Có LHP ở nhiều trạng thái khác nhau
+Test Steps:
+  1. Mở bộ lọc nâng cao (nếu cần)
+  2. Chọn trạng thái: "Đang diễn ra" (DANG_HOC)
+  3. Quan sát kết quả
+Test Data: Trạng thái: DANG_HOC
+Expected Result:
+  - Chỉ hiển thị LHP có trạng thái "Đang diễn ra" (badge xanh)
+
+--- TC-LHP-009 ---
+Test Case Name: Lọc Lớp học phần theo Khóa điểm
+Module / Function: Quản lý Lớp học phần
+Pre-condition: Có LHP đã khóa và chưa khóa điểm
+Test Steps:
+  1. Chọn bộ lọc: Khóa điểm = "Đã khóa"
+  2. Quan sát kết quả
+Test Data: Khóa điểm: true
+Expected Result:
+  - Chỉ hiển thị LHP đã khóa điểm (badge đỏ "Đã khóa")
+
+--- TC-LHP-010 ---
+Test Case Name: Lọc LHP kết hợp nhiều bộ lọc (Ngành + Niên khóa + Năm học)
+Module / Function: Quản lý Lớp học phần
+Pre-condition: Có LHP ở nhiều ngành, niên khóa, năm học
+Test Steps:
+  1. Mở bộ lọc nâng cao
+  2. Chọn Ngành: KTPM
+  3. Chọn Niên khóa: NK2024
+  4. Chọn Năm học: NH2024 → Học kỳ: 1
+  5. Quan sát kết quả
+Test Data: Ngành=KTPM, Niên khóa=NK2024, Năm học=NH2024, HK=1
+Expected Result:
+  - Chỉ hiển thị LHP thỏa mãn tất cả điều kiện lọc
+  - Phân trang cập nhật theo kết quả lọc
+
+--- TC-LHP-011 ---
+Test Case Name: Khóa điểm Lớp học phần
+Module / Function: Quản lý Lớp học phần
+Pre-condition: LHP tồn tại, trạng thái khóa điểm = "Chưa khóa"
+Test Steps:
+  1. Nhấn dropdown hành động → "Khóa điểm"
+  2. Modal xác nhận hiện ra
+  3. Nhấn xác nhận
+Test Data: LHP chưa khóa điểm
+Expected Result:
+  - Trạng thái khóa điểm chuyển thành "Đã khóa" (badge đỏ)
+  - Sau khi khóa, GV không thể sửa điểm LHP này nữa
+
+--- TC-LHP-012 ---
+Test Case Name: Nhập Sinh viên vào LHP từ Excel
+Module / Function: Quản lý Lớp học phần - Import SV Excel
+Pre-condition: LHP tồn tại, file Excel đúng format
+Test Steps:
+  1. Nhấn dropdown hành động → "Nhập sinh viên"
+  2. Tải file mẫu (tùy chọn)
+  3. Chọn file Excel .xlsx
+  4. Nhấn xác nhận
+Test Data: File chứa danh sách mã SV + mã LHP
+Expected Result:
+  - Hiển thị kết quả: summary (total, success, failed)
+  - Tab thất bại hiển thị chi tiết lỗi (row, maSinhVien, error)
+  - Tab theo lớp hiển thị kết quả phân tách theo từng LHP
+
+--- TC-LHP-013 ---
+Test Case Name: Tìm kiếm Lớp học phần
+Module / Function: Quản lý Lớp học phần
+Pre-condition: Có dữ liệu LHP
+Test Steps:
+  1. Nhập từ khóa tìm kiếm vào ô search
+  2. Nhấn Enter hoặc icon tìm kiếm
+Test Data: Từ khóa: "LTCS"
+Expected Result:
+  - Hiển thị LHP có mã hoặc môn học chứa "LTCS"
+
+--- TC-LHP-014 ---
+Test Case Name: Chuyển từ LHP sang Quản lý Điểm (SV trong LHP)
+Module / Function: Quản lý Lớp học phần
+Pre-condition: LHP tồn tại, có sinh viên
+Test Steps:
+  1. Nhấn dropdown hành động → "Quản lý SV" hoặc "Xem SV trong LHP"
+  2. Trang chuyển sang chi tiết LHP
+Test Data: Không cần
+Expected Result:
+  - Chuyển sang trang chi tiết LHP với danh sách sinh viên và điểm
+  - Hiển thị header thông tin LHP (Mã LHP, Môn học, GV, Ngành, Sĩ số, Khóa điểm)
+
+================================================================================
+                   MODULE 12: QUẢN LÝ ĐIỂM (Admin)
+================================================================================
+
+--- TC-DIEM-001 ---
+Test Case Name: Xem danh sách Sinh viên và Điểm trong LHP
+Module / Function: Quản lý Điểm (chi tiết LHP)
+Pre-condition: LHP có ít nhất 1 sinh viên
+Test Steps:
+  1. Truy cập chi tiết LHP (quản lý SV trong LHP)
+  2. Quan sát danh sách sinh viên và điểm
+Test Data: Không cần
+Expected Result:
+  - Hiển thị header thông tin LHP: Mã LHP, Môn học, GV, Ngành, Niên khóa, 
+    Năm học - HK, Thời gian, Sĩ số, Trạng thái khóa điểm
+  - Bảng hiển thị: Checkbox, Mã SV, Họ tên, Lớp, Loại tham gia (badge màu), 
+    Điểm QT, Điểm TP, Điểm thi, TBCHP, Điểm số, Điểm chữ
+
+--- TC-DIEM-002 ---
+Test Case Name: Xem chi tiết điểm Sinh viên trong LHP
+Module / Function: Quản lý Điểm
+Pre-condition: Sinh viên có điểm trong LHP
+Test Steps:
+  1. Nhấn nút "Xem chi tiết" (icon mắt) bên cạnh sinh viên
+  2. Quan sát modal chi tiết
+Test Data: Không cần
+Expected Result:
+  - Modal hiển thị 2 phần:
+    + Thông tin SV: Mã SV, Họ tên, Lớp niên chế (mã + tên), Ngành (mã + tên), 
+      Niên khóa, Loại tham gia (badge), Ngày đăng ký, Trạng thái điểm (badge)
+    + Bảng điểm: Điểm QT, Điểm TP, Điểm thi, TBCHP, Điểm số, Điểm chữ (badge)
+
+--- TC-DIEM-003 ---
+Test Case Name: Xem chi tiết SV chưa có điểm
+Module / Function: Quản lý Điểm
+Pre-condition: SV được đăng ký trong LHP nhưng chưa có điểm
+Test Steps:
+  1. Nhấn "Xem chi tiết" bên cạnh SV chưa có điểm
+Test Data: SV mới đăng ký, chưa nhập điểm
+Expected Result:
+  - Trạng thái điểm: badge vàng "Chưa có điểm"
+  - Bảng điểm hiển thị: "Sinh viên chưa có điểm" (colspan 6)
+
+--- TC-DIEM-004 ---
+Test Case Name: Xóa Sinh viên khỏi Lớp học phần
+Module / Function: Quản lý Điểm
+Pre-condition: LHP chưa khóa điểm, SV chưa có điểm (chuaCoDiem = true)
+Test Steps:
+  1. Nhấn dropdown hành động → "Xóa" bên cạnh sinh viên
+  2. Modal xác nhận hiển thị thông tin SV
+  3. Nhấn xác nhận xóa
+Test Data: SV: SV003 - Chưa có điểm
+Expected Result:
+  - Hiển thị "Đã xóa sinh viên SV003 - [Tên] khỏi lớp học phần"
+  - SV biến mất khỏi danh sách
+  - Sĩ số LHP giảm
+
+--- TC-DIEM-005 ---
+Test Case Name: Xóa hàng loạt Sinh viên khỏi LHP (Bulk Delete)
+Module / Function: Quản lý Điểm
+Pre-condition: LHP có nhiều SV chưa có điểm
+Test Steps:
+  1. Tick checkbox bên cạnh nhiều SV chưa có điểm
+  2. Nút "Xóa [N] sinh viên" xuất hiện
+  3. Nhấn nút "Xóa [N] sinh viên"
+  4. Modal xác nhận hiển thị danh sách SV sẽ xóa
+  5. Nhấn xác nhận
+Test Data: Chọn 5 SV chưa có điểm
+Expected Result:
+  - Hiển thị modal xác nhận với danh sách SV
+  - Sau xác nhận: hiển thị kết quả chi tiết (thành công/thất bại cho mỗi SV)
+  - Checkbox được reset sau khi xóa
+
+--- TC-DIEM-006 ---
+Test Case Name: Checkbox chọn tất cả SV (chỉ chọn SV chưa có điểm)
+Module / Function: Quản lý Điểm
+Pre-condition: LHP có SV cả có điểm và chưa có điểm
+Test Steps:
+  1. Tick checkbox "Chọn tất cả" ở header bảng
+  2. Quan sát các checkbox ở từng dòng
+Test Data: Không cần
+Expected Result:
+  - Chỉ chọn SV có chuaCoDiem = true
+  - SV đã có điểm không bị chọn (checkbox disabled hoặc không tick)
+  - Hiển thị trạng thái indeterminate nếu chỉ chọn một phần
+
+--- TC-DIEM-007 ---
+Test Case Name: Giữ selection khi chuyển trang (Bulk Delete)
+Module / Function: Quản lý Điểm
+Pre-condition: Có > 10 SV chưa có điểm, chọn ở trang 1
+Test Steps:
+  1. Tick checkbox 3 SV ở trang 1
+  2. Chuyển sang trang 2
+  3. Tick thêm 2 SV ở trang 2
+  4. Nhấn nút "Xóa [5] sinh viên"
+Test Data: Chọn SV ở nhiều trang
+Expected Result:
+  - Selection được giữ qua các trang
+  - Modal hiển thị đúng 5 SV đã chọn từ cả 2 trang
+  - Thông tin SV (mã, tên, lớp) được lưu đúng
+
+--- TC-DIEM-008 ---
+Test Case Name: Lọc SV theo Loại tham gia - Chính quy
+Module / Function: Quản lý Điểm
+Pre-condition: LHP có SV với nhiều loại tham gia
+Test Steps:
+  1. Chọn bộ lọc "Loại tham gia": Chính quy
+  2. Quan sát kết quả
+Test Data: Loại tham gia: CHINH_QUY
+Expected Result:
+  - Chỉ hiển thị SV có loại tham gia "Chính quy" (badge xanh)
+
+--- TC-DIEM-009 ---
+Test Case Name: Lọc SV theo Loại tham gia - Học lại
+Module / Function: Quản lý Điểm
+Pre-condition: LHP có SV học lại
+Test Steps:
+  1. Chọn bộ lọc "Loại tham gia": Học lại
+Test Data: Loại tham gia: HOC_LAI
+Expected Result:
+  - Chỉ hiển thị SV có loại tham gia "Học lại" (badge đỏ)
+
+--- TC-DIEM-010 ---
+Test Case Name: Lọc SV theo Loại tham gia - Học cải thiện
+Module / Function: Quản lý Điểm
+Pre-condition: LHP có SV học cải thiện
+Test Steps:
+  1. Chọn bộ lọc "Loại tham gia": Học cải thiện
+Test Data: Loại tham gia: HOC_CAI_THIEN
+Expected Result:
+  - Chỉ hiển thị SV có loại tham gia "Cải thiện" (badge vàng)
+
+--- TC-DIEM-011 ---
+Test Case Name: Tìm kiếm Sinh viên trong LHP
+Module / Function: Quản lý Điểm
+Pre-condition: LHP có nhiều SV
+Test Steps:
+  1. Nhập từ khóa vào ô tìm kiếm
+  2. Nhấn Enter hoặc icon tìm kiếm
+Test Data: Từ khóa: "Trần"
+Expected Result:
+  - Hiển thị SV có mã hoặc họ tên chứa "Trần"
+
+--- TC-DIEM-012 ---
+Test Case Name: Hiển thị thông tin LHP ở header trang chi tiết
+Module / Function: Quản lý Điểm
+Pre-condition: Truy cập chi tiết LHP
+Test Steps:
+  1. Truy cập trang chi tiết SV trong LHP
+  2. Quan sát phần header thông tin LHP
+Test Data: Không cần
+Expected Result:
+  - Hiển thị đầy đủ: Mã LHP, Môn học (mã + tên), GV (mã + tên), Ngành (mã + tên), 
+    Niên khóa (mã + tên), Năm học - HK, Thời gian (ngày BD - ngày KT), 
+    Sĩ số (badge), Khóa điểm (badge đỏ/xanh)
+
+================================================================================
+          MODULE 13: QUẢN LÝ LỚP HỌC PHẦN THEO GIẢNG VIÊN
+================================================================================
+
+--- TC-GVLHP-001 ---
+Test Case Name: Xem danh sách LHP của Giảng viên đang đăng nhập
+Module / Function: Quản lý LHP theo Giảng viên
+Pre-condition: Đăng nhập với vai trò Giảng viên
+Test Steps:
+  1. Truy cập "Quản lý LHP theo Giảng viên"
+  2. Quan sát danh sách
+Test Data: Không cần
+Expected Result:
+  - Gọi API /giang-day/lop-hoc-phan/giang-vien/me
+  - Chỉ hiển thị các LHP mà giảng viên đang đăng nhập được phân công
+  - Hiển thị: Mã LHP, Môn học, Ngành, Niên khóa, Năm học - HK, 
+    Trạng thái, Khóa điểm (badge), Sĩ số
+
+--- TC-GVLHP-002 ---
+Test Case Name: Lọc LHP theo Môn học
+Module / Function: Quản lý LHP theo Giảng viên
+Pre-condition: GV có nhiều LHP thuộc nhiều môn học khác nhau
+Test Steps:
+  1. Chọn bộ lọc "Môn học": lọc theo 1 môn cụ thể
+  2. Quan sát kết quả
+Test Data: Môn học: LTCS
+Expected Result:
+  - Chỉ hiển thị LHP thuộc môn đã chọn
+
+--- TC-GVLHP-003 ---
+Test Case Name: Lọc LHP theo trạng thái Khóa điểm
+Module / Function: Quản lý LHP theo Giảng viên
+Pre-condition: GV có LHP cả đã khóa và chưa khóa điểm
+Test Steps:
+  1. Chọn bộ lọc "Khóa điểm": "Chưa khóa"
+  2. Quan sát kết quả
+Test Data: Khóa điểm: false
+Expected Result:
+  - Chỉ hiển thị LHP chưa khóa điểm (badge xanh "Chưa khóa")
+
+--- TC-GVLHP-004 ---
+Test Case Name: Lọc kết hợp Ngành + Niên khóa + Học kỳ
+Module / Function: Quản lý LHP theo Giảng viên
+Pre-condition: GV có nhiều LHP đa dạng
+Test Steps:
+  1. Chọn bộ lọc "Ngành": KTPM
+  2. Chọn bộ lọc "Niên khóa": NK2024
+  3. Chọn bộ lọc "Học kỳ": HK1
+Test Data: Ngành: KTPM, Niên khóa: NK2024, Học kỳ: HK1
+Expected Result:
+  - Chỉ hiển thị LHP thỏa mãn tất cả điều kiện lọc
+
+--- TC-GVLHP-005 ---
+Test Case Name: Xem chi tiết LHP (modal)
+Module / Function: Quản lý LHP theo Giảng viên
+Pre-condition: GV có LHP
+Test Steps:
+  1. Nhấn dropdown hành động → "Xem chi tiết"
+  2. Quan sát modal chi tiết
+Test Data: Không cần
+Expected Result:
+  - Modal hiển thị: Mã LHP, Môn học (mã + tên), Giảng viên (mã + tên), 
+    Ngành, Niên khóa, Năm học - HK, Thời gian (ngày BD - ngày KT), 
+    Sĩ số, Khóa điểm, Ghi chú
+
+--- TC-GVLHP-006 ---
+Test Case Name: Tải file mẫu nhập điểm Excel
+Module / Function: Quản lý Điểm theo Giảng viên
+Pre-condition: GV có LHP chưa khóa điểm
+Test Steps:
+  1. Nhấn dropdown hành động → "Tải mẫu nhập điểm"
+  2. Hoặc vào trang quản lý điểm → "Tải mẫu"
+Test Data: Không cần
+Expected Result:
+  - Tải file .xlsx template với danh sách SV trong LHP
+  - File có cột: Mã SV, Họ tên, Điểm QT, Điểm TP, Điểm thi
+
+--- TC-GVLHP-007 ---
+Test Case Name: GV sửa điểm Sinh viên thành công
+Module / Function: Quản lý Điểm theo Giảng viên
+Pre-condition: LHP chưa khóa điểm, SV có trong LHP
+Test Steps:
+  1. Vào chi tiết LHP → trang quản lý điểm
+  2. Nhấn "Sửa điểm" (icon bút chì) bên cạnh sinh viên
+  3. Modal EditDiem mở, nhập điểm quá trình, điểm thành phần, điểm thi
+  4. Nhấn "Cập nhật"
+Test Data:
+  - Điểm quá trình: 8.0
+  - Điểm thành phần: 7.5
+  - Điểm thi: 7.0
+Expected Result:
+  - Điểm được cập nhật thành công
+  - TBCHP, Điểm số, Điểm chữ được tính toán tự động phía server
+  - Hiển thị alert "Cập nhật điểm thành công"
+
+--- TC-GVLHP-008 ---
+Test Case Name: GV sửa điểm thất bại - Điểm vượt quá 10
+Module / Function: Quản lý Điểm theo Giảng viên
+Pre-condition: LHP chưa khóa điểm
+Test Steps:
+  1. Nhấn "Sửa điểm" bên cạnh SV
+  2. Nhập điểm quá trình: 11 (vượt max=10)
+  3. Nhấn "Cập nhật"
+Test Data:
+  - Điểm quá trình: 11
+  - Điểm thành phần: 7.5
+  - Điểm thi: 7.0
+Expected Result:
+  - Không cho phép cập nhật
+  - Input type=number với max=10 ngăn không nhập vượt quá
+
+--- TC-GVLHP-009 ---
+Test Case Name: GV sửa điểm thất bại - Điểm âm
+Module / Function: Quản lý Điểm theo Giảng viên
+Pre-condition: LHP chưa khóa điểm
+Test Steps:
+  1. Nhấn "Sửa điểm" bên cạnh SV
+  2. Nhập điểm thi: -1 (nhỏ hơn min=0)
+  3. Nhấn "Cập nhật"
+Test Data:
+  - Điểm quá trình: 5.0
+  - Điểm thành phần: 5.0
+  - Điểm thi: -1
+Expected Result:
+  - Không cho phép cập nhật
+  - Input type=number với min=0 ngăn không nhập số âm
+
+--- TC-GVLHP-010 ---
+Test Case Name: GV sửa điểm với giá trị thập phân step=0.01
+Module / Function: Quản lý Điểm theo Giảng viên
+Pre-condition: LHP chưa khóa điểm
+Test Steps:
+  1. Nhấn "Sửa điểm" bên cạnh SV
+  2. Nhập điểm quá trình: 7.55, điểm TP: 8.25, điểm thi: 6.75
+  3. Nhấn "Cập nhật"
+Test Data:
+  - Điểm quá trình: 7.55
+  - Điểm thành phần: 8.25
+  - Điểm thi: 6.75
+Expected Result:
+  - Điểm được cập nhật với 2 chữ số thập phân
+  - step=0.01 cho phép nhập chính xác đến phần trăm
+
+--- TC-GVLHP-011 ---
+Test Case Name: GV nhập điểm từ Excel thành công
+Module / Function: Quản lý Điểm theo Giảng viên
+Pre-condition: LHP chưa khóa điểm, file Excel đúng format
+Test Steps:
+  1. Vào trang quản lý điểm LHP
+  2. Nhấn "Nhập điểm từ Excel"
+  3. Import modal mở: nhấn "Tải mẫu" để tải file mẫu
+  4. Điền điểm vào file, upload file .xlsx
+  5. Nhấn "Xác nhận nhập điểm"
+Test Data: File Excel chứa điểm 30 SV, file .xlsx
+Expected Result:
+  - Hiển thị kết quả: successRows (số dòng thành công) 
+  - Nếu có lỗi: uploadErrors hiển thị chi tiết lỗi từng dòng
+  - Điểm trong bảng được cập nhật
+
+--- TC-GVLHP-012 ---
+Test Case Name: GV nhập điểm từ Excel thất bại - File sai format
+Module / Function: Quản lý Điểm theo Giảng viên
+Pre-condition: LHP chưa khóa điểm
+Test Steps:
+  1. Nhấn "Nhập điểm từ Excel"
+  2. Upload file không phải .xlsx (VD: .csv, .pdf)
+Test Data: File test.pdf
+Expected Result:
+  - Hiển thị lỗi: chỉ chấp nhận file .xlsx
+  - Không import điểm
+
+--- TC-GVLHP-013 ---
+Test Case Name: GV sửa điểm thất bại - LHP đã khóa điểm
+Module / Function: Quản lý Điểm theo Giảng viên
+Pre-condition: LHP đã khóa điểm (khoaDiem = true)
+Test Steps:
+  1. Vào trang quản lý điểm của LHP đã khóa
+  2. Quan sát các nút hành động
+Test Data: Không cần
+Expected Result:
+  - Nút "Sửa điểm" bị vô hiệu hóa hoặc ẩn
+  - Nút "Nhập điểm từ Excel" bị vô hiệu hóa
+  - Hiển thị badge "Đã khóa điểm" ở header LHP
+
+--- TC-GVLHP-014 ---
+Test Case Name: GV lọc SV theo Loại tham gia trong trang điểm
+Module / Function: Quản lý Điểm theo Giảng viên
+Pre-condition: LHP có SV nhiều loại (chính quy, học lại, cải thiện)
+Test Steps:
+  1. Vào trang quản lý điểm LHP
+  2. Chọn bộ lọc "Loại tham gia": Học lại
+  3. Quan sát kết quả
+Test Data: Loại tham gia: HOC_LAI
+Expected Result:
+  - Chỉ hiển thị SV có loại tham gia "Học lại"
+  - Badge "Học lại" hiển thị đúng màu (đỏ)
+
+================================================================================
+                   MODULE 14: THÊM LỚP HỌC PHẦN
+================================================================================
+
+--- TC-TLHP-001 ---
+Test Case Name: Xem danh sách LHP đề xuất (auto-generated)
+Module / Function: Thêm Lớp học phần
+Pre-condition: Có Năm học, Học kỳ đã chọn; hệ thống có dữ liệu Ngành, Niên khóa, Môn học
+Test Steps:
+  1. Truy cập "Thêm Lớp học phần" cho năm học và học kỳ cụ thể
+  2. Quan sát danh sách LHP đề xuất
+Test Data: Năm học: 2024-2025, Học kỳ: HK1
+Expected Result:
+  - Hiển thị danh sách LHP đề xuất với: STT, Mã LHP (auto-generate), 
+    Ghí chú, Mã ngành, Mã niên khóa, Mã môn học, Năm học, Học kỳ, 
+    Số TC, Mã GV, Số SV tham gia
+  - Mã LHP tự sinh theo format: {maMonHoc}_{maNienKhoa}_{maNganh}_{soThuTu}
+
+--- TC-TLHP-002 ---
+Test Case Name: Sửa thông tin LHP đề xuất (đổi GV)
+Module / Function: Thêm Lớp học phần
+Pre-condition: Có LHP đề xuất trong danh sách
+Test Steps:
+  1. Nhấn "Sửa" bên cạnh LHP đề xuất
+  2. Đổi Giảng viên phụ trách
+  3. Nhấn "Lưu"
+Test Data: GV mới: GV005 (tổng TC hiện tại: 6)
+Expected Result:
+  - GV được cập nhật cho LHP đề xuất
+  - Hiển thị TC hiện tại của GV mới trong học kỳ
+
+--- TC-TLHP-003 ---
+Test Case Name: Sửa số SV tham gia LHP đề xuất
+Module / Function: Thêm Lớp học phần
+Pre-condition: Có LHP đề xuất trong danh sách
+Test Steps:
+  1. Nhấn "Sửa" bên cạnh LHP đề xuất
+  2. Thay đổi số SV tham gia: 35
+  3. Nhấn "Lưu"
+Test Data: soSinhVienThamGia: 35
+Expected Result:
+  - Số SV tham gia được cập nhật
+  - Nếu tổng SV khác ban đầu: hiện cảnh báo CheckSinhVienLimit
+
+--- TC-TLHP-004 ---
+Test Case Name: Sửa GV - Vượt quá giới hạn 12 tín chỉ/học kỳ
+Module / Function: Thêm Lớp học phần
+Pre-condition: GV đã dạy gần đủ 12 TC trong học kỳ
+Test Steps:
+  1. Nhấn "Sửa" bên cạnh LHP đề xuất (4 TC)
+  2. Chọn GV có tổng TC hiện tại = 10
+  3. Nhấn "Lưu"
+Test Data: GV: GV003 (currentCredits=10), LHP: 4 TC → tổng = 14 > 12
+Expected Result:
+  - Hiển thị cảnh báo: "Vượt quá giới hạn tín chỉ/học kỳ"
+  - GV credit panel hiển thị currentCredits vs newCredits với badge đỏ
+
+--- TC-TLHP-005 ---
+Test Case Name: Xóa LHP khỏi danh sách đề xuất
+Module / Function: Thêm Lớp học phần
+Pre-condition: Có LHP đề xuất trong danh sách
+Test Steps:
+  1. Nhấn "Xóa" bên cạnh LHP đề xuất
+  2. Xác nhận xóa
+Test Data: Không cần
+Expected Result:
+  - LHP bị xóa khỏi danh sách đề xuất (chỉ xóa dưới client, chưa lưu DB)
+  - STT được cập nhật lại
+
+--- TC-TLHP-006 ---
+Test Case Name: Tạo mới LHP thủ công (modal)
+Module / Function: Thêm Lớp học phần
+Pre-condition: Có dữ liệu Ngành, Niên khóa, Môn học, GV
+Test Steps:
+  1. Nhấn "Thêm LHP mới"
+  2. Modal mở: chọn Mã ngành, Mã niên khóa, Mã môn học, Mã GV
+  3. Nhập số SV tham gia (mặc định 40)
+  4. Toggle phân bổ lại SV (nếu muốn)
+  5. Nhấn "Thêm"
+Test Data:
+  - Mã ngành: KTPM
+  - Mã niên khóa: NK2024
+  - Mã môn học: LTCS
+  - Mã GV: GV001
+  - Số SV: 40
+Expected Result:
+  - LHP mới xuất hiện trong danh sách đề xuất
+  - Mã LHP tự động sinh: LTCS_NK2024_KTPM_01
+
+--- TC-TLHP-007 ---
+Test Case Name: Phân bổ SV tự động (min 20 SV/class)
+Module / Function: Thêm Lớp học phần
+Pre-condition: Có 90 SV cần phân bổ vào LHP của 1 môn
+Test Steps:
+  1. Hệ thống auto tính phân bổ với MIN_SINH_VIEN = 20
+  2. Quan sát kết quả phân bổ
+Test Data: 90 SV, max 40 SV/LHP
+Expected Result:
+  - Tạo 3 LHP: 30-30-30 hoặc tương đương
+  - Mỗi LHP có ít nhất 20 SV
+  - Tổng SV = 90
+
+--- TC-TLHP-008 ---
+Test Case Name: Phân bổ SV - Số SV ít hơn ngưỡng tối thiểu
+Module / Function: Thêm Lớp học phần
+Pre-condition: Chỉ có 15 SV cần phân bổ (< MIN 20)
+Test Steps:
+  1. Hệ thống auto tính phân bổ
+  2. Quan sát kết quả
+Test Data: 15 SV
+Expected Result:
+  - Tạo 1 LHP duy nhất với 15 SV
+  - Không chia thêm vì chia sẽ dưới ngưỡng tối thiểu
+
+--- TC-TLHP-009 ---
+Test Case Name: Xác nhận tạo hàng loạt LHP thành công
+Module / Function: Thêm Lớp học phần
+Pre-condition: Danh sách đề xuất có nhiều LHP hợp lệ
+Test Steps:
+  1. Kiểm tra danh sách đề xuất (10 LHP)
+  2. Nhấn "Xác nhận tạo"
+  3. Quan sát kết quả
+Test Data: 10 LHP đề xuất
+Expected Result:
+  - ImportResult hiển thị: summary (tổng, thành công, thất bại)
+  - Details mỗi LHP: mã LHP, trạng thái, soSinhVienDaDangKy
+
+--- TC-TLHP-010 ---
+Test Case Name: Cảnh báo khi tổng SV khác ban đầu (CheckSinhVienLimit)
+Module / Function: Thêm Lớp học phần
+Pre-condition: User đã sửa số SV trong các LHP đề xuất
+Test Steps:
+  1. Sửa số SV của LHP #1 từ 40 → 30
+  2. Quan sát cảnh báo
+Test Data: Tổng SV ban đầu: 80, sau sửa: 70
+Expected Result:
+  - Hiển thị cảnh báo: "Tổng số SV (70) khác tổng ban đầu (80)"
+
+--- TC-TLHP-011 ---
+Test Case Name: Phân trang danh sách đề xuất (client-side)
+Module / Function: Thêm Lớp học phần
+Pre-condition: Có > 10 LHP đề xuất
+Test Steps:
+  1. Quan sát phân trang
+  2. Chuyển sang trang 2
+Test Data: 25 LHP đề xuất
+Expected Result:
+  - Trang 1 hiển thị 10 LHP
+  - Trang 2 hiển thị 10 LHP
+  - Trang 3 hiển thị 5 LHP
+  - Phân trang client-side (không gọi API lại)
+
+--- TC-TLHP-012 ---
+Test Case Name: Nhập LHP từ Excel
+Module / Function: Thêm Lớp học phần - Import
+Pre-condition: File Excel đúng format
+Test Steps:
+  1. Nhấn "Nhập từ Excel"
+  2. Upload file .xlsx
+  3. Xác nhận
+Test Data: File chứa 10 LHP với đủ thông tin
+Expected Result:
+  - Hiển thị chi tiết kết quả: thành công/thất bại, số SV đã đăng ký mỗi LHP
+  - LHP import thành công xuất hiện trong hệ thống
+
+================================================================================
+                   MODULE 15: THÊM SINH VIÊN HỌC LẠI
+================================================================================
+
+--- TC-SVHL-001 ---
+Test Case Name: Xem danh sách đề xuất Sinh viên trượt môn
+Module / Function: Thêm Sinh viên học lại
+Pre-condition: Có SV trượt môn trong học kỳ trước
+Test Steps:
+  1. Truy cập trang "Thêm Sinh viên học lại" cho năm học và học kỳ cụ thể
+  2. Quan sát tab "Đề xuất"
+Test Data: Năm học: 2024-2025, Học kỳ: HK1
+Expected Result:
+  - Hiển thị danh sách SV trượt với: Mã SV, Họ tên, Mã LHP trượt, 
+    Điểm QT, Điểm TP, Điểm thi, TBCHP, Điểm số, Điểm chữ, Đánh giá
+  - Hiển thị thẻ thống kê: tongSinhVienTruot, soSinhVienChuaHocLai
+
+--- TC-SVHL-002 ---
+Test Case Name: Xem LHP gợi ý cho SV (bestChoice)
+Module / Function: Thêm Sinh viên học lại
+Pre-condition: Có đề xuất SV trượt và LHP phù hợp đang mở
+Test Steps:
+  1. Nhấn "Xem chi tiết" bên cạnh SV đề xuất
+  2. Quan sát modal DetailDeXuat
+Test Data: Không cần
+Expected Result:
+  - Modal hiển thị danh sách cacLopHocPhanCoTheDangKy
+  - Mỗi LHP hiển thị: Mã LHP, Sĩ số hiện tại, Sĩ số tối đa (40)
+  - LHP bestChoice được đánh dấu nổi bật
+
+--- TC-SVHL-003 ---
+Test Case Name: Chỉnh sửa LHP cho SV học lại (EditModal)
+Module / Function: Thêm Sinh viên học lại
+Pre-condition: Có đề xuất SV trượt và nhiều LHP phù hợp
+Test Steps:
+  1. Nhấn nút "Sửa" bên cạnh SV đề xuất
+  2. EditModal mở: chọn LHP khác từ dropdown
+  3. Nhấn "Lưu"
+Test Data: LHP chọn: LHP-LTCS-02 (sĩ số: 35/40)
+Expected Result:
+  - LHP được gán cho SV
+  - proposedCount của LHP mới tăng 1
+  - proposedCount của LHP cũ giảm 1
+
+--- TC-SVHL-004 ---
+Test Case Name: Sửa LHP thất bại - LHP đã đạt sĩ số tối đa (40)
+Module / Function: Thêm Sinh viên học lại
+Pre-condition: LHP đã đạt capacity 40 SV
+Test Steps:
+  1. Nhấn "Sửa" bên cạnh SV đề xuất
+  2. Chọn LHP đã đầy (40/40)
+  3. Nhấn "Lưu"
+Test Data: LHP-LTCS-01 (sĩ số: 40/40)
+Expected Result:
+  - Không cho phép chọn LHP đã đầy
+  - Hiển thị cảnh báo: "LHP đã đạt sĩ số tối đa"
+  - LHP đầy bị disabled trong dropdown
+
+--- TC-SVHL-005 ---
+Test Case Name: Xác nhận thêm SV học lại vào LHP
+Module / Function: Thêm Sinh viên học lại
+Pre-condition: Đã chọn LHP cho các SV đề xuất (ít nhất 5 SV)
+Test Steps:
+  1. Nhấn "Xác nhận thêm"
+  2. Modal xác nhận: hiển thị danh sách SV và LHP tương ứng
+  3. Nhấn "Xác nhận"
+Test Data: 5 SV với LHP tương ứng
+Expected Result:
+  - Hiển thị ConfirmResultRow cho từng SV: thành công/thất bại
+  - SV thành công: được thêm vào LHP với loại tham gia "HOC_LAI"
+  - SV thất bại: hiển thị lý do
+
+--- TC-SVHL-006 ---
+Test Case Name: Xác nhận thêm SV học lại - SV không có LHP khả dụng
+Module / Function: Thêm Sinh viên học lại
+Pre-condition: SV trượt môn nhưng không có LHP nào mở cho môn đó
+Test Steps:
+  1. Quan sát SV không có cacLopHocPhanCoTheDangKy
+  2. Thử xác nhận
+Test Data: SV trượt môn không có LHP mở
+Expected Result:
+  - SV hiển thị "Không có LHP phù hợp"
+  - Không thể xác nhận cho SV này
+
+--- TC-SVHL-007 ---
+Test Case Name: Xem tab "Đã học lại"
+Module / Function: Thêm Sinh viên học lại
+Pre-condition: Có SV đã được đăng ký học lại
+Test Steps:
+  1. Chuyển sang tab "Đã học lại"
+  2. Quan sát danh sách
+Test Data: Không cần
+Expected Result:
+  - Hiển thị SinhVienDaHocLaiItem: Mã SV, Họ tên, Môn học, 
+    cacLanHocLai (lịch sử các lần học lại)
+  - Mỗi lần học lại hiển thị: LHP, Kết quả (Đạt/Trượt)
+
+--- TC-SVHL-008 ---
+Test Case Name: Xem chi tiết lịch sử học lại của SV
+Module / Function: Thêm Sinh viên học lại
+Pre-condition: SV đã học lại nhiều lần
+Test Steps:
+  1. Trong tab "Đã học lại", nhấn "Xem chi tiết" bên cạnh SV
+  2. Quan sát modal DetailDaHocLai
+Test Data: SV học lại 3 lần
+Expected Result:
+  - Modal hiển thị cacLanHocLai với chi tiết mỗi lần:
+    + LHP, Năm học - HK
+    + ketQuaHocTap: Điểm QT, TP, Thi, TBCHP, Điểm số, Điểm chữ
+
+--- TC-SVHL-009 ---
+Test Case Name: Tìm kiếm SV trong tab Đề xuất
+Module / Function: Thêm Sinh viên học lại
+Pre-condition: Có danh sách đề xuất nhiều SV
+Test Steps:
+  1. Nhập từ khóa vào ô tìm kiếm
+  2. Nhấn Enter
+Test Data: Từ khóa: "Nguyễn"
+Expected Result:
+  - Hiển thị SV có Mã SV hoặc Họ tên chứa "Nguyễn"
+
+--- TC-SVHL-010 ---
+Test Case Name: Lọc SV theo trạng thái (đã học lại / đang học lại / đã đạt)
+Module / Function: Thêm Sinh viên học lại
+Pre-condition: Có SV với nhiều trạng thái khác nhau
+Test Steps:
+  1. Chọn bộ lọc trạng thái: "Chưa học lại"
+Test Data: Filter: daHocLai=false, dangHocLai=false, daDat=false
+Expected Result:
+  - Chỉ hiển thị SV chưa được đăng ký học lại
+
+--- TC-SVHL-011 ---
+Test Case Name: Xem thống kê tổng quan SV trượt môn
+Module / Function: Thêm Sinh viên học lại
+Pre-condition: Có dữ liệu SV trượt
+Test Steps:
+  1. Truy cập trang "Thêm SV học lại"
+  2. Quan sát thẻ thống kê phía trên
+Test Data: Không cần
+Expected Result:
+  - Hiển thị: tongSinhVienTruot, soSinhVienChuaHocLai, 
+    soSinhVienDaHocLai, soSinhVienDaDat
+  - Số liệu khớp với danh sách bên dưới
+
+--- TC-SVHL-012 ---
+Test Case Name: Phân trang danh sách đề xuất SV trượt
+Module / Function: Thêm Sinh viên học lại
+Pre-condition: Có > 10 SV trượt môn
+Test Steps:
+  1. Quan sát phân trang
+  2. Chuyển trang
+Test Data: 25 SV trượt
+Expected Result:
+  - Hiển thị phân trang đúng
+  - Selection (nếu có) được giữ khi chuyển trang
+
+================================================================================
+                   MODULE 16: QUẢN LÝ CHƯƠNG TRÌNH ĐÀO TẠO
+================================================================================
+
+--- TC-CTDT-001 ---
+Test Case Name: Xem danh sách Chương trình Đào tạo
+Module / Function: Quản lý CTĐT
+Pre-condition: Có CTĐT trong hệ thống
+Test Steps:
+  1. Truy cập "Quản lý Chương trình Đào tạo"
+  2. Quan sát danh sách
+Test Data: Không cần
+Expected Result:
+  - Hiển thị: Mã CT, Tên CT, Thời gian ĐT (năm), Ngành, Khoa
+  - Dòng có thể mở rộng (expandable) hiển thị các niên khóa đã áp dụng
+
+--- TC-CTDT-002 ---
+Test Case Name: Xem chi tiết CTĐT (expand dòng)
+Module / Function: Quản lý CTĐT
+Pre-condition: CTĐT đã được áp dụng cho ít nhất 1 niên khóa
+Test Steps:
+  1. Nhấn icon expand (▶) bên cạnh CTĐT
+  2. Quan sát thông tin mở rộng
+Test Data: Không cần
+Expected Result:
+  - Hiển thị danh sách niên khóa đã áp dụng CTĐT:
+    Mã niên khóa, Tên niên khóa, Ngày áp dụng, Ghi chú
+  - Mỗi bản ghi áp dụng có nút "Xóa"
+
+--- TC-CTDT-003 ---
+Test Case Name: Tạo mới CTĐT thành công
+Module / Function: Tạo CTĐT
+Pre-condition: Có Ngành, Niên khóa, Môn học trong hệ thống
+Test Steps:
+  1. Nhấn "Tạo CTĐT mới"
+  2. Bước 1: Nhập Mã CT, Tên CT, Thời gian ĐT, chọn Ngành, chọn Niên khóa
+  3. Bước 2: Thêm môn học vào CTĐT (chọn thứ tự học kỳ cho mỗi môn)
+  4. Bước 3: Xác nhận và lưu
+Test Data:
+  - Mã CT: CTDT-KTPM-01
+  - Tên CT: Chương trình ĐT Kỹ thuật Phần mềm
+  - Thời gian ĐT: 4 (năm)
+  - Ngành: KTPM
+  - Niên khóa: NK2024
+  - Môn: LTCS (HK1), CTDL (HK2), OOP (HK3)
+Expected Result:
+  - CTĐT được tạo thành công qua 3 bước
+  - Hiển thị thống kê: soMon, tongTinChi
+  - Danh sách môn học theo thứ tự học kỳ
+
+--- TC-CTDT-004 ---
+Test Case Name: Tạo CTĐT thất bại - Mã CT trùng
+Module / Function: Tạo CTĐT
+Pre-condition: Đã tồn tại CTĐT có mã "CTDT-KTPM-01"
+Test Steps:
+  1. Nhấn "Tạo CTĐT mới"
+  2. Nhập Mã CT: CTDT-KTPM-01 (trùng)
+  3. Tiếp tục tạo
+Test Data: Mã CT: CTDT-KTPM-01 (đã tồn tại)
+Expected Result:
+  - Hiển thị lỗi: "Mã chương trình đã tồn tại"
+  - Không tạo được CTĐT
+
+--- TC-CTDT-005 ---
+Test Case Name: Tạo CTĐT thất bại - Thời gian ĐT ngoài khoảng 1-15
+Module / Function: Tạo CTĐT
+Pre-condition: Mở form tạo CTĐT
+Test Steps:
+  1. Nhập Thời gian ĐT: 20 (vượt max=15)
+  2. Hoặc nhập: 0 (dưới min=1)
+Test Data: Thời gian ĐT: 20 hoặc 0
+Expected Result:
+  - Input min=1 max=15 không cho phép nhập ngoài khoảng
+  - Hiển thị validation error
+
+--- TC-CTDT-006 ---
+Test Case Name: Thêm môn học vào CTĐT - Kiểm tra trùng lặp
+Module / Function: Tạo CTĐT
+Pre-condition: Đang ở bước 2 (thêm môn học)
+Test Steps:
+  1. Thêm môn học LTCS vào HK1
+  2. Thử thêm lại LTCS vào HK2
+Test Data: Môn: LTCS (đã có trong CTĐT)
+Expected Result:
+  - Hiển thị cảnh báo: "Môn học đã tồn tại trong CTĐT"
+  - Không thêm được môn trùng
+
+--- TC-CTDT-007 ---
+Test Case Name: Load môn học từ CTĐT đã tồn tại
+Module / Function: Tạo CTĐT
+Pre-condition: Có CTĐT khác đã có danh sách môn học
+Test Steps:
+  1. Đang ở bước 2 (thêm môn học)
+  2. Nhấn "Load từ CTĐT có sẵn"
+  3. Chọn CTĐT nguồn
+  4. Xác nhận
+Test Data: CTĐT nguồn: CTDT-KTPM-01 (có 20 môn)
+Expected Result:
+  - Tất cả môn học từ CTĐT nguồn được copy sang
+  - Có thể chỉnh sửa/thêm/xóa môn sau khi load
+
+--- TC-CTDT-008 ---
+Test Case Name: Sửa CTĐT thành công
+Module / Function: Quản lý CTĐT
+Pre-condition: CTĐT đã tồn tại
+Test Steps:
+  1. Nhấn "Sửa" bên cạnh CTĐT
+  2. Modal ChuongTrinhModal mở
+  3. Sửa tên CT và thời gian ĐT
+  4. Nhấn "Cập nhật"
+Test Data:
+  - Tên CT (sửa): Chương trình ĐT KTPM - Cập nhật 2024
+  - Thời gian ĐT (sửa): 4.5
+Expected Result:
+  - Thông tin CTĐT được cập nhật
+  - Hiển thị alert "Cập nhật thành công"
+
+--- TC-CTDT-009 ---
+Test Case Name: Xóa CTĐT thành công
+Module / Function: Quản lý CTĐT
+Pre-condition: CTĐT tồn tại, chưa áp dụng cho niên khóa nào
+Test Steps:
+  1. Nhấn "Xóa" bên cạnh CTĐT
+  2. Xác nhận xóa
+Test Data: CTDT-KTPM-01 (chưa áp dụng)
+Expected Result:
+  - CTĐT bị xóa khỏi danh sách
+  - Hiển thị alert "Xóa thành công"
+
+--- TC-CTDT-010 ---
+Test Case Name: Áp dụng CTĐT cho Niên khóa
+Module / Function: Quản lý CTĐT - Áp dụng
+Pre-condition: CTĐT tồn tại, Niên khóa chưa được áp dụng CTĐT này
+Test Steps:
+  1. Nhấn "Áp dụng chương trình"
+  2. ApDungModal mở: chọn CTĐT → hiển thị thông tin ngành/khoa
+  3. Chọn Niên khóa
+  4. Chọn ngày áp dụng (date picker)
+  5. Nhập ghi chú (tùy chọn)
+  6. Nhấn "Áp dụng"
+Test Data:
+  - CTĐT: CTDT-KTPM-01
+  - Niên khóa: NK2024
+  - Ngày áp dụng: 01/09/2024
+  - Ghi chú: "Áp dụng từ HK1"
+Expected Result:
+  - Áp dụng thành công
+  - NK2024 xuất hiện trong danh sách niên khóa áp dụng khi expand dòng CTĐT
+
+--- TC-CTDT-011 ---
+Test Case Name: Xóa bản ghi Áp dụng CTĐT cho Niên khóa
+Module / Function: Quản lý CTĐT - Áp dụng
+Pre-condition: CTĐT đã áp dụng cho niên khóa
+Test Steps:
+  1. Expand dòng CTĐT
+  2. Nhấn "Xóa" bên cạnh bản ghi áp dụng niên khóa
+  3. Xác nhận
+Test Data: Xóa áp dụng NK2024
+Expected Result:
+  - Bản ghi áp dụng bị xóa
+  - Niên khóa NK2024 khả dụng lại cho áp dụng
+
+--- TC-CTDT-012 ---
+Test Case Name: Lọc CTĐT theo Ngành và Niên khóa
+Module / Function: Quản lý CTĐT
+Pre-condition: Có nhiều CTĐT của nhiều ngành
+Test Steps:
+  1. Chọn bộ lọc "Ngành": KTPM
+  2. Chọn bộ lọc "Niên khóa": NK2024
+  3. Quan sát kết quả
+Test Data: Ngành: KTPM, Niên khóa: NK2024
+Expected Result:
+  - Chỉ hiển thị CTĐT thuộc ngành KTPM áp dụng cho NK2024
+
+--- TC-CTDT-013 ---
+Test Case Name: Tìm kiếm CTĐT theo từ khóa
+Module / Function: Quản lý CTĐT
+Pre-condition: Có nhiều CTĐT
+Test Steps:
+  1. Nhập từ khóa vào ô tìm kiếm
+  2. Nhấn Enter
+Test Data: Từ khóa: "Phần mềm"
+Expected Result:
+  - Hiển thị CTĐT có mã hoặc tên chứa "Phần mềm"
+
+--- TC-CTDT-014 ---
+Test Case Name: Lọc môn học theo loại (Đại cương/Chuyên ngành/Tự chọn)
+Module / Function: Tạo CTĐT - Bước 2
+Pre-condition: Đang thêm môn học vào CTĐT
+Test Steps:
+  1. Ở bước 2, chọn bộ lọc loại môn: "Chuyên ngành"
+  2. Quan sát danh sách môn khả dụng
+Test Data: loaiMon: CHUYEN_NGANH
+Expected Result:
+  - Chỉ hiển thị môn học thuộc loại "Chuyên ngành" (DAI_CUONG/CHUYEN_NGANH/TU_CHON)
+
+================================================================================
+                   MODULE 17: QUẢN LÝ TÀI KHOẢN
+================================================================================
+
+--- TC-TK-001 ---
+Test Case Name: Xem danh sách Tài khoản
+Module / Function: Quản lý Tài khoản
+Pre-condition: Có tài khoản trong hệ thống
+Test Steps:
+  1. Truy cập "Quản lý Tài khoản"
+Test Data: Không cần
+Expected Result:
+  - Hiển thị: Tên đăng nhập, Vai trò (badge màu), Họ tên (profile), Ngày tạo
+
+--- TC-TK-002 ---
+Test Case Name: Xem chi tiết Tài khoản
+Module / Function: Quản lý Tài khoản
+Pre-condition: Tồn tại ít nhất 1 tài khoản
+Test Steps:
+  1. Nhấn "Xem chi tiết"
+Test Data: Không cần
+Expected Result:
+  - Modal hiển thị: Tên đăng nhập, Vai trò, Ngày tạo
+  - Nếu có profile: Họ tên, Ngày sinh, Giới tính, Địa chỉ, Mã SV (nếu là sinh viên)
+
+--- TC-TK-003 ---
+Test Case Name: Sửa vai trò Tài khoản (Giảng viên → Cán bộ)
+Module / Function: Quản lý Tài khoản
+Pre-condition: Tài khoản là Giảng viên
+Test Steps:
+  1. Nhấn "Sửa" bên cạnh tài khoản GV
+  2. Đổi vai trò sang "Cán bộ phòng ĐT"
+  3. Nhấn "Cập nhật"
+Test Data:
+  - Vai trò (sửa): CAN_BO_PHONG_DAO_TAO
+Expected Result:
+  - Vai trò được cập nhật thành công
+
+--- TC-TK-004 ---
+Test Case Name: Sửa vai trò thất bại - Tài khoản Admin
+Module / Function: Quản lý Tài khoản
+Pre-condition: Tài khoản có vai trò ADMIN
+Test Steps:
+  1. Nhấn "Sửa" bên cạnh tài khoản Admin
+  2. Quan sát modal
+Test Data: Không cần
+Expected Result:
+  - Hiển thị: "Không thể thay đổi vai trò của Quản trị viên"
+  - Nút "Cập nhật" bị vô hiệu hóa (disabled)
+
+--- TC-TK-005 ---
+Test Case Name: Sửa vai trò thất bại - Tài khoản Sinh viên
+Module / Function: Quản lý Tài khoản
+Pre-condition: Tài khoản có vai trò SINH_VIEN
+Test Steps:
+  1. Nhấn "Sửa" bên cạnh tài khoản SV
+  2. Quan sát modal
+Test Data: Không cần
+Expected Result:
+  - Hiển thị: "Không thể thay đổi vai trò của sinh viên"
+  - Nút "Cập nhật" bị vô hiệu hóa
+
+--- TC-TK-006 ---
+Test Case Name: Tạo tài khoản Cán bộ phòng ĐT thành công
+Module / Function: Quản lý Tài khoản
+Pre-condition: Tên đăng nhập chưa tồn tại
+Test Steps:
+  1. Nhấn "Tạo tài khoản Cán bộ"
+  2. Nhập tên đăng nhập và mật khẩu
+  3. Nhấn "Tạo tài khoản"
+Test Data:
+  - Tên đăng nhập: canbo02
+  - Mật khẩu: 123456
+Expected Result:
+  - Tài khoản được tạo với vai trò CAN_BO_PHONG_DAO_TAO
+  - Hiển thị thông báo thành công
+
+--- TC-TK-007 ---
+Test Case Name: Tạo tài khoản Cán bộ thất bại - Để trống trường
+Module / Function: Quản lý Tài khoản
+Pre-condition: Người dùng đã đăng nhập
+Test Steps:
+  1. Mở modal tạo tài khoản
+  2. Để trống tên đăng nhập hoặc mật khẩu
+  3. Nhấn "Tạo tài khoản"
+Test Data:
+  - Tên đăng nhập: (trống)
+  - Mật khẩu: (trống)
+Expected Result:
+  - Hiển thị lỗi: "Tên đăng nhập không được để trống", "Mật khẩu không được để trống"
+
+--- TC-TK-008 ---
+Test Case Name: Xóa Tài khoản thành công
+Module / Function: Quản lý Tài khoản
+Pre-condition: Tài khoản tồn tại, không phải Admin
+Test Steps:
+  1. Nhấn "Xóa"
+  2. Xác nhận
+Test Data: TK: canbo02
+Expected Result:
+  - Xóa thành công
+
+--- TC-TK-009 ---
+Test Case Name: Reset mật khẩu Tài khoản
+Module / Function: Quản lý Tài khoản
+Pre-condition: Tài khoản tồn tại
+Test Steps:
+  1. Nhấn "Reset mật khẩu" từ dropdown
+  2. Xác nhận
+Test Data: TK cần reset: GV001
+Expected Result:
+  - Mật khẩu được reset về mặc định
+  - Hiển thị mật khẩu mới
+
+--- TC-TK-010 ---
+Test Case Name: Tìm kiếm Tài khoản theo từ khóa
+Module / Function: Quản lý Tài khoản
+Pre-condition: Có dữ liệu tài khoản
+Test Steps:
+  1. Nhập từ khóa vào ô tìm kiếm
+  2. Nhấn Enter
+Test Data: Từ khóa: "GV"
+Expected Result:
+  - Hiển thị tài khoản có tên đăng nhập hoặc profile chứa "GV"
+
+================================================================================
+                   MODULE 18: XÉT TỐT NGHIỆP
+================================================================================
+
+--- TC-XTN-001 ---
+Test Case Name: Xem dự đoán kết quả xét tốt nghiệp
+Module / Function: Xét tốt nghiệp
+Pre-condition: Niên khóa đã có SV hoàn thành chương trình
+Test Steps:
+  1. Truy cập trang "Xét tốt nghiệp" cho niên khóa cụ thể
+  2. Nhấn "Dự đoán" hoặc quan sát tab "Dự đoán"
+Test Data: Niên khóa: NK2020
+Expected Result:
+  - Hiển thị thẻ StatCard thống kê tổng quan:
+    + tongSinhVienDuocXet
+    + soSinhVienDat
+    + soSinhVienKhongDat
+    + soSinhVienKhongDuDieuKien
+  - Danh sách SV với KetQuaXetTotNghiepEnum: DAT / KHONG_DAT / KHONG_DU_DIEU_KIEN
+
+--- TC-XTN-002 ---
+Test Case Name: Xem thống kê xét tốt nghiệp theo Ngành
+Module / Function: Xét tốt nghiệp
+Pre-condition: Đã có kết quả dự đoán
+Test Steps:
+  1. Nhấn/chuyển sang phần "Thống kê theo Ngành"
+Test Data: Không cần
+Expected Result:
+  - Hiển thị ThongKeTheoNganh: mỗi ngành hiển thị
+    + Tổng SV, Số Đạt, Số Không đạt, Tỷ lệ đạt (%)
+
+--- TC-XTN-003 ---
+Test Case Name: Xem chi tiết SV xét tốt nghiệp (DetailModal)
+Module / Function: Xét tốt nghiệp
+Pre-condition: Có kết quả dự đoán
+Test Steps:
+  1. Nhấn "Xem chi tiết" bên cạnh SV
+  2. Quan sát modal DetailModal
+Test Data: Không cần
+Expected Result:
+  - Modal hiển thị đầy đủ:
+    + Thông tin SV: Mã SV, Họ tên, Ngành, Niên khóa
+    + GPA (điểm trung bình tích lũy)
+    + ketQuaXet: DAT / KHONG_DAT / KHONG_DU_DIEU_KIEN (badge màu)
+    + xepLoaiTotNghiep: XUAT_SAC / GIOI / KHA / TRUNG_BINH / KHONG_DAT / KHONG_XET
+    + lyDo (nếu không đạt/không đủ điều kiện)
+
+--- TC-XTN-004 ---
+Test Case Name: Xác nhận xét tốt nghiệp thành công
+Module / Function: Xét tốt nghiệp
+Pre-condition: Đã dự đoán xong, có SV đạt
+Test Steps:
+  1. Nhấn "Xác nhận xét tốt nghiệp"
+  2. ConfirmModal mở với cảnh báo "Lưu ý: không thể hoàn tác"
+  3. Hiển thị bảng thống kê (thongKe tổng quan)
+  4. Nhấn "Xác nhận"
+Test Data: Không cần
+Expected Result:
+  - Xử lý thành công
+  - SV đạt được chuyển tình trạng sang "DA_TOT_NGHIEP"
+  - ResultModal hiển thị: thống kê chi tiết (Xuất sắc, Giỏi, Khá, Trung bình cards)
+
+--- TC-XTN-005 ---
+Test Case Name: Modal xác nhận - Cảnh báo "không thể hoàn tác"
+Module / Function: Xét tốt nghiệp
+Pre-condition: Nhấn nút "Xác nhận xét tốt nghiệp"
+Test Steps:
+  1. Nhấn "Xác nhận xét tốt nghiệp"
+  2. Đọc nội dung modal
+Test Data: Không cần
+Expected Result:
+  - ConfirmModal hiển thị rõ cảnh báo: "Lưu ý: không thể hoàn tác"
+  - Hiển thị thống kê: tổng SV xét, số đạt, số không đạt, số không đủ ĐK
+  - Nút "Hủy" và "Xác nhận" rõ ràng
+
+--- TC-XTN-006 ---
+Test Case Name: Xem kết quả sau xác nhận (ResultModal)
+Module / Function: Xét tốt nghiệp
+Pre-condition: Đã xác nhận xét tốt nghiệp thành công
+Test Steps:
+  1. Sau khi xác nhận, quan sát ResultModal tự động mở
+Test Data: Không cần
+Expected Result:
+  - ResultModal hiển thị thống kê kết quả chi tiết:
+    + Card "Xuất sắc": soXuatSac (badge đỏ/vàng)
+    + Card "Giỏi": soGioi
+    + Card "Khá": soKha
+    + Card "Trung bình": soTrungBinh
+    + Tổng SV đạt vs không đạt
+
+--- TC-XTN-007 ---
+Test Case Name: Lọc SV theo Kết quả xét (Đạt/Không đạt/Không đủ ĐK)
+Module / Function: Xét tốt nghiệp
+Pre-condition: Có kết quả dự đoán
+Test Steps:
+  1. Chọn bộ lọc "Kết quả xét": "Đạt"
+  2. Quan sát kết quả
+Test Data: Filter: ketQuaXet = DAT
+Expected Result:
+  - Chỉ hiển thị SV có kết quả xét = "Đạt"
+
+--- TC-XTN-008 ---
+Test Case Name: Lọc SV theo Xếp loại tốt nghiệp
+Module / Function: Xét tốt nghiệp
+Pre-condition: Có kết quả dự đoán với nhiều xếp loại
+Test Steps:
+  1. Chọn bộ lọc "Xếp loại": "Giỏi"
+  2. Quan sát kết quả
+Test Data: Filter: xepLoaiTotNghiep = GIOI
+Expected Result:
+  - Chỉ hiển thị SV có xếp loại tốt nghiệp "Giỏi"
+
+--- TC-XTN-009 ---
+Test Case Name: Lọc SV theo Ngành
+Module / Function: Xét tốt nghiệp
+Pre-condition: Niên khóa có SV từ nhiều ngành
+Test Steps:
+  1. Chọn bộ lọc "Ngành": KTPM
+  2. Quan sát kết quả
+Test Data: Filter: nganhId = KTPM
+Expected Result:
+  - Chỉ hiển thị SV thuộc ngành KTPM
+
+--- TC-XTN-010 ---
+Test Case Name: Xem danh sách SV đã tốt nghiệp
+Module / Function: Xét tốt nghiệp
+Pre-condition: Đã xác nhận xét tốt nghiệp trước đó
+Test Steps:
+  1. Chuyển sang tab "Đã tốt nghiệp"
+  2. Quan sát danh sách
+Test Data: Không cần
+Expected Result:
+  - Hiển thị: Mã SV, Họ tên, Ngành, GPA, Xếp loại tốt nghiệp, 
+    Ngày tốt nghiệp
+
+--- TC-XTN-011 ---
+Test Case Name: Tìm kiếm SV trong danh sách xét tốt nghiệp
+Module / Function: Xét tốt nghiệp
+Pre-condition: Có danh sách dự đoán nhiều SV
+Test Steps:
+  1. Nhập từ khóa vào ô tìm kiếm
+  2. Nhấn Enter
+Test Data: Từ khóa: "SV001" hoặc "Nguyễn"
+Expected Result:
+  - Hiển thị SV có mã hoặc họ tên khớp từ khóa
+
+--- TC-XTN-012 ---
+Test Case Name: Xét tốt nghiệp - Niên khóa không có SV đủ điều kiện
+Module / Function: Xét tốt nghiệp
+Pre-condition: Niên khóa mới, SV chưa hoàn thành chương trình
+Test Steps:
+  1. Chọn niên khóa mới (VD: NK2024 - SV năm nhất)
+  2. Nhấn "Dự đoán"
+Test Data: Niên khóa: NK2024
+Expected Result:
+  - Tất cả SV có kết quả "Không đủ điều kiện"
+  - Thống kê: soSinhVienKhongDuDieuKien = tongSinhVienDuocXet
+  - soSinhVienDat = 0
+
+--- TC-XTN-013 ---
+Test Case Name: Phân trang danh sách SV xét tốt nghiệp
+Module / Function: Xét tốt nghiệp
+Pre-condition: Niên khóa có > 10 SV
+Test Steps:
+  1. Quan sát phân trang
+  2. Chuyển sang trang 2
+Test Data: 50 SV trong niên khóa
+Expected Result:
+  - Phân trang hoạt động đúng
+  - Thông tin "Hiển thị X-Y trên Z kết quả" chính xác
+
+================================================================================
+       MODULE 19: PHÍA SINH VIÊN - DASHBOARD & XEM KẾT QUẢ HỌC TẬP
+================================================================================
+
+--- TC-SV-DASH-001 ---
+Test Case Name: Sinh viên xem Dashboard cá nhân
+Module / Function: Dashboard Sinh viên (CL_side)
+Pre-condition: SV đã đăng nhập thành công
+Test Steps:
+  1. Đăng nhập vào hệ thống sinh viên
+  2. Truy cập trang Dashboard
+Test Data: Tài khoản SV đã đăng nhập
+Expected Result:
+  - Hiển thị thông tin cá nhân
+  - Hiển thị tổng quan kết quả học tập
+
+--- TC-SV-KQHT-001 ---
+Test Case Name: Sinh viên xem Kết quả Học tập
+Module / Function: Kết quả Học tập (CL_side)
+Pre-condition: SV đã đăng nhập, có kết quả học tập
+Test Steps:
+  1. Truy cập trang "Kết quả Học tập"
+Test Data: Không cần
+Expected Result:
+  - Hiển thị kết quả theo từng học kỳ
+  - Hiển thị: Môn học, Số tín chỉ, Điểm QT, Điểm TP, Điểm thi, TBCHP, Điểm chữ
+
+--- TC-SV-CTDT-001 ---
+Test Case Name: Sinh viên xem Chương trình Đào tạo
+Module / Function: Chương trình Đào tạo (CL_side)
+Pre-condition: SV đã đăng nhập, CTĐT đã được thiết lập cho ngành/niên khóa của SV
+Test Steps:
+  1. Truy cập trang "Chương trình Đào tạo"
+Test Data: Không cần
+Expected Result:
+  - Hiển thị CTĐT áp dụng cho SV
+  - Danh sách môn học phân theo học kỳ
+
+--- TC-SV-LHP-001 ---
+Test Case Name: Sinh viên xem danh sách Lớp học phần
+Module / Function: Lớp học phần Sinh viên (CL_side)
+Pre-condition: SV đã đăng nhập, SV có LHP
+Test Steps:
+  1. Truy cập "Lớp học phần"
+Test Data: Không cần
+Expected Result:
+  - Hiển thị các LHP mà SV đang/đã tham gia
+  - Thông tin: Mã LHP, Môn học, GV, Trạng thái
+
+--- TC-SV-PROFILE-001 ---
+Test Case Name: Sinh viên xem thông tin cá nhân
+Module / Function: Thông tin người dùng (CL_side)
+Pre-condition: SV đã đăng nhập
+Test Steps:
+  1. Truy cập trang thông tin cá nhân
+Test Data: Không cần
+Expected Result:
+  - Hiển thị: Mã SV, Họ tên, Ngày sinh, Giới tính, Email, SĐT, Địa chỉ, 
+    Lớp, Ngành, Niên khóa, Tình trạng
+
+================================================================================
+         MODULE 20: KIỂM TRA PHÂN QUYỀN (Authorization)
+================================================================================
+
+--- TC-PQ-001 ---
+Test Case Name: Admin truy cập tất cả chức năng
+Module / Function: Phân quyền
+Pre-condition: Đăng nhập bằng tài khoản Admin
+Test Steps:
+  1. Đăng nhập Admin
+  2. Truy cập lần lượt các module: Khoa, Ngành, Niên khóa, Môn học, GV, SV, 
+     LHP, Tài khoản, CTĐT, Xét TN
+Test Data: TK Admin
+Expected Result:
+  - Tất cả module đều truy cập được
+  - Có đầy đủ quyền CRUD
+
+--- TC-PQ-002 ---
+Test Case Name: Giảng viên chỉ truy cập LHP được phân công
+Module / Function: Phân quyền
+Pre-condition: Đăng nhập bằng tài khoản Giảng viên
+Test Steps:
+  1. Đăng nhập GV
+  2. Truy cập "Quản lý LHP theo Giảng viên"
+  3. Thử truy cập module quản lý Khoa (nếu có sidebar)
+Test Data: TK Giảng viên
+Expected Result:
+  - Chỉ xem được LHP mình được phân công
+  - Không truy cập được các module quản trị (Khoa, Ngành, TK...)
+
+--- TC-PQ-003 ---
+Test Case Name: Sinh viên không truy cập được trang Admin
+Module / Function: Phân quyền
+Pre-condition: Đăng nhập bằng tài khoản Sinh viên qua frontend Admin
+Test Steps:
+  1. Truy cập trang đăng nhập Admin
+  2. Nhập tài khoản SV
+Test Data: TK Sinh viên
+Expected Result:
+  - Từ chối truy cập: "Bạn không đủ quyền"
+
+--- TC-PQ-004 ---
+Test Case Name: Truy cập API không có token
+Module / Function: Phân quyền API
+Pre-condition: Không đăng nhập
+Test Steps:
+  1. Gửi request đến API (VD: GET /danh-muc/khoa) mà không gửi Authorization header
+Test Data: Không có access_token
+Expected Result:
+  - API trả về 401 Unauthorized
+
+--- TC-PQ-005 ---
+Test Case Name: Truy cập API với token hết hạn
+Module / Function: Phân quyền API
+Pre-condition: Token JWT đã hết hạn
+Test Steps:
+  1. Gửi request với token hết hạn
+Test Data: Token expired
+Expected Result:
+  - API trả về 401 Unauthorized
+
+================================================================================
+         MODULE 21: KIỂM TRA GIAO DIỆN & TRẢI NGHIỆM NGƯỜI DÙNG
+================================================================================
+
+--- TC-UI-001 ---
+Test Case Name: Modal đóng/mở đúng cách
+Module / Function: UI - Modal
+Pre-condition: Bất kỳ trang quản lý nào
+Test Steps:
+  1. Nhấn nút tạo mới → Modal mở
+  2. Nhấn nút "Hủy" → Modal đóng
+  3. Nhấn nút tạo mới → Modal mở
+  4. Nhấn icon X (hoặc click overlay) → Modal đóng
+Test Data: Không cần
+Expected Result:
+  - Modal mở đóng mượt mà
+  - Form được reset khi đóng modal
+
+--- TC-UI-002 ---
+Test Case Name: Alert hiển thị và tự động ẩn
+Module / Function: UI - Alert
+Pre-condition: Thực hiện action tạo/sửa/xóa thành công
+Test Steps:
+  1. Tạo mới 1 bản ghi
+  2. Quan sát alert xuất hiện
+  3. Chờ alert tự động ẩn
+Test Data: Không cần
+Expected Result:
+  - Alert hiển thị đúng variant (success/error)
+  - Alert có nút X để đóng thủ công
+  - Alert tự động ẩn sau thời gian quy định
+
+--- TC-UI-003 ---
+Test Case Name: Phân trang hiển thị đúng thông tin
+Module / Function: UI - Pagination
+Pre-condition: Có > 10 bản ghi
+Test Steps:
+  1. Truy cập trang quản lý
+  2. Quan sát thông tin phân trang
+Test Data: Không cần
+Expected Result:
+  - "Hiển thị 1 - 10 trên X kết quả" hiển thị chính xác
+  - Nút chuyển trang hoạt động đúng
+  - Khi ở trang cuối: "Hiển thị Y - X trên X kết quả"
+
+--- TC-UI-004 ---
+Test Case Name: Responsive trên mobile
+Module / Function: UI - Responsive
+Pre-condition: Bất kỳ trang nào
+Test Steps:
+  1. Thu nhỏ kích thước trình duyệt xuống 375px width
+  2. Quan sát layout
+Test Data: Không cần
+Expected Result:
+  - Bảng có scroll ngang (min-width)
+  - Các nút, form vẫn sử dụng được
+  - Không bị vỡ layout
+
+--- TC-UI-005 ---
+Test Case Name: Dark mode hiển thị đúng
+Module / Function: UI - Dark mode
+Pre-condition: Hệ thống hỗ trợ dark mode
+Test Steps:
+  1. Chuyển sang dark mode
+  2. Kiểm tra tất cả các trang
+Test Data: Không cần
+Expected Result:
+  - Tất cả text đọc được rõ ràng
+  - Các badge, alert hiển thị đúng màu
+  - Không có element bị "chìm" vào background
+
+================================================================================
+                          KẾT THÚC TEST CASES
+================================================================================
+Tổng cộng: 190+ test cases
+Phủ 21 module chính:
+  1.  Đăng nhập (Authentication) - 11 TCs
+  2.  Dashboard (Tổng quan) - 3 TCs
+  3.  Quản lý Khoa - 11 TCs
+  4.  Quản lý Niên khóa - 7 TCs
+  5.  Quản lý Ngành - 8 TCs
+  6.  Quản lý Môn học - 8 TCs
+  7.  Quản lý Giảng viên - 8 TCs
+  8.  Quản lý Sinh viên - 8 TCs
+  9.  Quản lý Năm học & Học kỳ - 4 TCs
+  10. Quản lý Lớp niên chế - 5 TCs
+  11. Quản lý Lớp học phần - 14 TCs
+  12. Quản lý Điểm (Admin) - 12 TCs
+  13. Quản lý LHP theo Giảng viên & Điểm - 14 TCs
+  14. Thêm Lớp học phần - 12 TCs
+  15. Thêm Sinh viên Học lại - 12 TCs
+  16. Chương trình Đào tạo - 14 TCs
+  17. Quản lý Tài khoản - 10 TCs
+  18. Xét Tốt nghiệp - 13 TCs
+  19. Phía Sinh viên - 5 TCs
+  20. Phân quyền (Authorization) - 5 TCs
+  21. Giao diện & UX - 5 TCs
+================================================================================
