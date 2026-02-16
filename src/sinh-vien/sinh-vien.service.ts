@@ -1555,6 +1555,13 @@ export class SinhVienService {
             throw new NotFoundException('Sinh viên không tồn tại');
         }
 
+        // Chỉ cho phép sinh viên có tình trạng DANG_HOC đăng ký
+        if (sinhVien.tinhTrang !== TinhTrangHocTapEnum.DANG_HOC) {
+            throw new BadRequestException(
+                `Chỉ sinh viên đang học (DANG_HOC) mới được phép đăng ký học phần. Tình trạng hiện tại của bạn: ${sinhVien.tinhTrang}`,
+            );
+        }
+
         const monHoc = await this.monHocRepo.findOne({ where: { id: monHocId } });
         if (!monHoc) {
             throw new NotFoundException('Môn học không tồn tại');
@@ -1926,6 +1933,13 @@ export class SinhVienService {
         if (yeuCau.trangThai !== TrangThaiYeuCauHocPhanEnum.CHO_DUYET) {
             throw new BadRequestException(
                 `Chỉ có thể sửa yêu cầu có trạng thái CHO_DUYET. Yêu cầu hiện tại có trạng thái: ${yeuCau.trangThai}`,
+            );
+        }
+
+        // Chỉ cho phép sinh viên có tình trạng DANG_HOC sửa yêu cầu
+        if (yeuCau.sinhVien.tinhTrang !== TinhTrangHocTapEnum.DANG_HOC) {
+            throw new BadRequestException(
+                `Chỉ sinh viên đang học (DANG_HOC) mới được phép sửa yêu cầu học phần. Tình trạng hiện tại của sinh viên: ${yeuCau.sinhVien.tinhTrang}`,
             );
         }
 

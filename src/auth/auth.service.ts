@@ -17,6 +17,7 @@ import { VerifyChangePasswordOtpDto } from './dtos/verify-change-password-otp.dt
 import { GetUsersQueryDto } from './dtos/get-user-query.dto';
 import { VaiTroNguoiDungEnum } from './enums/vai-tro-nguoi-dung.enum';
 import { AutoCreateAccountsResponseDto } from './dtos/auto-create-accounts.response.dto';
+import { YeuCauHocPhan } from 'src/giang-day/entity/yeu-cau-hoc-phan.entity';
 
 @Injectable()
 export class AuthService {
@@ -24,6 +25,7 @@ export class AuthService {
         @InjectRepository(NguoiDung) private nguoiDungRepo: Repository<NguoiDung>,
         @InjectRepository(SinhVien) private sinhVienRepo: Repository<SinhVien>,
         @InjectRepository(GiangVien) private giangVienRepo: Repository<GiangVien>,
+        @InjectRepository(YeuCauHocPhan) private yeuCauHocPhanRepo: Repository<YeuCauHocPhan>,
         private jwtService: JwtService,
         private configService: ConfigService,
         private readonly mailerService: MailerService,
@@ -308,6 +310,14 @@ export class AuthService {
     async remove(id: number): Promise<void> {
         const user = await this.nguoiDungRepo.findOne({ where: { id } });
         if (!user) throw new NotFoundException('Người dùng không tồn tại');
+
+        // Xóa các yêu cầu học phần có liên quan đến người dùng này (người xử lý)
+        await this.yeuCauHocPhanRepo
+            .createQueryBuilder()
+            .delete()
+            .where('nguoi_xu_ly_id = :id', { id })
+            .execute();
+
         await this.nguoiDungRepo.remove(user);
     }
 

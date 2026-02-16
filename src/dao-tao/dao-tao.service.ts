@@ -34,6 +34,7 @@ import { SinhVien } from 'src/sinh-vien/entity/sinh-vien.entity';
 import * as ExcelJS from 'exceljs';
 import * as fs from 'fs/promises';
 import { NguoiDung } from 'src/auth/entity/nguoi-dung.entity';
+import { YeuCauHocPhan } from 'src/giang-day/entity/yeu-cau-hoc-phan.entity';
 
 @Injectable()
 export class DaoTaoService {
@@ -60,6 +61,8 @@ export class DaoTaoService {
     private sinhVienRepo: Repository<SinhVien>,
     @InjectRepository(NguoiDung)
     private nguoiDungRepo: Repository<NguoiDung>,
+    @InjectRepository(YeuCauHocPhan)
+    private yeuCauHocPhanRepo: Repository<YeuCauHocPhan>,
   ) { }
 
   // ==================== NĂM HỌC ====================
@@ -858,6 +861,13 @@ export class DaoTaoService {
   async xoaMonKhoiChuongTrinh(id: number): Promise<void> {
     const chiTiet = await this.chiTietRepo.findOneBy({ id });
     if (!chiTiet) throw new NotFoundException('Bản ghi chi tiết không tồn tại');
+
+    // Xóa các yêu cầu học phần có liên quan đến chi tiết chương trình đào tạo này
+    await this.yeuCauHocPhanRepo
+      .createQueryBuilder()
+      .delete()
+      .where('chi_tiet_ctdt_id = :id', { id })
+      .execute();
 
     await this.chiTietRepo.remove(chiTiet);
   }

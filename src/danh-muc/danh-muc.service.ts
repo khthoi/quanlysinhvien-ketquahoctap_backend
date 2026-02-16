@@ -30,6 +30,7 @@ import { GetAllMonHocQueryDto, PhanCongMonHocResponseDto } from './dtos/phan-con
 import * as ExcelJS from 'exceljs';
 import * as fs from 'fs/promises';
 import { LoaiMonEnum } from './enums/loai-mon.enum';
+import { YeuCauHocPhan } from 'src/giang-day/entity/yeu-cau-hoc-phan.entity';
 
 @Injectable()
 export class DanhMucService {
@@ -52,6 +53,8 @@ export class DanhMucService {
         private readonly nguoiDungRepository: Repository<NguoiDung>,
         @InjectRepository(GiangVienMonHoc)
         private readonly giangVienMonHocRepository: Repository<GiangVienMonHoc>,
+        @InjectRepository(YeuCauHocPhan)
+        private readonly yeuCauHocPhanRepository: Repository<YeuCauHocPhan>,
     ) { }
 
     // getAllKhoa() - load cả ngành + phân trang + search
@@ -1458,6 +1461,13 @@ export class DanhMucService {
         if (monHoc.giangVienMonHocs && monHoc.giangVienMonHocs.length > 0) {
             throw new BadRequestException('Không thể xóa môn học này vì còn giảng viên được phân công');
         }
+
+        // Xóa các yêu cầu học phần có liên quan đến môn học này
+        await this.yeuCauHocPhanRepository
+            .createQueryBuilder()
+            .delete()
+            .where('mon_hoc_id = :id', { id })
+            .execute();
 
         await this.monHocRepository.remove(monHoc);
     }

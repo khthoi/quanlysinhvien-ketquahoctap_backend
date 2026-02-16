@@ -12,10 +12,11 @@ import { GiangVien } from '../danh-muc/entity/giang-vien.entity';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
+import { YeuCauHocPhan } from '../giang-day/entity/yeu-cau-hoc-phan.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([NguoiDung, SinhVien, GiangVien]),
+    TypeOrmModule.forFeature([NguoiDung, SinhVien, GiangVien, YeuCauHocPhan]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],

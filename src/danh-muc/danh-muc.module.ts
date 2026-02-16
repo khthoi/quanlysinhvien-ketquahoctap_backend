@@ -11,9 +11,10 @@ import { DanhMucController } from './danh-muc.controller';
 import { GiangVienMonHoc } from './entity/giangvien-monhoc.entity';
 import { NguoiDung } from 'src/auth/entity/nguoi-dung.entity';
 import { DebugDanhMucMiddleware } from 'src/common/middleware/debug-danh-muc.middleware';
+import { YeuCauHocPhan } from 'src/giang-day/entity/yeu-cau-hoc-phan.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([GiangVien, Khoa, Lop, MonHoc, Nganh, NienKhoa, GiangVienMonHoc, NguoiDung])],
+  imports: [TypeOrmModule.forFeature([GiangVien, Khoa, Lop, MonHoc, Nganh, NienKhoa, GiangVienMonHoc, NguoiDung, YeuCauHocPhan])],
   controllers: [DanhMucController],
   providers: [DanhMucService],
 })

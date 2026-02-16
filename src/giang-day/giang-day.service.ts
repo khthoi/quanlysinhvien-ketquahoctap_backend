@@ -848,6 +848,13 @@ export class GiangDayService {
             throw new BadRequestException('Không thể xóa lớp học phần đã có kết quả học tập');
         }
 
+        // Xóa các yêu cầu học phần có liên quan đến lớp học phần này
+        await this.yeuCauHocPhanRepo
+            .createQueryBuilder()
+            .delete()
+            .where('lop_hoc_phan_da_duyet_id = :id', { id })
+            .execute();
+
         await this.lopHocPhanRepo.remove(lhp);
     }
 
@@ -4081,6 +4088,7 @@ export class GiangDayService {
     async chuyenTrangThaiDangXuLy(yeuCauId: number): Promise<void> {
         const yeuCau = await this.yeuCauHocPhanRepo.findOne({
             where: { id: yeuCauId },
+            relations: ['sinhVien'],
         });
 
         if (!yeuCau) {
@@ -4090,6 +4098,13 @@ export class GiangDayService {
         if (yeuCau.trangThai !== TrangThaiYeuCauHocPhanEnum.CHO_DUYET) {
             throw new BadRequestException(
                 `Chỉ có thể chuyển trạng thái từ CHO_DUYET sang DANG_XU_LY. Yêu cầu hiện tại có trạng thái: ${yeuCau.trangThai}`,
+            );
+        }
+
+        // Chỉ chuyển trạng thái được những yêu cầu của sinh viên có tình trạng DANG_HOC
+        if (yeuCau.sinhVien.tinhTrang !== TinhTrangHocTapEnum.DANG_HOC) {
+            throw new BadRequestException(
+                `Chỉ có thể chuyển trạng thái yêu cầu của sinh viên đang học (DANG_HOC). Tình trạng hiện tại của sinh viên: ${yeuCau.sinhVien.tinhTrang}`,
             );
         }
 
@@ -4122,6 +4137,13 @@ export class GiangDayService {
         ) {
             throw new BadRequestException(
                 `Chỉ có thể duyệt yêu cầu có trạng thái CHO_DUYET hoặc DANG_XU_LY. Yêu cầu hiện tại có trạng thái: ${yeuCau.trangThai}`,
+            );
+        }
+
+        // Chỉ duyệt được những yêu cầu của sinh viên có tình trạng DANG_HOC
+        if (yeuCau.sinhVien.tinhTrang !== TinhTrangHocTapEnum.DANG_HOC) {
+            throw new BadRequestException(
+                `Chỉ có thể duyệt yêu cầu của sinh viên đang học (DANG_HOC). Tình trạng hiện tại của sinh viên: ${yeuCau.sinhVien.tinhTrang}`,
             );
         }
 
@@ -4340,22 +4362,13 @@ export class GiangDayService {
 
         if (sinhVienChuaCoLopHocPhanDeXuat.length === 0) {
             return {
-                maNamHoc,
-                tenNamHoc: namHoc.tenNamHoc,
-                hocKy,
                 danhSachLopHocPhanDeXuat: [],
                 tongSoLop: 0,
                 tongSoSinhVien: 0,
             };
         }
 
-        // 5. Lấy học kỳ mới nhất của năm học mới nhất trong hệ thống
-        const hocKyTiepTheo = await this.timHocKyMoiNhat();
-        if (!hocKyTiepTheo) {
-            throw new BadRequestException('Không tìm thấy học kỳ mới nhất trong hệ thống');
-        }
-
-        // 6. Load thông tin đầy đủ từ database cho các sinh viên chưa có lớp học phần đề xuất
+        // 5. Load thông tin đầy đủ từ database cho các sinh viên chưa có lớp học phần đề xuất
         const sinhVienIds = sinhVienChuaCoLopHocPhanDeXuat.map(item => item.sinhVienId);
         const maLopHocPhanTruots = sinhVienChuaCoLopHocPhanDeXuat.map(item => item.maLopHocPhanTruot);
 
@@ -4513,33 +4526,18 @@ export class GiangDayService {
                     sttLop
                 );
 
-                // Phân công giảng viên
+                // Phân công giảng viên (chọn giảng viên đầu tiên trong danh sách)
+                // Không tính tín chỉ vì chưa có học kỳ cụ thể, người dùng sẽ tự chọn học kỳ khi tạo lớp học phần
                 const giangViens = await this.layGiangVienPhanCongChoMon(monHocId, this.lopHocPhanRepo.manager);
                 let giangVienId: number | null = null;
                 let maGiangVien: string | null = null;
                 let hoTenGiangVien: string | null = null;
 
                 if (giangViens.length > 0) {
-                    // Tính tín chỉ hiện tại của từng giảng viên
-                    const giangVienWithLoad: Array<{ gv: GiangVien; tinChi: number }> = [];
-
-                    for (const gv of giangViens) {
-                        const tinChiHienTai = await this.tinhTinChiHienTaiCuaGV(gv.id, hocKyTiepTheo.id);
-                        giangVienWithLoad.push({ gv, tinChi: tinChiHienTai });
-                    }
-
-                    // Sắp xếp theo số tín chỉ tăng dần
-                    giangVienWithLoad.sort((a, b) => a.tinChi - b.tinChi);
-
-                    // Chọn giảng viên có ít tín chỉ nhất nhưng không vượt trần (12 tín chỉ)
-                    for (const item of giangVienWithLoad) {
-                        if (item.tinChi + monHoc.soTinChi <= 12) {
-                            giangVienId = item.gv.id;
-                            maGiangVien = item.gv.maGiangVien;
-                            hoTenGiangVien = item.gv.hoTen;
-                            break;
-                        }
-                    }
+                    // Chọn giảng viên đầu tiên trong danh sách
+                    giangVienId = giangViens[0].id;
+                    maGiangVien = giangViens[0].maGiangVien;
+                    hoTenGiangVien = giangViens[0].hoTen;
                 }
 
                 // Tạo DTO cho lớp học phần đề xuất
@@ -4555,10 +4553,6 @@ export class GiangDayService {
                     nienKhoaId: nienKhoa.id,
                     maNienKhoa: nienKhoa.maNienKhoa,
                     tenNienKhoa: nienKhoa.tenNienKhoa,
-                    hocKyId: hocKyTiepTheo.id,
-                    hocKy: hocKyTiepTheo.hocKy,
-                    maNamHoc: hocKyTiepTheo.namHoc.maNamHoc,
-                    tenNamHoc: hocKyTiepTheo.namHoc.tenNamHoc,
                     giangVienId: giangVienId || null,
                     maGiangVien: maGiangVien || null,
                     hoTenGiangVien: hoTenGiangVien || null,
@@ -4583,9 +4577,6 @@ export class GiangDayService {
         }
 
         return {
-            maNamHoc,
-            tenNamHoc: namHoc.tenNamHoc,
-            hocKy,
             danhSachLopHocPhanDeXuat,
             tongSoLop: danhSachLopHocPhanDeXuat.length,
             tongSoSinhVien: danhSachLopHocPhanDeXuat.reduce((sum, lhp) => sum + lhp.soSinhVienCanHocLai, 0),
@@ -4734,16 +4725,7 @@ export class GiangDayService {
         }
 
         if (yeuCauKhongCoLopDeXuat.length === 0) {
-            // Tìm học kỳ mới nhất để trả về trong response
-            const hocKyMoiNhat = await this.timHocKyMoiNhat();
-            if (!hocKyMoiNhat) {
-                throw new BadRequestException('Không tìm thấy học kỳ mới nhất trong hệ thống');
-            }
-
             return {
-                maNamHoc: hocKyMoiNhat.namHoc.maNamHoc,
-                tenNamHoc: hocKyMoiNhat.namHoc.tenNamHoc,
-                hocKy: hocKyMoiNhat.hocKy,
                 danhSachLopHocPhanDeXuat: [],
                 tongSoLop: 0,
                 tongSoSinhVien: 0,
@@ -4761,13 +4743,7 @@ export class GiangDayService {
             yeuCauByMonHoc.get(monHocId)!.push(yeuCau);
         }
 
-        // 4. Tìm học kỳ mới nhất
-        const hocKyMoiNhat = await this.timHocKyMoiNhat();
-        if (!hocKyMoiNhat) {
-            throw new BadRequestException('Không tìm thấy học kỳ mới nhất trong hệ thống');
-        }
-
-        // 5. Với mỗi môn học, xử lý sinh viên và tạo đề xuất lớp học phần
+        // 4. Với mỗi môn học, xử lý sinh viên và tạo đề xuất lớp học phần
         const danhSachLopHocPhanDeXuat: LopHocPhanDeXuatCanTaoChoHocBoSungCaiThienDto[] = [];
 
         for (const [monHocId, yeuCaus] of yeuCauByMonHoc.entries()) {
@@ -4835,26 +4811,12 @@ export class GiangDayService {
                 let hoTenGiangVien: string | null = null;
 
                 if (giangViens.length > 0) {
-                    // Tính tín chỉ hiện tại của từng giảng viên
-                    const giangVienWithLoad: Array<{ gv: GiangVien; tinChi: number }> = [];
-
-                    for (const gv of giangViens) {
-                        const tinChiHienTai = await this.tinhTinChiHienTaiCuaGV(gv.id, hocKyMoiNhat.id);
-                        giangVienWithLoad.push({ gv, tinChi: tinChiHienTai });
-                    }
-
-                    // Sắp xếp theo số tín chỉ tăng dần
-                    giangVienWithLoad.sort((a, b) => a.tinChi - b.tinChi);
-
-                    // Chọn giảng viên có ít tín chỉ nhất nhưng không vượt trần (12 tín chỉ)
-                    for (const item of giangVienWithLoad) {
-                        if (item.tinChi + monHoc.soTinChi <= 12) {
-                            giangVienId = item.gv.id;
-                            maGiangVien = item.gv.maGiangVien;
-                            hoTenGiangVien = item.gv.hoTen;
-                            break;
-                        }
-                    }
+                    // Chọn giảng viên đầu tiên trong danh sách
+                    // (Không tính tín chỉ vì chưa có học kỳ cụ thể - người dùng sẽ tự chọn năm học và học kỳ sau)
+                    const gv = giangViens[0];
+                    giangVienId = gv.id;
+                    maGiangVien = gv.maGiangVien;
+                    hoTenGiangVien = gv.hoTen;
                 }
 
                 // Lấy thông tin đầy đủ của sinh viên
@@ -4898,10 +4860,6 @@ export class GiangDayService {
                     nienKhoaId: nienKhoa.id,
                     maNienKhoa: nienKhoa.maNienKhoa,
                     tenNienKhoa: nienKhoa.tenNienKhoa,
-                    hocKyId: hocKyMoiNhat.id,
-                    hocKy: hocKyMoiNhat.hocKy,
-                    maNamHoc: hocKyMoiNhat.namHoc.maNamHoc,
-                    tenNamHoc: hocKyMoiNhat.namHoc.tenNamHoc,
                     giangVienId: giangVienId || null,
                     maGiangVien: maGiangVien || null,
                     hoTenGiangVien: hoTenGiangVien || null,
@@ -4919,9 +4877,6 @@ export class GiangDayService {
         }
 
         return {
-            maNamHoc: hocKyMoiNhat.namHoc.maNamHoc,
-            tenNamHoc: hocKyMoiNhat.namHoc.tenNamHoc,
-            hocKy: hocKyMoiNhat.hocKy,
             danhSachLopHocPhanDeXuat,
             tongSoLop: danhSachLopHocPhanDeXuat.length,
             tongSoSinhVien: danhSachLopHocPhanDeXuat.reduce((sum, lhp) => sum + lhp.soSinhVienCanHoc, 0),

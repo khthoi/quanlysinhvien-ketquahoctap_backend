@@ -73,18 +73,6 @@ export class LopHocPhanDeXuatCanTaoDto {
   @ApiProperty({ description: 'Tên niên khóa' })
   tenNienKhoa: string;
 
-  @ApiProperty({ description: 'ID học kỳ' })
-  hocKyId: number;
-
-  @ApiProperty({ description: 'Học kỳ' })
-  hocKy: number;
-
-  @ApiProperty({ description: 'Mã năm học' })
-  maNamHoc: string;
-
-  @ApiProperty({ description: 'Tên năm học' })
-  tenNamHoc: string;
-
   @ApiProperty({ description: 'ID giảng viên (nếu có)' })
   giangVienId?: number | null;
 
@@ -102,15 +90,6 @@ export class LopHocPhanDeXuatCanTaoDto {
 }
 
 export class GetDeXuatLopHocPhanChoHocLaiResponseDto {
-  @ApiProperty({ description: 'Mã năm học' })
-  maNamHoc: string;
-
-  @ApiProperty({ description: 'Tên năm học' })
-  tenNamHoc: string;
-
-  @ApiProperty({ description: 'Học kỳ' })
-  hocKy: number;
-
   @ApiProperty({ description: 'Danh sách lớp học phần đề xuất cần tạo', type: [LopHocPhanDeXuatCanTaoDto] })
   danhSachLopHocPhanDeXuat: LopHocPhanDeXuatCanTaoDto[];
 
