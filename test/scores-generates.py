@@ -158,6 +158,54 @@ def doc_du_lieu_tu_database(cursor):
     
     return ket_qua_hoc_tap, sinh_vien_lop_hoc_phan
 
+
+def tao_ban_ghi_kqht_cho_sv_chua_co(
+    cursor,
+    conn,
+    sv_ids_chua_co_kqht,
+    sinh_vien_lop_hoc_phan,
+):
+    """
+    Tạo các bản ghi ket_qua_hoc_tap cho những sinh viên
+    đã đăng ký lớp học phần nhưng CHƯA có bất kỳ kết quả học tập nào.
+    """
+    if not sv_ids_chua_co_kqht:
+        return 0
+
+    sv_ids_set = set(sv_ids_chua_co_kqht)
+
+    insert_sql = """
+        INSERT INTO ket_qua_hoc_tap
+        (diem_qua_trinh, diem_thanh_phan, diem_thi, sinh_vien_id, lop_hoc_phan_id)
+        VALUES (%s, %s, %s, %s, %s)
+    """
+
+    so_ban_ghi_moi = 0
+
+    for row in sinh_vien_lop_hoc_phan:
+        sv_id = row['sinh_vien_id']
+
+        # Chỉ xử lý các sinh viên nằm trong danh sách chưa có KQHT
+        if sv_id not in sv_ids_set:
+            continue
+
+        lhp_id = row['lop_hoc_phan_id']
+
+        try:
+            # Tạo bản ghi KQHT "rỗng" (điểm = 0), sẽ được cập nhật lại sau
+            cursor.execute(
+                insert_sql,
+                (0.0, 0.0, 0.0, sv_id, lhp_id),
+            )
+            so_ban_ghi_moi += 1
+        except Error as e:
+            print(f"  ✗ Lỗi khi tạo KQHT cho SV {sv_id}, LHP {lhp_id}: {e}")
+
+    if so_ban_ghi_moi:
+        conn.commit()
+
+    return so_ban_ghi_moi
+
 def tinh_diem_cao_nhat_theo_mon(ket_qua_hoc_tap: List[Dict]) -> Dict[int, Dict[int, float]]:
     """Tính điểm TBCHP cao nhất của mỗi môn học cho mỗi sinh viên (chỉ tính các lớp đã khóa điểm)"""
     # Cấu trúc: {sinh_vien_id: {mon_hoc_id: diem_tbchp_cao_nhat}}
@@ -249,16 +297,16 @@ def nhap_thong_tin_phan_bo():
     print("NHẬP THÔNG TIN PHÂN BỐ SINH VIÊN")
     print("=" * 70)
     
-    # Số sinh viên trượt môn (ít nhất 1 môn có TBCHP cao nhất < 4.0)
+    # % sinh viên trượt môn (ít nhất 1 môn có TBCHP cao nhất < 4.0)
     while True:
         try:
-            so_sv_truot_mon = int(input("\nNhập số lượng sinh viên trượt môn (ít nhất 1 môn có TBCHP < 4.0): "))
-            if so_sv_truot_mon < 0:
-                print("Số lượng phải >= 0!")
+            pct_truot_mon = float(input("\nNhập % sinh viên trượt môn (ít nhất 1 môn có TBCHP < 4.0): "))
+            if pct_truot_mon < 0 or pct_truot_mon > 100:
+                print("Phần trăm phải từ 0 đến 100!")
                 continue
             break
         except ValueError:
-            print("Vui lòng nhập số nguyên hợp lệ!")
+            print("Vui lòng nhập số hợp lệ!")
     
     # % sinh viên trượt tốt nghiệp (tất cả môn >= 4.0 nhưng GPA < 2.0)
     while True:
@@ -316,10 +364,11 @@ def nhap_thong_tin_phan_bo():
             print("Vui lòng nhập số hợp lệ!")
     
     # Kiểm tra tổng phần trăm
-    tong_pct = pct_truot_tot_nghiep + pct_trung_binh + pct_kha + pct_gioi + pct_xuat_sac
+    tong_pct = pct_truot_mon + pct_truot_tot_nghiep + pct_trung_binh + pct_kha + pct_gioi + pct_xuat_sac
     if tong_pct > 100:
         print(f"\n⚠ Cảnh báo: Tổng phần trăm = {tong_pct}% > 100%")
         print("Sẽ điều chỉnh tự động để tổng = 100%")
+        pct_truot_mon = pct_truot_mon * 100 / tong_pct
         pct_truot_tot_nghiep = pct_truot_tot_nghiep * 100 / tong_pct
         pct_trung_binh = pct_trung_binh * 100 / tong_pct
         pct_kha = pct_kha * 100 / tong_pct
@@ -327,7 +376,7 @@ def nhap_thong_tin_phan_bo():
         pct_xuat_sac = pct_xuat_sac * 100 / tong_pct
     
     return {
-        'so_sv_truot_mon': so_sv_truot_mon,
+        'pct_truot_mon': pct_truot_mon,
         'pct_truot_tot_nghiep': pct_truot_tot_nghiep,
         'pct_trung_binh': pct_trung_binh,
         'pct_kha': pct_kha,
@@ -415,6 +464,7 @@ def tinh_tbchp_tu_gpa(target_gpa: float) -> float:
 def tao_diem_theo_yeu_cau(
     ket_qua_hoc_tap: List[Dict],
     sinh_vien_info: Dict[int, Dict],
+    sinh_vien_lop_hoc_phan: List[Dict],
     phan_bo: Dict,
     cursor
 ) -> List[Dict]:
@@ -422,14 +472,13 @@ def tao_diem_theo_yeu_cau(
     print("\nĐang tạo điểm số theo yêu cầu...")
     
     # Đếm số sinh viên có bản ghi ket_qua_hoc_tap để cập nhật
-    # (SV có SVLHP nhưng chưa có KQHT sẽ không có gì để update trong mode hiện tại)
     tong_sv = sum(1 for _sv_id, info in sinh_vien_info.items() if info.get('co_ket_qua_hoc_tap'))
     so_sv_khong_co_kqht = len(sinh_vien_info) - tong_sv
     if so_sv_khong_co_kqht > 0:
-        print(f"  - Bỏ qua {so_sv_khong_co_kqht} SV chưa có bản ghi kết quả học tập (không thể update)")
+        print(f"  - Còn {so_sv_khong_co_kqht} sinh viên chưa có bản ghi kết quả học tập, sẽ không được đưa vào phân bố điểm.")
     
     # Tính số lượng sinh viên cần cho mỗi loại
-    so_sv_truot_mon = min(phan_bo['so_sv_truot_mon'], tong_sv)
+    so_sv_truot_mon = int(tong_sv * phan_bo['pct_truot_mon'] / 100)
     so_sv_truot_tot_nghiep = int(tong_sv * phan_bo['pct_truot_tot_nghiep'] / 100)
     so_sv_trung_binh = int(tong_sv * phan_bo['pct_trung_binh'] / 100)
     so_sv_kha = int(tong_sv * phan_bo['pct_kha'] / 100)
@@ -610,11 +659,37 @@ def main():
     try:
         # Đọc dữ liệu từ database
         ket_qua_hoc_tap, sinh_vien_lop_hoc_phan = doc_du_lieu_tu_database(cursor)
-        
+
+        # Kiểm tra sinh viên đã đăng ký lớp học phần nhưng chưa có bất kỳ kết quả học tập nào
+        sv_ids_from_svlhp = {row['sinh_vien_id'] for row in (sinh_vien_lop_hoc_phan or [])}
+        sv_ids_from_kqht = {row['sinh_vien_id'] for row in (ket_qua_hoc_tap or [])}
+        sv_ids_chua_co_kqht = sorted(sv_ids_from_svlhp - sv_ids_from_kqht)
+
+        if sv_ids_chua_co_kqht:
+            print("\n⚠ Phát hiện sinh viên thiếu bản ghi kết quả học tập:")
+            print(f"  - Số sinh viên đã đăng ký LHP nhưng CHƯA có KQHT: {len(sv_ids_chua_co_kqht)}")
+            xac_nhan_tao_kqht = input(
+                "Bạn có muốn tự động tạo các bản ghi kết quả học tập cho các sinh viên này không? (yes/no): "
+            ).strip().lower()
+
+            if xac_nhan_tao_kqht == 'yes':
+                so_ban_ghi_moi = tao_ban_ghi_kqht_cho_sv_chua_co(
+                    cursor,
+                    conn,
+                    sv_ids_chua_co_kqht,
+                    sinh_vien_lop_hoc_phan,
+                )
+                print(f"  ✓ Đã tạo {so_ban_ghi_moi} bản ghi kết quả học tập mới.")
+
+                # Đọc lại dữ liệu sau khi insert
+                ket_qua_hoc_tap, sinh_vien_lop_hoc_phan = doc_du_lieu_tu_database(cursor)
+            else:
+                print("  → Giữ nguyên, KHÔNG tạo thêm bản ghi kết quả học tập.")
+
         if not ket_qua_hoc_tap:
             print("\n⚠ Không có dữ liệu kết quả học tập trong database!")
             return
-        
+
         # Phân loại sinh viên
         sinh_vien_info = phan_loai_sinh_vien(ket_qua_hoc_tap, sinh_vien_lop_hoc_phan, cursor)
         
@@ -638,8 +713,9 @@ def main():
         danh_sach_cap_nhat = tao_diem_theo_yeu_cau(
             ket_qua_hoc_tap,
             sinh_vien_info,
+            sinh_vien_lop_hoc_phan,
             phan_bo,
-            cursor
+            cursor,
         )
         
         # Xác nhận trước khi cập nhật
