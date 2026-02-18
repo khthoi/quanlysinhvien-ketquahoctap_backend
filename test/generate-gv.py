@@ -1,79 +1,9 @@
-import openpyxl
-from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+import mysql.connector
+from mysql.connector import Error
 from datetime import datetime, timedelta
 import random
-import re
-import unidecode  # <-- thêm thư viện này để bỏ dấu dễ dàng
-
-# Tạo workbook mới
-wb = openpyxl.Workbook()
-ws = wb.active
-ws.title = "Giảng viên"
-
-# Định nghĩa màu sắc và border
-header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
-thin_border = Border(
-    left=Side(style='thin'),
-    right=Side(style='thin'),
-    top=Side(style='thin'),
-    bottom=Side(style='thin')
-)
-
-# Danh sách môn học (giữ nguyên)
-mon_hoc = [
-    ("ML1011", "Triết học Mác - Lênin"),
-    ("TH1001", "Giáo dục thể chất 1"),
-    ("TN1001", "Tiếng Anh 1"),
-    ("TH1101", "Toán cao cấp A1"),
-    ("TH1102", "Đại số tuyến tính"),
-    ("IT1001", "Nhập môn lập trình"),
-    ("IT1002", "Tin học cơ sở"),
-    ("ML1021", "Kinh tế chính trị Mác - Lênin"),
-    ("TH1002", "Giáo dục thể chất 2"),
-    ("TN1002", "Tiếng Anh 2"),
-    ("TH1103", "Toán cao cấp A2"),
-    ("TH1104", "Toán rời rạc"),
-    ("IT1003", "Lập trình hướng đối tượng"),
-    ("IT1004", "Cấu trúc dữ liệu và giải thuật"),
-    ("ML1031", "Chủ nghĩa xã hội khoa học"),
-    ("TH1003", "Giáo dục thể chất 3"),
-    ("TN1003", "Tiếng Anh 3"),
-    ("TH1105", "Xác suất thống kê"),
-    ("IT2001", "Cơ sở dữ liệu"),
-    ("IT2002", "Hệ điều hành"),
-    ("IT2003", "Kiến trúc máy tính"),
-    ("ML1041", "Tư tưởng Hồ Chí Minh"),
-    ("PL1001", "Pháp luật đại cương"),
-    ("IT2004", "Mạng máy tính"),
-    ("IT2005", "Lập trình Web"),
-    ("IT2006", "Phân tích thiết kế hệ thống"),
-    ("IT2007", "Công nghệ phần mềm"),
-    ("IT2008", "Trí tuệ nhân tạo"),
-    ("ML1051", "Lịch sử Đảng Cộng sản Việt Nam"),
-    ("IT3001", "Lập trình di động"),
-    ("IT3002", "An toàn và bảo mật thông tin"),
-    ("IT3003", "Học máy (Machine Learning)"),
-    ("IT3004", "Lập trình Java nâng cao"),
-    ("IT3005", "Đồ họa máy tính"),
-    ("IT3006", "Phát triển ứng dụng thương mại điện tử"),
-    ("IT3007", "Quản trị mạng"),
-    ("IT3008", "Hệ quản trị cơ sở dữ liệu"),
-    ("IT3009", "Điện toán đám mây (Cloud Computing)"),
-    ("IT3010", "Lập trình Python"),
-    ("IT3011", "Phân tích dữ liệu lớn (Big Data)"),
-    ("IT3012", "Internet of Things (IoT)"),
-    ("IT3013", "Blockchain và ứng dụng"),
-    ("IT4001", "Phát triển game"),
-    ("IT4002", "Xử lý ngôn ngữ tự nhiên (NLP)"),
-    ("IT4003", "Computer Vision"),
-    ("IT4004", "DevOps"),
-    ("IT4005", "Quản lý dự án CNTT"),
-    ("IT4006", "Kiểm thử phần mềm"),
-    ("IT4007", "Thực tập doanh nghiệp"),
-    ("IT4008", "Đồ án chuyên ngành"),
-    ("IT4009", "Khóa luận tốt nghiệp"),
-    ("IT4010", "Seminar chuyên ngành"),
-]
+import unidecode
+from collections import defaultdict, Counter
 
 # Dữ liệu mẫu họ tên
 ho_dem = ["Nguyễn", "Trần", "Lê", "Phạm", "Hoàng", "Phan", "Vũ", "Đặng", "Bùi", "Đỗ", "Hồ", "Ngô", "Dương", "Lý"]
@@ -86,159 +16,429 @@ ten = [
 ]
 dia_chi = ["Hà Nội", "TP. Hồ Chí Minh", "Đà Nẵng", "Hải Phòng", "Cần Thơ", "Huế", "Nha Trang", "Vũng Tàu", "Biên Hòa", "Thái Nguyên"]
 
-# Tạo header
-headers = ['STT', 'Mã giảng viên', 'Họ tên', 'Ngày sinh', 'Email', 'Số điện thoại', 'Giới tính', 'Địa chỉ']
-for col, header in enumerate(headers, start=1):
-    cell = ws.cell(row=1, column=col)
-    cell.value = header
-    cell.font = Font(name='Arial', size=11, bold=True, color='FFFFFF')
-    cell.alignment = Alignment(horizontal='center', vertical='center')
-    cell.fill = header_fill
-    cell.border = thin_border
-
-ws.row_dimensions[1].height = 25
-
 # Hàm tạo mã giảng viên dạng TRAN_TRUNG_CUONG
 def tao_ma_giang_vien(ho_ten):
-    # Bỏ dấu → viết HOA → thay khoảng trắng bằng _
     khong_dau = unidecode.unidecode(ho_ten).upper()
     ma = khong_dau.replace(" ", "_")
     return ma
 
 # Hàm tạo email không dấu, chữ thường
 def tao_email_khong_dau(ho, td, t, index):
-    # Nối họ + tên đệm + tên → bỏ dấu → chữ thường
     full = f"{ho} {td} {t}"
     khong_dau = unidecode.unidecode(full).lower().replace(" ", "")
     email = f"{khong_dau}{index}@university.edu.vn"
     return email
 
-# Tạo dữ liệu 30 giảng viên
-giang_vien_data = []
-used_emails = set()
-used_phones = set()
+def get_existing_data(cursor):
+    """Lấy dữ liệu hiện có từ database"""
+    # Lấy danh sách giảng viên hiện có
+    cursor.execute("SELECT ma_giang_vien, email, sdt FROM giang_vien")
+    existing_gv = cursor.fetchall()
+    used_ma_gv = {gv['ma_giang_vien'] for gv in existing_gv}
+    used_emails = {gv['email'] for gv in existing_gv}
+    used_phones = {gv['sdt'] for gv in existing_gv if gv['sdt']}
+    
+    # Lấy danh sách môn học
+    cursor.execute("SELECT id, ma_mon_hoc, ten_mon_hoc FROM mon_hoc ORDER BY id")
+    mon_hoc_list = cursor.fetchall()
+    
+    # Lấy phân công môn học hiện có
+    cursor.execute("""
+        SELECT gv.id as giang_vien_id, gv.ma_giang_vien, mh.id as mon_hoc_id, mh.ma_mon_hoc
+        FROM giang_vien gv
+        INNER JOIN giang_vien_mon_hoc gvmh ON gv.id = gvmh.giang_vien_id
+        INNER JOIN mon_hoc mh ON gvmh.mon_hoc_id = mh.id
+    """)
+    phan_cong_hien_co = cursor.fetchall()
+    
+    # Lấy thông tin lớp học phần chưa có giảng viên
+    cursor.execute("""
+        SELECT lhp.id, lhp.mon_hoc_id, lhp.hoc_ky_id, lhp.nien_khoa_id, mh.ma_mon_hoc
+        FROM lop_hoc_phan lhp
+        INNER JOIN mon_hoc mh ON lhp.mon_hoc_id = mh.id
+        WHERE lhp.giang_vien_id IS NULL
+    """)
+    lop_hoc_phan_chua_co_gv = cursor.fetchall()
+    
+    return {
+        'used_ma_gv': used_ma_gv,
+        'used_emails': used_emails,
+        'used_phones': used_phones,
+        'mon_hoc_list': mon_hoc_list,
+        'phan_cong_hien_co': phan_cong_hien_co,
+        'lop_hoc_phan_chua_co_gv': lop_hoc_phan_chua_co_gv,
+        'existing_gv_count': len(existing_gv)
+    }
 
-for i in range(1, 31):
-    # Tạo tên ngẫu nhiên
-    ho = random.choice(ho_dem)
-    td = random.choice(ten_dem)
-    t = random.choice(ten)
-    ho_ten = f"{ho} {td} {t}"
+def analyze_subject_distribution(mon_hoc_list, phan_cong_hien_co, lop_hoc_phan_chua_co_gv):
+    """Phân tích phân bố môn học để phân công đồng đều"""
+    # Đếm số giảng viên hiện có cho mỗi môn học
+    mon_hoc_gv_count = defaultdict(int)
+    for pc in phan_cong_hien_co:
+        mon_hoc_gv_count[pc['mon_hoc_id']] += 1
     
-    # Tạo mã giảng viên mới theo dạng yêu cầu
-    ma_gv = tao_ma_giang_vien(ho_ten)
+    # Đếm số lớp học phần chưa có giảng viên cho mỗi môn học
+    mon_hoc_lhp_count = defaultdict(int)
+    for lhp in lop_hoc_phan_chua_co_gv:
+        mon_hoc_lhp_count[lhp['mon_hoc_id']] += 1
     
-    # Ngày sinh (1970–1990)
-    start_date = datetime(1970, 1, 1)
-    end_date = datetime(1990, 12, 31)
-    days_between = (end_date - start_date).days
-    random_days = random.randint(0, days_between)
-    ngay_sinh = start_date + timedelta(days=random_days)
+    # Tính số giảng viên cần thiết cho mỗi môn học
+    # Ưu tiên các môn học có nhiều lớp học phần chưa có giảng viên
+    mon_hoc_priority = []
+    for mh in mon_hoc_list:
+        mh_id = mh['id']
+        current_gv = mon_hoc_gv_count[mh_id]
+        needed_lhp = mon_hoc_lhp_count[mh_id]
+        
+        # Tính điểm ưu tiên: số lớp học phần cần / (số giảng viên hiện có + 1)
+        # Môn học có nhiều lớp học phần cần giảng viên hơn sẽ có điểm cao hơn
+        priority_score = needed_lhp / (current_gv + 1) if (current_gv + 1) > 0 else needed_lhp
+        
+        mon_hoc_priority.append({
+            'mon_hoc_id': mh_id,
+            'ma_mon_hoc': mh['ma_mon_hoc'],
+            'ten_mon_hoc': mh['ten_mon_hoc'],
+            'current_gv': current_gv,
+            'needed_lhp': needed_lhp,
+            'priority_score': priority_score
+        })
     
-    # Email không dấu, unique
-    email = tao_email_khong_dau(ho, td, t, i)
-    base = email.split('@')[0]
-    counter = 0
-    while email in used_emails:
-        counter += 1
-        email = f"{base}{counter}@university.edu.vn"
-    used_emails.add(email)
+    # Sắp xếp theo điểm ưu tiên giảm dần
+    mon_hoc_priority.sort(key=lambda x: x['priority_score'], reverse=True)
     
-    # Số điện thoại unique
-    phone = f"09{random.randint(10000000, 99999999)}"
-    while phone in used_phones:
-        phone = f"09{random.randint(10000000, 99999999)}"
-    used_phones.add(phone)
-    
-    # Giới tính
-    gioi_tinh = random.choice(["NAM", "NU"])
-    
-    # Địa chỉ
-    dia_chi_gv = random.choice(dia_chi)
-    
-    giang_vien_data.append({
-        'stt': i,
-        'ma_gv': ma_gv,
-        'ho_ten': ho_ten,
-        'ngay_sinh': ngay_sinh.strftime('%Y-%m-%d'),
-        'email': email,
-        'sdt': phone,
-        'gioi_tinh': gioi_tinh,
-        'dia_chi': dia_chi_gv,
-        'mon_day': []
-    })
+    return mon_hoc_priority
 
-# Phân công môn học (giữ nguyên logic)
-mon_hoc_shuffled = mon_hoc.copy()
-random.shuffle(mon_hoc_shuffled)
-
-idx = 0
-for gv in giang_vien_data:
-    num_subjects = random.randint(2, 5)
-    for _ in range(num_subjects):
-        if idx < len(mon_hoc_shuffled):
-            gv['mon_day'].append(mon_hoc_shuffled[idx][0])
-            idx += 1
+def distribute_subjects_evenly(mon_hoc_priority, num_gv, existing_assignments):
+    """Phân công môn học đồng đều cho các giảng viên mới"""
+    if not mon_hoc_priority:
+        return [[] for _ in range(num_gv)]
+    
+    # Tạo danh sách môn học cần phân công (lặp lại theo độ ưu tiên)
+    subject_queue = []
+    total_priority = sum(mh['priority_score'] for mh in mon_hoc_priority)
+    
+    if total_priority > 0:
+        for mh in mon_hoc_priority:
+            # Số lần môn học này cần xuất hiện = priority_score * số giảng viên / tổng priority
+            weight = int((mh['priority_score'] / total_priority) * num_gv * 2)  # x2 để đảm bảo đủ
+            subject_queue.extend([mh['mon_hoc_id']] * max(1, weight))
+    else:
+        # Nếu không có priority, phân đều tất cả môn học
+        for mh in mon_hoc_priority:
+            subject_queue.extend([mh['mon_hoc_id']] * 2)
+    
+    # Xáo trộn để phân bố ngẫu nhiên
+    random.shuffle(subject_queue)
+    
+    # Phân công cho từng giảng viên
+    assignments = [[] for _ in range(num_gv)]
+    subject_counter = Counter()
+    
+    # Phân công mỗi môn học cho giảng viên có ít môn học nhất
+    for mon_hoc_id in subject_queue:
+        # Tìm giảng viên có ít môn học nhất và chưa có môn học này
+        best_gv_idx = None
+        min_count = float('inf')
+        
+        for i in range(num_gv):
+            if mon_hoc_id not in assignments[i]:
+                if len(assignments[i]) < min_count:
+                    min_count = len(assignments[i])
+                    best_gv_idx = i
+        
+        if best_gv_idx is not None:
+            assignments[best_gv_idx].append(mon_hoc_id)
+            subject_counter[mon_hoc_id] += 1
         else:
+            # Nếu tất cả giảng viên đã có môn học này, thêm vào giảng viên có ít môn nhất
+            min_gv_idx = min(range(num_gv), key=lambda i: len(assignments[i]))
+            if mon_hoc_id not in assignments[min_gv_idx]:
+                assignments[min_gv_idx].append(mon_hoc_id)
+                subject_counter[mon_hoc_id] += 1
+    
+    # Đảm bảo mỗi giảng viên có ít nhất 2 môn học
+    all_mon_hoc_ids = [mh['mon_hoc_id'] for mh in mon_hoc_priority]
+    for i in range(num_gv):
+        while len(assignments[i]) < 2:
+            # Thêm môn học chưa có hoặc ít giảng viên nhất
+            available_subjects = [mh_id for mh_id in all_mon_hoc_ids if mh_id not in assignments[i]]
+            if available_subjects:
+                # Chọn môn học có ít giảng viên nhất trong assignments
+                subject_counts = Counter()
+                for j in range(num_gv):
+                    for mh_id in assignments[j]:
+                        subject_counts[mh_id] += 1
+                
+                best_subject = min(available_subjects, key=lambda mh_id: subject_counts.get(mh_id, 0))
+                assignments[i].append(best_subject)
+            else:
+                break
+    
+    return assignments
+
+def create_giang_vien(cursor, conn, num_gv, used_ma_gv, used_emails, used_phones):
+    """Tạo giảng viên mới trong database"""
+    giang_vien_ids = []
+    
+    for i in range(num_gv):
+        # Tạo tên ngẫu nhiên
+        ho = random.choice(ho_dem)
+        td = random.choice(ten_dem)
+        t = random.choice(ten)
+        ho_ten = f"{ho} {td} {t}"
+        
+        # Tạo mã giảng viên (đảm bảo không trùng)
+        ma_gv = tao_ma_giang_vien(ho_ten)
+        counter = 1
+        while ma_gv in used_ma_gv:
+            ma_gv = f"{tao_ma_giang_vien(ho_ten)}_{counter}"
+            counter += 1
+        used_ma_gv.add(ma_gv)
+        
+        # Ngày sinh (1970–1990)
+        start_date = datetime(1970, 1, 1)
+        end_date = datetime(1990, 12, 31)
+        days_between = (end_date - start_date).days
+        random_days = random.randint(0, days_between)
+        ngay_sinh = start_date + timedelta(days=random_days)
+        
+        # Email không dấu, unique
+        email = tao_email_khong_dau(ho, td, t, i + 1)
+        base = email.split('@')[0]
+        counter = 0
+        while email in used_emails:
+            counter += 1
+            email = f"{base}{counter}@university.edu.vn"
+        used_emails.add(email)
+        
+        # Số điện thoại unique
+        phone = f"09{random.randint(10000000, 99999999)}"
+        while phone in used_phones:
+            phone = f"09{random.randint(10000000, 99999999)}"
+        used_phones.add(phone)
+        
+        # Giới tính
+        gioi_tinh = random.choice(["NAM", "NU"])
+        
+        # Địa chỉ
+        dia_chi_gv = random.choice(dia_chi)
+        
+        # Insert vào database
+        try:
+            cursor.execute("""
+                INSERT INTO giang_vien (ma_giang_vien, ho_ten, ngay_sinh, email, sdt, gioi_tinh, dia_chi)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (ma_gv, ho_ten, ngay_sinh.strftime('%Y-%m-%d'), email, phone, gioi_tinh, dia_chi_gv))
+            
+            gv_id = cursor.lastrowid
+            giang_vien_ids.append(gv_id)
+            print(f"  ✓ Đã tạo giảng viên: {ma_gv} - {ho_ten} (ID: {gv_id})")
+        except Error as e:
+            print(f"  ✗ Lỗi khi tạo giảng viên {ma_gv}: {e}")
+            conn.rollback()
+            raise
+    
+    conn.commit()
+    return giang_vien_ids
+
+def assign_subjects_to_teachers(cursor, conn, giang_vien_ids, assignments, mon_hoc_list):
+    """Phân công môn học cho giảng viên"""
+    mon_hoc_dict = {mh['id']: mh for mh in mon_hoc_list}
+    total_assignments = 0
+    
+    for gv_idx, gv_id in enumerate(giang_vien_ids):
+        for mon_hoc_id in assignments[gv_idx]:
+            try:
+                cursor.execute("""
+                    INSERT INTO giang_vien_mon_hoc (giang_vien_id, mon_hoc_id)
+                    VALUES (%s, %s)
+                """, (gv_id, mon_hoc_id))
+                total_assignments += 1
+                mon_hoc_info = mon_hoc_dict.get(mon_hoc_id, {})
+                print(f"  ✓ Phân công: GV ID {gv_id} → {mon_hoc_info.get('ma_mon_hoc', mon_hoc_id)}")
+            except Error as e:
+                # Có thể đã tồn tại (unique constraint), bỏ qua
+                if "Duplicate entry" not in str(e):
+                    print(f"  ✗ Lỗi khi phân công môn học: {e}")
+    
+    conn.commit()
+    print(f"\n  Tổng số phân công môn học: {total_assignments}")
+
+def assign_teachers_to_classes(cursor, conn, lop_hoc_phan_chua_co_gv):
+    """Gán giảng viên cho các lớp học phần chưa có giảng viên"""
+    if not lop_hoc_phan_chua_co_gv:
+        print("\n  Không có lớp học phần nào cần gán giảng viên.")
+        return
+    
+    # Lấy danh sách giảng viên và môn học họ dạy
+    cursor.execute("""
+        SELECT gv.id as giang_vien_id, gvmh.mon_hoc_id
+        FROM giang_vien gv
+        INNER JOIN giang_vien_mon_hoc gvmh ON gv.id = gvmh.giang_vien_id
+    """)
+    gv_mon_hoc = cursor.fetchall()
+    
+    # Tạo dict: mon_hoc_id -> [danh sách giảng viên có thể dạy]
+    mon_hoc_to_gv = defaultdict(list)
+    for row in gv_mon_hoc:
+        mon_hoc_to_gv[row['mon_hoc_id']].append(row['giang_vien_id'])
+    
+    # Đếm số lớp học phần đã gán cho mỗi giảng viên (để phân bố đồng đều)
+    gv_class_count = defaultdict(int)
+    
+    assigned_count = 0
+    for lhp in lop_hoc_phan_chua_co_gv:
+        mon_hoc_id = lhp['mon_hoc_id']
+        available_gv = mon_hoc_to_gv.get(mon_hoc_id, [])
+        
+        if available_gv:
+            # Chọn giảng viên có ít lớp học phần nhất
+            best_gv = min(available_gv, key=lambda gv_id: gv_class_count[gv_id])
+            
+            try:
+                cursor.execute("""
+                    UPDATE lop_hoc_phan
+                    SET giang_vien_id = %s
+                    WHERE id = %s
+                """, (best_gv, lhp['id']))
+                
+                gv_class_count[best_gv] += 1
+                assigned_count += 1
+            except Error as e:
+                print(f"  ✗ Lỗi khi gán giảng viên cho lớp học phần {lhp['id']}: {e}")
+        else:
+            print(f"  ⚠ Không có giảng viên nào dạy môn học ID {mon_hoc_id} cho lớp học phần {lhp['id']}")
+    
+    conn.commit()
+    print(f"\n  Đã gán giảng viên cho {assigned_count}/{len(lop_hoc_phan_chua_co_gv)} lớp học phần")
+
+def main():
+    print("=" * 70)
+    print("TẠO DỮ LIỆU GIẢNG VIÊN VÀ PHÂN CÔNG MÔN HỌC")
+    print("=" * 70)
+    
+    # Hỏi số lượng giảng viên cần tạo
+    while True:
+        try:
+            num_gv = int(input("\nNhập số lượng giảng viên cần tạo: "))
+            if num_gv <= 0:
+                print("Số lượng phải lớn hơn 0!")
+                continue
             break
+        except ValueError:
+            print("Vui lòng nhập số nguyên hợp lệ!")
+    
+    # Kết nối database
+    try:
+        conn = mysql.connector.connect(
+            host="localhost",
+            user="root",
+            password="",
+            port=3307,
+            database="quanlysinhvien_kqht"
+        )
+        cursor = conn.cursor(dictionary=True)
+        
+        print("\n" + "=" * 70)
+        print("BƯỚC 1: Lấy dữ liệu hiện có từ database...")
+        print("=" * 70)
+        
+        existing_data = get_existing_data(cursor)
+        print(f"  - Số giảng viên hiện có: {existing_data['existing_gv_count']}")
+        print(f"  - Số môn học: {len(existing_data['mon_hoc_list'])}")
+        print(f"  - Số phân công hiện có: {len(existing_data['phan_cong_hien_co'])}")
+        print(f"  - Số lớp học phần chưa có giảng viên: {len(existing_data['lop_hoc_phan_chua_co_gv'])}")
+        
+        print("\n" + "=" * 70)
+        print("BƯỚC 2: Phân tích phân bố môn học...")
+        print("=" * 70)
+        
+        mon_hoc_priority = analyze_subject_distribution(
+            existing_data['mon_hoc_list'],
+            existing_data['phan_cong_hien_co'],
+            existing_data['lop_hoc_phan_chua_co_gv']
+        )
+        
+        print("\n  Top 10 môn học cần giảng viên nhất:")
+        for i, mh in enumerate(mon_hoc_priority[:10], 1):
+            print(f"    {i}. {mh['ma_mon_hoc']} - {mh['ten_mon_hoc']}")
+            print(f"       (Hiện có: {mh['current_gv']} GV, Cần: {mh['needed_lhp']} lớp học phần)")
+        
+        print("\n" + "=" * 70)
+        print("BƯỚC 3: Phân công môn học đồng đều...")
+        print("=" * 70)
+        
+        assignments = distribute_subjects_evenly(
+            mon_hoc_priority,
+            num_gv,
+            existing_data['phan_cong_hien_co']
+        )
+        
+        # Hiển thị phân công
+        print("\n  Phân công môn học cho các giảng viên mới:")
+        for i, assignment in enumerate(assignments, 1):
+            mon_hoc_names = [mh['ma_mon_hoc'] for mh in existing_data['mon_hoc_list'] 
+                           if mh['id'] in assignment]
+            print(f"    GV {i}: {len(assignment)} môn học - {', '.join(mon_hoc_names[:5])}{'...' if len(mon_hoc_names) > 5 else ''}")
+        
+        print("\n" + "=" * 70)
+        print("BƯỚC 4: Tạo giảng viên mới...")
+        print("=" * 70)
+        
+        giang_vien_ids = create_giang_vien(
+            cursor,
+            conn,
+            num_gv,
+            existing_data['used_ma_gv'],
+            existing_data['used_emails'],
+            existing_data['used_phones']
+        )
+        
+        print("\n" + "=" * 70)
+        print("BƯỚC 5: Phân công môn học cho giảng viên...")
+        print("=" * 70)
+        
+        assign_subjects_to_teachers(
+            cursor,
+            conn,
+            giang_vien_ids,
+            assignments,
+            existing_data['mon_hoc_list']
+        )
+        
+        print("\n" + "=" * 70)
+        print("BƯỚC 6: Gán giảng viên cho các lớp học phần...")
+        print("=" * 70)
+        
+        # Lấy lại danh sách lớp học phần chưa có giảng viên (sau khi đã tạo giảng viên mới)
+        cursor.execute("""
+            SELECT lhp.id, lhp.mon_hoc_id, lhp.hoc_ky_id, lhp.nien_khoa_id, mh.ma_mon_hoc
+            FROM lop_hoc_phan lhp
+            INNER JOIN mon_hoc mh ON lhp.mon_hoc_id = mh.id
+            WHERE lhp.giang_vien_id IS NULL
+        """)
+        lop_hoc_phan_chua_co_gv = cursor.fetchall()
+        
+        assign_teachers_to_classes(cursor, conn, lop_hoc_phan_chua_co_gv)
+        
+        print("\n" + "=" * 70)
+        print("HOÀN TẤT!")
+        print("=" * 70)
+        print(f"  ✅ Đã tạo {num_gv} giảng viên mới")
+        print(f"  ✅ Đã phân công môn học đồng đều")
+        print(f"  ✅ Đã gán giảng viên cho các lớp học phần")
+        print("=" * 70)
+        
+    except Error as e:
+        print(f"\n❌ Lỗi MySQL: {e}")
+        if 'conn' in locals() and conn.is_connected():
+            conn.rollback()
+    
+    finally:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+            print("\n🔌 Đã đóng kết nối MySQL\n")
 
-# Ghi dữ liệu vào sheet "Giảng viên" (giữ nguyên phần này)
-current_row = 2
-for gv in giang_vien_data:
-    ws.cell(row=current_row, column=1).value = gv['stt']
-    ws.cell(row=current_row, column=2).value = gv['ma_gv']
-    ws.cell(row=current_row, column=3).value = gv['ho_ten']
-    ws.cell(row=current_row, column=4).value = gv['ngay_sinh']
-    ws.cell(row=current_row, column=5).value = gv['email']
-    ws.cell(row=current_row, column=6).value = gv['sdt']
-    ws.cell(row=current_row, column=7).value = gv['gioi_tinh']
-    ws.cell(row=current_row, column=8).value = gv['dia_chi']
-
-    for col in range(1, 9):
-        cell = ws.cell(row=current_row, column=col)
-        cell.alignment = Alignment(horizontal='center' if col in [1,2,4,6,7] else 'left', vertical='center')
-        cell.border = thin_border
-
-    ws.row_dimensions[current_row].height = 20
-    current_row += 1
-
-# Định dạng cột (giữ nguyên)
-ws.column_dimensions['A'].width = 8
-ws.column_dimensions['B'].width = 22   # rộng hơn tí vì mã dài
-ws.column_dimensions['C'].width = 28
-ws.column_dimensions['D'].width = 15
-ws.column_dimensions['E'].width = 38
-ws.column_dimensions['F'].width = 18
-ws.column_dimensions['G'].width = 12
-ws.column_dimensions['H'].width = 25
-
-# Sheet phân công môn học (giữ nguyên)
-ws2 = wb.create_sheet(title="Phân công môn học")
-
-headers2 = ['Mã giảng viên', 'Mã môn học']
-for col, header in enumerate(headers2, start=1):
-    cell = ws2.cell(row=1, column=col)
-    cell.value = header
-    cell.font = Font(name='Arial', size=11, bold=True, color='FFFFFF')
-    cell.alignment = Alignment(horizontal='center', vertical='center')
-    cell.fill = header_fill
-    cell.border = thin_border
-
-current_row = 2
-for gv in giang_vien_data:
-    for ma_mon in gv['mon_day']:
-        ws2.cell(row=current_row, column=1).value = gv['ma_gv']
-        ws2.cell(row=current_row, column=2).value = ma_mon
-        for col in [1,2]:
-            cell = ws2.cell(row=current_row, column=col)
-            cell.alignment = Alignment(horizontal='center', vertical='center')
-            cell.border = thin_border
-        ws2.row_dimensions[current_row].height = 20
-        current_row += 1
-
-ws2.column_dimensions['A'].width = 22
-ws2.column_dimensions['B'].width = 15
-
-# Lưu file
-wb.save('giang_vien_va_phan_cong_mon_hoc.xlsx')
-print("Đã tạo file thành công!")
+if __name__ == "__main__":
+    main()
