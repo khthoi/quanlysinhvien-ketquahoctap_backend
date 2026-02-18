@@ -1,23 +1,64 @@
-import mysql.connector
-from mysql.connector import Error
+import os
 import random
 from collections import defaultdict
 from typing import Dict, List, Tuple, Optional
 
+import mysql.connector
+from mysql.connector import Error
+
+def _load_env_file(env_path: str) -> Dict[str, str]:
+    """Đọc file .env đơn giản (key=value, bỏ qua comment)"""
+    env_vars: Dict[str, str] = {}
+    if not os.path.exists(env_path):
+        return env_vars
+
+    try:
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                if key:
+                    env_vars[key] = value
+    except Exception as e:
+        print(f"⚠ Không thể đọc file .env: {e}")
+    return env_vars
+
+
 # Kết nối database
 def connect_db():
-    """Kết nối đến MySQL database"""
+    """Kết nối đến MySQL database, ưu tiên cấu hình từ file .env nằm ngoài thư mục test một cấp"""
+    # Xác định đường dẫn tới file .env (thư mục cha của thư mục test)
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env_path = os.path.join(base_dir, ".env")
+
+    # Đọc biến môi trường từ file .env (nếu có)
+    file_env = _load_env_file(env_path)
+
+    # Ưu tiên: file .env -> biến môi trường hệ thống -> giá trị mặc định
+    host = file_env.get("DB_HOST") or os.getenv("DB_HOST", "localhost")
+    port_str = file_env.get("DB_PORT") or os.getenv("DB_PORT", "3306")
+    user = file_env.get("DB_USERNAME") or os.getenv("DB_USERNAME", "root")
+    password = file_env.get("DB_PASSWORD") or os.getenv("DB_PASSWORD", "")
+    database = file_env.get("DB_DATABASE") or os.getenv("DB_DATABASE", "quanlysinhvien_kqht")
+
     try:
         conn = mysql.connector.connect(
-            host="localhost",
-            user="root",
-            password="",
-            port=3306,
-            database="quanlysinhvien_kqht"
+            host=host,
+            user=user,
+            password=password,
+            port=int(port_str) if str(port_str).isdigit() else 3306,
+            database=database,
         )
         return conn
     except Error as e:
         print(f"Lỗi kết nối database: {e}")
+        print(f"  - Đã thử kết nối với host={host}, port={port_str}, user={user}, database={database}")
         return None
 
 def tinh_tbchp(diem_qua_trinh: float, diem_thanh_phan: float, diem_thi: float) -> float:
