@@ -2,9 +2,40 @@ import os
 import random
 from collections import defaultdict
 from typing import Dict, List, Tuple, Optional
+import sys
 
 import mysql.connector
 from mysql.connector import Error
+
+
+def safe_input(prompt: str, default: Optional[str] = None) -> str:
+    """
+    Đọc input an toàn, tránh lỗi UnicodeDecodeError trong môi trường không cấu hình UTF-8.
+
+    - Nếu đọc được bình thường -> trả về chuỗi người dùng nhập.
+    - Nếu gặp UnicodeDecodeError -> in cảnh báo và trả về giá trị default (nếu có),
+      hoặc chuỗi rỗng nếu default = None.
+    """
+    try:
+        return input(prompt)
+    except UnicodeDecodeError:
+        # Cố gắng đọc trực tiếp từ stdin theo dạng bytes rồi tự decode linh hoạt
+        try:
+            sys.stdout.write("\n⚠ Lỗi Unicode khi đọc input, sẽ dùng giá trị mặc định.\n")
+            sys.stdout.flush()
+            if default is not None:
+                return default
+            # Đọc một dòng thô rồi decode "mềm"
+            raw = sys.stdin.buffer.readline()
+            # Thử nhiều encoding, fallback latin-1
+            for enc in ("utf-8", "cp1252", "latin-1"):
+                try:
+                    return raw.decode(enc, errors="ignore").strip()
+                except Exception:
+                    continue
+            return ""
+        except Exception:
+            return default or ""
 
 def _load_env_file(env_path: str) -> Dict[str, str]:
     """Đọc file .env đơn giản (key=value, bỏ qua comment)"""
@@ -300,7 +331,9 @@ def nhap_thong_tin_phan_bo():
     # % sinh viên trượt môn (ít nhất 1 môn có TBCHP cao nhất < 4.0)
     while True:
         try:
-            pct_truot_mon = float(input("\nNhập % sinh viên trượt môn (ít nhất 1 môn có TBCHP < 4.0): "))
+            pct_truot_mon = float(
+                safe_input("\nNhập % sinh viên trượt môn (ít nhất 1 môn có TBCHP < 4.0): ", default="0")
+            )
             if pct_truot_mon < 0 or pct_truot_mon > 100:
                 print("Phần trăm phải từ 0 đến 100!")
                 continue
@@ -311,7 +344,12 @@ def nhap_thong_tin_phan_bo():
     # % sinh viên trượt tốt nghiệp (tất cả môn >= 4.0 nhưng GPA < 2.0)
     while True:
         try:
-            pct_truot_tot_nghiep = float(input("\nNhập % sinh viên trượt tốt nghiệp (tất cả môn >= 4.0 nhưng GPA < 2.0): "))
+            pct_truot_tot_nghiep = float(
+                safe_input(
+                    "\nNhập % sinh viên trượt tốt nghiệp (tất cả môn >= 4.0 nhưng GPA < 2.0): ",
+                    default="0",
+                )
+            )
             if pct_truot_tot_nghiep < 0 or pct_truot_tot_nghiep > 100:
                 print("Phần trăm phải từ 0 đến 100!")
                 continue
@@ -322,7 +360,9 @@ def nhap_thong_tin_phan_bo():
     # % sinh viên xếp loại Trung bình (GPA từ 2.0 đến 2.5)
     while True:
         try:
-            pct_trung_binh = float(input("\nNhập % sinh viên xếp loại Trung bình (GPA từ 2.0 đến 2.5): "))
+            pct_trung_binh = float(
+                safe_input("\nNhập % sinh viên xếp loại Trung bình (GPA từ 2.0 đến 2.5): ", default="0")
+            )
             if pct_trung_binh < 0 or pct_trung_binh > 100:
                 print("Phần trăm phải từ 0 đến 100!")
                 continue
@@ -333,7 +373,9 @@ def nhap_thong_tin_phan_bo():
     # % sinh viên xếp loại Khá (GPA từ 2.5 đến 3.2)
     while True:
         try:
-            pct_kha = float(input("\nNhập % sinh viên xếp loại Khá (GPA từ 2.5 đến 3.2): "))
+            pct_kha = float(
+                safe_input("\nNhập % sinh viên xếp loại Khá (GPA từ 2.5 đến 3.2): ", default="0")
+            )
             if pct_kha < 0 or pct_kha > 100:
                 print("Phần trăm phải từ 0 đến 100!")
                 continue
@@ -344,7 +386,9 @@ def nhap_thong_tin_phan_bo():
     # % sinh viên xếp loại Giỏi (GPA từ 3.2 đến 3.6)
     while True:
         try:
-            pct_gioi = float(input("\nNhập % sinh viên xếp loại Giỏi (GPA từ 3.2 đến 3.6): "))
+            pct_gioi = float(
+                safe_input("\nNhập % sinh viên xếp loại Giỏi (GPA từ 3.2 đến 3.6): ", default="0")
+            )
             if pct_gioi < 0 or pct_gioi > 100:
                 print("Phần trăm phải từ 0 đến 100!")
                 continue
@@ -355,7 +399,9 @@ def nhap_thong_tin_phan_bo():
     # % sinh viên xếp loại Xuất sắc (GPA >= 3.6)
     while True:
         try:
-            pct_xuat_sac = float(input("\nNhập % sinh viên xếp loại Xuất sắc (GPA >= 3.6): "))
+            pct_xuat_sac = float(
+                safe_input("\nNhập % sinh viên xếp loại Xuất sắc (GPA >= 3.6): ", default="0")
+            )
             if pct_xuat_sac < 0 or pct_xuat_sac > 100:
                 print("Phần trăm phải từ 0 đến 100!")
                 continue
@@ -668,8 +714,9 @@ def main():
         if sv_ids_chua_co_kqht:
             print("\n⚠ Phát hiện sinh viên thiếu bản ghi kết quả học tập:")
             print(f"  - Số sinh viên đã đăng ký LHP nhưng CHƯA có KQHT: {len(sv_ids_chua_co_kqht)}")
-            xac_nhan_tao_kqht = input(
-                "Bạn có muốn tự động tạo các bản ghi kết quả học tập cho các sinh viên này không? (yes/no): "
+            xac_nhan_tao_kqht = safe_input(
+                "Bạn có muốn tự động tạo các bản ghi kết quả học tập cho các sinh viên này không? (yes/no): ",
+                default="no",
             ).strip().lower()
 
             if xac_nhan_tao_kqht == 'yes':
@@ -699,7 +746,10 @@ def main():
         # Hỏi mode cập nhật
         print("\n" + "=" * 70)
         while True:
-            mode = input("Chọn mode: (1) Update - Ghi đè điểm hiện có, (2) Insert - Tạo mới: ").strip()
+            mode = safe_input(
+                "Chọn mode: (1) Update - Ghi đè điểm hiện có, (2) Insert - Tạo mới: ",
+                default="1",
+            ).strip()
             if mode == '1':
                 mode = 'update'
                 break
@@ -720,7 +770,10 @@ def main():
         
         # Xác nhận trước khi cập nhật
         print("\n" + "=" * 70)
-        xac_nhan = input(f"Bạn có chắc chắn muốn cập nhật {len(danh_sach_cap_nhat)} bản ghi? (yes/no): ").strip().lower()
+        xac_nhan = safe_input(
+            f"Bạn có chắc chắn muốn cập nhật {len(danh_sach_cap_nhat)} bản ghi? (yes/no): ",
+            default="no",
+        ).strip().lower()
         
         if xac_nhan == 'yes':
             # Cập nhật database
