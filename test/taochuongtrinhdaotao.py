@@ -12,7 +12,7 @@ import unidecode
 
 # ====================== CẤU HÌNH & HẰNG SỐ ======================
 
-JSON_MON_HOC_PATH = r"c:\Users\Admin\Downloads\JSON response 9.txt"
+JSON_MON_HOC_PATH = r"JSON response 9.txt"
 
 SO_TIN_CHI_MUC_TIEU = 147
 SO_HOC_KY_CTDT = 8
