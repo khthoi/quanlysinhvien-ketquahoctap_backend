@@ -3050,7 +3050,7 @@ export class GiangDayService {
             maNamHoc: string;
             hocKy: number;
             soTinChi: number;
-            maGiangVien: string;
+            giangVien: string;
             soSinhVienThamGia: number;
         }>;
         summary: {
@@ -3058,6 +3058,10 @@ export class GiangDayService {
             tongSinhVien: number;
             tongTinChi: number;
         };
+        giangVien: {
+            maGiangVien: string;
+            soTinChi: number;
+        }[];
     }> {
         // 1. Tìm năm học by maNamHoc
         const namHoc = await this.namHocRepo.findOne({ where: { maNamHoc } });
@@ -3085,13 +3089,15 @@ export class GiangDayService {
             maNamHoc: string;
             hocKy: number;
             soTinChi: number;
-            maGiangVien: string;
+            giangVien: string;
             soSinhVienThamGia: number;
         }> = [];
         let stt = 1;
 
         // Map theo dõi tổng tín chỉ đã phân công cho mỗi GV theo từng học kỳ
         const giangVienTinChiMap = new Map<string, number>();
+        // Map key (gvId_hocKyId) -> mã giảng viên, phục vụ trả kết quả tổng hợp
+        const giangVienKeyToMaMap = new Map<string, string>();
 
         // Hàm helper để lấy tín chỉ hiện tại của GV (từ DB + từ planRows đang xử lý)
         const getTinChiHienTaiCuaGV = async (gvId: number, hocKyId: number): Promise<number> => {
@@ -3256,6 +3262,10 @@ export class GiangDayService {
                             }[] = [];
 
                             for (const gv of giangViens) {
+                                const key = `${gv.id}_${hocKyThucTe.id}`;
+                                if (!giangVienKeyToMaMap.has(key)) {
+                                    giangVienKeyToMaMap.set(key, gv.maGiangVien);
+                                }
                                 const tinChiHienTai = await getTinChiHienTaiCuaGV(gv.id, hocKyThucTe.id);
                                 giangVienWithLoad.push({
                                     gv,
@@ -3268,7 +3278,8 @@ export class GiangDayService {
 
                             // 3. Chọn GV có ít tín chỉ nhất nhưng không vượt trần
                             for (const item of giangVienWithLoad) {
-                                if (item.tinChi + monHoc.soTinChi <= 12) {
+                                const tongTinChiSau = item.tinChi + monHoc.soTinChi;
+                                if (tongTinChiSau <= 12) {
                                     maGiangVien = item.gv.maGiangVien;
                                     capNhatTinChiGV(item.gv.id, hocKyThucTe.id, monHoc.soTinChi);
                                     break;
@@ -3288,7 +3299,7 @@ export class GiangDayService {
                             maNamHoc: hocKyThucTe.namHoc.maNamHoc,
                             hocKy: hocKyThucTe.hocKy,
                             soTinChi: monHoc.soTinChi,
-                            maGiangVien,
+                            giangVien: maGiangVien,
                             soSinhVienThamGia: soSVTrongLop,
                         });
                     }
@@ -3303,9 +3314,25 @@ export class GiangDayService {
             tongTinChi: planRows.reduce((sum, row) => sum + row.soTinChi, 0),
         };
 
+        // Chuyển map tín chỉ theo GV thành danh sách kết quả
+        const giangVien = Array.from(giangVienTinChiMap.entries())
+            .map(([key, soTinChi]) => {
+                const maGiangVien = giangVienKeyToMaMap.get(key);
+                if (!maGiangVien) return null;
+                return {
+                    maGiangVien,
+                    soTinChi,
+                };
+            })
+            .filter(
+                (item): item is { maGiangVien: string; soTinChi: number } =>
+                    item !== null,
+            );
+
         return {
             data: planRows,
             summary,
+            giangVien,
         };
     }
 
