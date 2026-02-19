@@ -95,19 +95,62 @@ def load_courses_from_json(path: str) -> List[Dict]:
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    # File JSON hiện tại đang có dạng {"data": [ ... ]}
-    # hoặc có thể là một list các môn học.
+    # File JSON có thể có 2 dạng:
+    #   - {"data": [ ... ]}
+    #   - [ ... ] (list các phần tử)
     if isinstance(data, dict) and "data" in data:
-        courses = data["data"]
+        raw_items = data["data"]
     elif isinstance(data, list):
-        courses = data
+        raw_items = data
     else:
         raise ValueError(
             "Định dạng file JSON không hợp lệ. "
             "Kỳ vọng là list các môn hoặc dict có key 'data'."
         )
 
-    print(f"  - Số môn học trong file: {len(courses)}")
+    if not raw_items:
+        print("  - File JSON không có phần tử nào.")
+        return []
+
+    # ================== CHUẨN HÓA DỮ LIỆU MÔN HỌC ==================
+    #
+    # Có 2 kiểu dữ liệu đầu vào:
+    #   1) Danh sách môn học: mỗi phần tử đã có đủ các field:
+    #        - maMonHoc, tenMonHoc, loaiMon, soTinChi
+    #   2) Danh sách lớp học phần (giống file 'JSON response 9.txt'):
+    #        - maLopHocPhan, maMonHoc, soTinChi, ...
+    #      → cần gom theo maMonHoc để suy ra danh sách môn học duy nhất.
+
+    first = raw_items[0]
+    if "tenMonHoc" in first and "loaiMon" in first:
+        # Trường hợp 1: đã là danh sách môn học đúng chuẩn
+        courses = raw_items
+        print(f"  - Số môn học trong file (đã chuẩn): {len(courses)}")
+        return courses
+
+    # Trường hợp 2: dữ liệu là danh sách lớp học phần → gom theo maMonHoc
+    print("  - Phát hiện dữ liệu là DANH SÁCH LỚP HỌC PHẦN, sẽ gom theo 'maMonHoc' để tạo danh sách môn học duy nhất.")
+
+    course_map: Dict[str, Dict] = {}
+    for item in raw_items:
+        ma = item.get("maMonHoc")
+        if not ma:
+            continue
+
+        if ma not in course_map:
+            so_tc = item.get("soTinChi", 0)
+            # Vì file không có tên môn & loại môn, tạm thời:
+            #   - tenMonHoc: dùng luôn mã môn
+            #   - loaiMon  : gán 'KHAC' để phân biệt là dữ liệu sinh tự động
+            course_map[ma] = {
+                "maMonHoc": ma,
+                "tenMonHoc": ma,
+                "loaiMon": "KHAC",
+                "soTinChi": so_tc,
+            }
+
+    courses = list(course_map.values())
+    print(f"  - Đã suy ra {len(courses)} môn học duy nhất từ danh sách {len(raw_items)} lớp học phần.")
     return courses
 
 
