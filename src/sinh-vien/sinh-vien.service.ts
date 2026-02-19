@@ -151,21 +151,38 @@ export class SinhVienService {
 
             const maSinhVien = row.getCell(2).value?.toString().trim(); // Mã sinh viên
             const hoTen = row.getCell(3).value?.toString().trim(); // Họ tên
-            const ngaySinh = row.getCell(4).value?.toString(); // Ngày sinh
+
+            // Giữ nguyên giá trị thô từ ExcelJS cho ngày tháng
+            const ngaySinhRaw = row.getCell(4).value; // Ngày sinh (raw)
             const gioiTinhStr = row.getCell(5).value?.toString(); // Giới tính
             const diaChi = row.getCell(6).value?.toString(); // Địa chỉ
             const email = this.getCellValue(row.getCell(7)).trim(); // Email
             const sdt = row.getCell(8).value?.toString(); // Số điện thoại
-            const ngayNhapHoc = row.getCell(9).value?.toString(); // Ngày nhập học
+            const ngayNhapHocRaw = row.getCell(9).value; // Ngày nhập học (raw)
             const tinhTrangStr = row.getCell(10).value?.toString(); // Tình trạng học tập
             const maLop = row.getCell(11).value?.toString().trim(); // Mã lớp
 
-            if (!maSinhVien || !hoTen || !email || !ngayNhapHoc || !maLop) {
+            if (!maSinhVien || !hoTen || !email || !ngayNhapHocRaw || !maLop) {
                 results.failed++;
                 results.errors.push({
                     row: rowNum,
                     maSinhVien: maSinhVien || 'N/A',
                     error: 'Thiếu dữ liệu bắt buộc',
+                });
+                continue;
+            }
+
+            // Parse ngày sinh & ngày nhập học từ giá trị thô
+            const parsedNgaySinh = this.parseExcelDate(ngaySinhRaw);
+            const parsedNgayNhapHoc = this.parseExcelDate(ngayNhapHocRaw);
+
+            // Không để ngày nhập học không hợp lệ lọt xuống DB
+            if (!parsedNgayNhapHoc) {
+                results.failed++;
+                results.errors.push({
+                    row: rowNum,
+                    maSinhVien: maSinhVien || 'N/A',
+                    error: 'Ngày nhập học không hợp lệ',
                 });
                 continue;
             }
@@ -193,12 +210,12 @@ export class SinhVienService {
                 const sinhVien = this.sinhVienRepo.create({
                     maSinhVien,
                     hoTen,
-                    ngaySinh: ngaySinh ? new Date(ngaySinh) : undefined,
+                    ngaySinh: parsedNgaySinh || undefined,
                     gioiTinh,
                     diaChi: diaChi || undefined,
                     email,
                     sdt: sdt || undefined,
-                    ngayNhapHoc: new Date(ngayNhapHoc),
+                    ngayNhapHoc: parsedNgayNhapHoc,
                     tinhTrang,
                     lop,
                 });
@@ -252,6 +269,32 @@ export class SinhVienService {
         }
 
         return v.toString();
+    }
+
+    /** Parse ngày từ giá trị Excel (Date object hoặc string dd/mm/yyyy). Trả về null nếu không hợp lệ. */
+    private parseExcelDate(value: any): Date | null {
+        if (!value) return null;
+
+        // ExcelJS trả về Date object
+        if (value instanceof Date) {
+            return value;
+        }
+
+        // Nếu là string dạng dd/mm/yyyy
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            const parts = trimmed.split('/');
+            if (parts.length === 3) {
+                const [day, month, year] = parts;
+                const parsed = new Date(Number(year), Number(month) - 1, Number(day));
+
+                if (!isNaN(parsed.getTime())) {
+                    return parsed;
+                }
+            }
+        }
+
+        return null;
     }
 
     async create(dto: CreateSinhVienDto) {
