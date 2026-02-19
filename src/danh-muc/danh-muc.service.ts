@@ -1835,7 +1835,7 @@ Chọn mã môn từ danh sách dropdown.
                 // Lấy giá trị (cột bắt đầu từ 1: STT, 2: Mã GV, 3: Họ tên, ...)
                 const maGiangVien = (row.getCell(2).value?.toString() || '').trim();
                 const hoTen = (row.getCell(3).value?.toString() || '').trim();
-                const ngaySinhStr = row.getCell(4).value;
+                const ngaySinhRaw = row.getCell(4).value; // giữ nguyên giá trị thô từ Excel
                 const email = getCellText(row.getCell(5).value);
                 const sdt = row.getCell(6).value?.toString().trim() || undefined;
                 const gioiTinhStr = (row.getCell(7).value?.toString() || '').trim();
@@ -1894,7 +1894,7 @@ Chọn mã môn từ danh sách dropdown.
                 let ngaySinh: string | undefined;
 
                 // ❌ Không có data → lỗi
-                if (!ngaySinhStr || (typeof ngaySinhStr === 'string' && !ngaySinhStr.trim())) {
+                if (!ngaySinhRaw || (typeof ngaySinhRaw === 'string' && !ngaySinhRaw.trim())) {
                     results.failedSheet1++;
                     results.errors.push({
                         sheet: 'Giảng viên',
@@ -1905,31 +1905,7 @@ Chọn mã môn từ danh sách dropdown.
                     continue;
                 }
 
-                let parsed: Date | null = null;
-
-                // Excel date object
-                if (ngaySinhStr instanceof Date && !isNaN(ngaySinhStr.getTime())) {
-                    parsed = ngaySinhStr;
-                }
-                // String
-                else if (typeof ngaySinhStr === 'string') {
-                    const str = ngaySinhStr.trim();
-
-                    // YYYY-MM-DD
-                    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
-                        parsed = new Date(str);
-                    }
-                    // DD-MM-YYYY hoặc DD/MM/YYYY
-                    else if (/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/.test(str)) {
-                        const [, d, m, y] = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/)!;
-                        parsed = new Date(+y, +m - 1, +d);
-                    }
-                    // MM/DD/YYYY
-                    else if (/^(\d{1,2})[/](\d{1,2})[/](\d{4})$/.test(str)) {
-                        const [, m, d, y] = str.match(/^(\d{1,2})[/](\d{1,2})[/](\d{4})$/)!;
-                        parsed = new Date(+y, +m - 1, +d);
-                    }
-                }
+                const parsed = this.parseExcelDate(ngaySinhRaw);
 
                 // ❌ Sai format hoặc parse lỗi
                 if (!parsed || isNaN(parsed.getTime())) {
@@ -2123,6 +2099,64 @@ Chọn mã môn từ danh sách dropdown.
             // Xóa file tạm
             await fs.unlink(filePath).catch(() => { });
         }
+    }
+
+    /**
+     * Parse ngày từ giá trị Excel (Date object, số serial, hoặc string).
+     * Trả về Date hợp lệ hoặc null nếu không parse được.
+     */
+    private parseExcelDate(value: any): Date | null {
+        if (value == null) return null;
+
+        // Trường hợp ExcelJS đã trả về Date
+        if (value instanceof Date && !isNaN(value.getTime())) {
+            return value;
+        }
+
+        // Trường hợp ô là số serial date của Excel
+        if (typeof value === 'number') {
+            // Excel serial date bắt đầu từ 1899-12-30
+            const excelEpoch = new Date(1899, 11, 30);
+            const parsed = new Date(excelEpoch.getTime() + value * 24 * 60 * 60 * 1000);
+            return isNaN(parsed.getTime()) ? null : parsed;
+        }
+
+        // Trường hợp string: hỗ trợ nhiều định dạng phổ biến
+        if (typeof value === 'string') {
+            const str = value.trim();
+            if (!str) return null;
+
+            // YYYY-MM-DD
+            if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+                const [y, m, d] = str.split('-').map(Number);
+                const parsed = new Date(y, m - 1, d);
+                return isNaN(parsed.getTime()) ? null : parsed;
+            }
+
+            // DD-MM-YYYY hoặc DD/MM/YYYY hoặc DD.MM.YYYY
+            const dmYMatch = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+            if (dmYMatch) {
+                const [, dStr, mStr, yStr] = dmYMatch;
+                const d = Number(dStr);
+                const m = Number(mStr);
+                const y = Number(yStr);
+                const parsed = new Date(y, m - 1, d);
+                return isNaN(parsed.getTime()) ? null : parsed;
+            }
+
+            // MM/DD/YYYY (ít dùng, nhưng hỗ trợ thêm)
+            const mDYMatch = str.match(/^(\d{1,2})[/](\d{1,2})[/](\d{4})$/);
+            if (mDYMatch) {
+                const [, mStr, dStr, yStr] = mDYMatch;
+                const d = Number(dStr);
+                const m = Number(mStr);
+                const y = Number(yStr);
+                const parsed = new Date(y, m - 1, d);
+                return isNaN(parsed.getTime()) ? null : parsed;
+            }
+        }
+
+        return null;
     }
 
     // Thêm giảng viên mới 
