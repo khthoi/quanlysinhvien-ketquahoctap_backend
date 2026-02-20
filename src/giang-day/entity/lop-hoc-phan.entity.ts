@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique, OneToMany, Index } from 'typeorm';
 import { MonHoc } from 'src/danh-muc/entity/mon-hoc.entity';
 import { HocKy } from 'src/dao-tao/entity/hoc-ky.entity';
 import { GiangVien } from 'src/danh-muc/entity/giang-vien.entity';
@@ -9,6 +9,9 @@ import { KetQuaHocTap } from 'src/ket-qua/entity/ket-qua-hoc-tap.entity';
 
 
 @Entity('lop_hoc_phan')
+@Index('IDX_lhp_hoc_ky_khoa_diem', ['hocKy', 'khoaDiem'])
+@Index('IDX_lhp_mon_hoc_khoa_diem', ['monHoc', 'khoaDiem'])
+@Index('IDX_lhp_mon_hoc', ['monHoc'])
 export class LopHocPhan {
   @PrimaryGeneratedColumn()
   id: number;

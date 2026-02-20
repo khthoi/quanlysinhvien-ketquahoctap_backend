@@ -1,8 +1,11 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique, OneToMany, Index } from 'typeorm';
 import { Nganh } from './nganh.entity';
 import { NienKhoa } from './nien-khoa.entity';
 import { SinhVien } from 'src/sinh-vien/entity/sinh-vien.entity';
 
+@Index('IDX_LOP_MA_LOP', ['maLop'])
+@Index('IDX_LOP_NGANH_ID', ['nganh'])
+@Index('IDX_LOP_NIEN_KHOA_ID', ['nienKhoa'])
 @Entity('lop')
 @Unique(['maLop'])  
 export class Lop {

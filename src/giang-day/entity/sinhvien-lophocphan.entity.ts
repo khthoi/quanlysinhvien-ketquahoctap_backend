@@ -1,10 +1,11 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique, Index } from 'typeorm';
 import { SinhVien } from 'src/sinh-vien/entity/sinh-vien.entity';
 import { LopHocPhan } from './lop-hoc-phan.entity';
 import { LoaiHinhThamGiaLopHocPhanEnum } from '../enums/loai-hinh-tham-gia-lop-hoc-phan.enum';
 
 @Entity('sinh_vien_lop_hoc_phan')
 @Unique(['sinhVien', 'lopHocPhan'])
+@Index('IDX_svlhp_sinh_vien', ['sinhVien'])
 export class SinhVienLopHocPhan {
   @PrimaryGeneratedColumn()
   id: number;

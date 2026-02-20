@@ -5,12 +5,14 @@ import {
   ManyToOne,
   JoinColumn,
   Unique,
+  Index,
 } from 'typeorm';
 import { SinhVien } from 'src/sinh-vien/entity/sinh-vien.entity';
 import { LopHocPhan } from 'src/giang-day/entity/lop-hoc-phan.entity';
 
 @Entity('ket_qua_hoc_tap')
 @Unique(['sinhVien', 'lopHocPhan'])
+@Index('IDX_kq_sinh_vien', ['sinhVien'])
 export class KetQuaHocTap {
   @PrimaryGeneratedColumn()
   id: number;

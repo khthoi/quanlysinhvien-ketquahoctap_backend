@@ -299,7 +299,7 @@ Trả về JSON chứa:
   @Post('xet-tot-nghiep/du-doan')
   @Roles(VaiTroNguoiDungEnum.ADMIN, VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async duDoanXetTotNghiep(@Body() dto: XetTotNghiepDto) {
-    return this.sinhVienService.duDoanXetTotNghiep(dto.nienKhoaId);
+    return this.sinhVienService.duDoanXetTotNghiep(dto);
   }
 
   @ApiOperation({
@@ -324,12 +324,12 @@ Trả về JSON chứa:
   }
 
   @ApiOperation({
-    summary: 'Lấy danh sách sinh viên đã tốt nghiệp theo niên khóa',
-    description: `Lấy danh sách tất cả sinh viên có trạng thái DA_TOT_NGHIEP trong niên khóa.
+    summary: 'Lấy danh sách sinh viên đã tốt nghiệp theo niên khóa (có phân trang & bộ lọc)',
+    description: `Lấy danh sách tất cả sinh viên có trạng thái DA_TOT_NGHIEP trong niên khóa, có thể lọc theo xếp loại, mã lớp, mã ngành và phân trang.
 Trả về JSON chứa:
 - Tổng số sinh viên tốt nghiệp
 - Thống kê theo từng ngành (số lượng, xếp loại)
-- Danh sách chi tiết sinh viên với thông tin cơ bản, GPA, xếp loại tốt nghiệp`,
+- Danh sách chi tiết sinh viên với thông tin cơ bản, GPA, xếp loại tốt nghiệp (sau khi áp dụng bộ lọc & phân trang)`,
   })
   @ApiBody({ type: XetTotNghiepDto })
   @ApiResponse({
@@ -340,7 +340,7 @@ Trả về JSON chứa:
   @Post('xet-tot-nghiep/danh-sach')
   @Roles(VaiTroNguoiDungEnum.ADMIN, VaiTroNguoiDungEnum.CAN_BO_PHONG_DAO_TAO)
   async getDanhSachTotNghiep(@Body() dto: XetTotNghiepDto) {
-    return this.sinhVienService.getDanhSachTotNghiep(dto.nienKhoaId);
+    return this.sinhVienService.getDanhSachTotNghiep(dto);
   }
 
   @ApiOperation({

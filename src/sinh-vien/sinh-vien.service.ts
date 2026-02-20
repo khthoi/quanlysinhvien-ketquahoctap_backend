@@ -38,6 +38,7 @@ import {
     SinhVienTotNghiepDto,
     ThongKeTongQuanDto,
     ThongKeTheoNganhDto,
+    XetTotNghiepDto,
 } from './dtos/xet-tot-nghiep.dto';
 import { GetYeuCauDangKyQueryDto } from './dtos/get-yeu-cau-dang-ky-query.dto';
 import { GetYeuCauDangKyMeResponseDto, GetYeuCauDangKyResponseDto, YeuCauDangKyDto, YeuCauDangKyMeDto } from './dtos/get-yeu-cau-dang-ky-response.dto';
@@ -718,11 +719,15 @@ export class SinhVienService {
     // ==================== XÉT TỐT NGHIỆP APIs ====================
 
     /**
-     * DỰ ĐOÁN XÉT TỐT NGHIỆP
+     * Core: DỰ ĐOÁN XÉT TỐT NGHIỆP (KHÔNG phân trang / lọc)
      * Lấy danh sách sinh viên chưa tốt nghiệp trong niên khóa và đánh giá họ
      * KHÔNG thay đổi trạng thái của sinh viên
      */
-    async duDoanXetTotNghiep(nienKhoaId: number): Promise<DuDoanXetTotNghiepResponseDto> {
+    private async buildDuDoanXetTotNghiep(
+        nienKhoaId: number,
+        maLop?: string,
+        maNganh?: string,
+    ): Promise<DuDoanXetTotNghiepResponseDto> {
         // 1. Lấy thông tin niên khóa
         const nienKhoa = await this.nienKhoaRepo.findOne({
             where: { id: nienKhoaId },
@@ -732,11 +737,21 @@ export class SinhVienService {
             throw new NotFoundException(`Niên khóa ID ${nienKhoaId} không tồn tại`);
         }
 
-        // 2. Lấy tất cả các lớp thuộc niên khóa này
+        // 2. Lấy tất cả các lớp thuộc niên khóa này (có áp dụng filter theo ngành / lớp nếu có)
+        const lopWhere: any = {
+            nienKhoa: { id: nienKhoaId },
+        };
+
+        if (maNganh) {
+            lopWhere.nganh = { ...(lopWhere.nganh || {}), maNganh };
+        }
+
+        if (maLop) {
+            lopWhere.maLop = maLop;
+        }
+
         const lops = await this.lopRepo.find({
-            where: {
-                nienKhoa: { id: nienKhoaId },
-            },
+            where: lopWhere,
             relations: ['sinhViens', 'nganh', 'nganh.khoa', 'nienKhoa'],
         });
 
@@ -1032,13 +1047,59 @@ export class SinhVienService {
     }
 
     /**
+     * DỰ ĐOÁN XÉT TỐT NGHIỆP (API)
+     * Có phân trang và bộ lọc theo loại kết quả, xếp loại, mã lớp, mã ngành
+     */
+    async duDoanXetTotNghiep(dto: XetTotNghiepDto): Promise<DuDoanXetTotNghiepResponseDto> {
+        const {
+            nienKhoaId,
+            ketQua,
+            xepLoai,
+            maLop,
+            maNganh,
+            page = 1,
+            limit = 20,
+        } = dto;
+
+        // Lấy dữ liệu từ core, áp dụng filter ngành / lớp ngay từ query (tận dụng index DB)
+        const full = await this.buildDuDoanXetTotNghiep(nienKhoaId, maLop, maNganh);
+
+        // Áp dụng bộ lọc trên danh sách sinh viên
+        let filtered = full.danhSachSinhVien;
+
+        if (ketQua) {
+            filtered = filtered.filter((sv) => sv.ketQuaXet === ketQua);
+        }
+
+        if (xepLoai) {
+            filtered = filtered.filter((sv) => sv.xepLoaiTotNghiep === xepLoai);
+        }
+
+        const totalItems = filtered.length;
+        const safeLimit = limit || 20;
+        const totalPages = totalItems > 0 ? Math.ceil(totalItems / safeLimit) : 1;
+        const safePage = Math.min(Math.max(page || 1, 1), totalPages);
+        const start = (safePage - 1) * safeLimit;
+        const paged = filtered.slice(start, start + safeLimit);
+
+        return {
+            ...full,
+            page: safePage,
+            limit: safeLimit,
+            totalItems,
+            totalPages,
+            danhSachSinhVien: paged,
+        };
+    }
+
+    /**
      * XÁC NHẬN XÉT TỐT NGHIỆP
      * Xét tốt nghiệp cho tất cả sinh viên đạt điều kiện trong niên khóa
      * CẬP NHẬT trạng thái sinh viên thành DA_TOT_NGHIEP
      */
     async xacNhanXetTotNghiep(nienKhoaId: number): Promise<XacNhanXetTotNghiepResponseDto> {
-        // 1. Lấy dữ liệu dự đoán
-        const duDoan = await this.duDoanXetTotNghiep(nienKhoaId);
+        // 1. Lấy dữ liệu dự đoán (đầy đủ, không phân trang / lọc)
+        const duDoan = await this.buildDuDoanXetTotNghiep(nienKhoaId);
 
         // 2. Lọc sinh viên đạt
         const sinhVienDat = duDoan.danhSachSinhVien.filter(
@@ -1072,10 +1133,14 @@ export class SinhVienService {
     }
 
     /**
-     * LẤY DANH SÁCH SINH VIÊN ĐÃ TỐT NGHIỆP TRONG NIÊN KHÓA
-     * Trả về danh sách sinh viên có trạng thái DA_TOT_NGHIEP trong niên khóa
+     * CORE: LẤY DANH SÁCH SINH VIÊN ĐÃ TỐT NGHIỆP TRONG NIÊN KHÓA (KHÔNG PHÂN TRANG)
+     * Có hỗ trợ filter theo mã lớp / mã ngành ngay từ query để tận dụng index
      */
-    async getDanhSachTotNghiep(nienKhoaId: number): Promise<DanhSachTotNghiepResponseDto> {
+    private async buildDanhSachTotNghiep(
+        nienKhoaId: number,
+        maLop?: string,
+        maNganh?: string,
+    ): Promise<DanhSachTotNghiepResponseDto> {
         // 1. Lấy thông tin niên khóa
         const nienKhoa = await this.nienKhoaRepo.findOne({
             where: { id: nienKhoaId },
@@ -1085,11 +1150,21 @@ export class SinhVienService {
             throw new NotFoundException(`Niên khóa ID ${nienKhoaId} không tồn tại`);
         }
 
-        // 2. Lấy tất cả các lớp thuộc niên khóa này
+        // 2. Lấy tất cả các lớp thuộc niên khóa này (áp dụng filter ngành / lớp nếu có để tận dụng index)
+        const lopWhere: any = {
+            nienKhoa: { id: nienKhoaId },
+        };
+
+        if (maNganh) {
+            lopWhere.nganh = { ...(lopWhere.nganh || {}), maNganh };
+        }
+
+        if (maLop) {
+            lopWhere.maLop = maLop;
+        }
+
         const lops = await this.lopRepo.find({
-            where: {
-                nienKhoa: { id: nienKhoaId },
-            },
+            where: lopWhere,
             relations: ['sinhViens', 'nganh', 'nganh.khoa', 'nienKhoa'],
         });
 
@@ -1256,6 +1331,47 @@ export class SinhVienService {
     }
 
     /**
+     * LẤY DANH SÁCH SINH VIÊN ĐÃ TỐT NGHIỆP TRONG NIÊN KHÓA (API)
+     * Có phân trang và bộ lọc theo xếp loại, mã lớp, mã ngành
+     */
+    async getDanhSachTotNghiep(dto: XetTotNghiepDto): Promise<DanhSachTotNghiepResponseDto> {
+        const {
+            nienKhoaId,
+            xepLoai,
+            maLop,
+            maNganh,
+            page = 1,
+            limit = 20,
+        } = dto;
+
+        // Lấy dữ liệu core, đã áp dụng filter lớp / ngành bằng index
+        const full = await this.buildDanhSachTotNghiep(nienKhoaId, maLop, maNganh);
+
+        // Áp dụng bộ lọc theo xếp loại trên danh sách sinh viên đã tốt nghiệp
+        let filtered = full.danhSachSinhVien;
+
+        if (xepLoai) {
+            filtered = filtered.filter((sv) => sv.xepLoaiTotNghiep === xepLoai);
+        }
+
+        const totalItems = filtered.length;
+        const safeLimit = limit || 20;
+        const totalPages = totalItems > 0 ? Math.ceil(totalItems / safeLimit) : 1;
+        const safePage = Math.min(Math.max(page || 1, 1), totalPages);
+        const start = (safePage - 1) * safeLimit;
+        const paged = filtered.slice(start, start + safeLimit);
+
+        return {
+            ...full,
+            page: safePage,
+            limit: safeLimit,
+            totalItems,
+            totalPages,
+            danhSachSinhVien: paged,
+        };
+    }
+
+    /**
      * Tính thống kê tổng quan từ danh sách sinh viên
      */
     private tinhThongKeTongQuan(danhSach: SinhVienXetTotNghiepInternal[]): ThongKeTongQuanDto {
@@ -1311,7 +1427,7 @@ export class SinhVienService {
      */
     async xetTotNghiepVaXuatExcel(nienKhoaId: number): Promise<Buffer> {
         // 1. Lấy danh sách sinh viên đã tốt nghiệp
-        const danhSachTotNghiep = await this.getDanhSachTotNghiep(nienKhoaId);
+        const danhSachTotNghiep = await this.buildDanhSachTotNghiep(nienKhoaId);
 
         // 2. Tạo file Excel
         const workbook = new ExcelJS.Workbook();

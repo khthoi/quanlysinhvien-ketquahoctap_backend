@@ -1,10 +1,12 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique, OneToOne, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique, OneToOne, OneToMany, Index } from 'typeorm';
 import { Lop } from 'src/danh-muc/entity/lop.entity';
 import { GioiTinh } from 'src/danh-muc/enums/gioi-tinh.enum';
 import { TinhTrangHocTapEnum } from '../enums/tinh-trang-hoc-tap.enum';
 import { NguoiDung } from 'src/auth/entity/nguoi-dung.entity';
 import { KetQuaHocTap } from 'src/ket-qua/entity/ket-qua-hoc-tap.entity';
 
+@Index('IDX_SINH_VIEN_LOP_ID', ['lop'])
+@Index('IDX_SINH_VIEN_TINH_TRANG', ['tinhTrang'])
 @Entity('sinh_vien')
 export class SinhVien {
   @PrimaryGeneratedColumn()

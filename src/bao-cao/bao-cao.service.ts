@@ -2530,22 +2530,23 @@ export class BaoCaoService {
         }
 
         // 3. Lấy tất cả lớp học phần thuộc năm học và học kỳ đó (đã khóa điểm - để lấy SV trượt)
-        const lopHocPhans = await this.lopHocPhanRepo.find({
-            where: {
-                hocKy: { id: hocKyEntity.id },
-                khoaDiem: true, // chỉ lấy lớp đã khóa điểm
-            },
-            relations: [
-                'monHoc',
-                'nganh',
-                'nienKhoa',
-                'ketQuaHocTaps',
-                'ketQuaHocTaps.sinhVien',
-                'ketQuaHocTaps.sinhVien.lop',
-                'ketQuaHocTaps.sinhVien.lop.nganh',
-                'ketQuaHocTaps.sinhVien.lop.nienKhoa',
-            ],
-        });
+        //    Chỉ lấy các bản ghi kết quả đã đủ điểm trực tiếp ở tầng SQL để giảm dữ liệu trả về
+        const lopHocPhans = await this.lopHocPhanRepo
+            .createQueryBuilder('lhp')
+            .leftJoinAndSelect('lhp.monHoc', 'monHoc')
+            .leftJoinAndSelect('lhp.nganh', 'nganh')
+            .leftJoinAndSelect('lhp.nienKhoa', 'nienKhoa')
+            .leftJoinAndSelect('lhp.ketQuaHocTaps', 'kq')
+            .leftJoinAndSelect('kq.sinhVien', 'sv')
+            .leftJoinAndSelect('sv.lop', 'lop')
+            .leftJoinAndSelect('lop.nganh', 'lopNganh')
+            .leftJoinAndSelect('lop.nienKhoa', 'lopNienKhoa')
+            .where('lhp.hocKy = :hocKyId', { hocKyId: hocKyEntity.id })
+            .andWhere('lhp.khoaDiem = :khoaDiem', { khoaDiem: true })
+            .andWhere('kq.diemQuaTrinh IS NOT NULL')
+            .andWhere('kq.diemThanhPhan IS NOT NULL')
+            .andWhere('kq.diemThi IS NOT NULL')
+            .getMany();
 
         // 3b. Lấy TẤT CẢ lớp học phần trong học kỳ được query (bao gồm cả chưa khóa điểm) để tìm SV đang học lại
         const tatCaLopHocPhanTrongHocKy = await this.lopHocPhanRepo.find({
@@ -3154,20 +3155,21 @@ export class BaoCaoService {
         }
 
         // 3. Lấy tất cả lớp học phần đã khóa điểm trong học kỳ đó
-        const lopHocPhans = await this.lopHocPhanRepo.find({
-            where: {
-                hocKy: { id: hocKyEntity.id },
-                khoaDiem: true,
-            },
-            relations: [
-                'monHoc',
-                'nganh',
-                'nienKhoa',
-                'ketQuaHocTaps',
-                'ketQuaHocTaps.sinhVien',
-                'ketQuaHocTaps.sinhVien.lop',
-            ],
-        });
+        //    Chỉ lấy các bản ghi kết quả đã đủ điểm trực tiếp ở tầng SQL để giảm dữ liệu trả về
+        const lopHocPhans = await this.lopHocPhanRepo
+            .createQueryBuilder('lhp')
+            .leftJoinAndSelect('lhp.monHoc', 'monHoc')
+            .leftJoinAndSelect('lhp.nganh', 'nganh')
+            .leftJoinAndSelect('lhp.nienKhoa', 'nienKhoa')
+            .leftJoinAndSelect('lhp.ketQuaHocTaps', 'kq')
+            .leftJoinAndSelect('kq.sinhVien', 'sv')
+            .leftJoinAndSelect('sv.lop', 'lop')
+            .where('lhp.hocKy = :hocKyId', { hocKyId: hocKyEntity.id })
+            .andWhere('lhp.khoaDiem = :khoaDiem', { khoaDiem: true })
+            .andWhere('kq.diemQuaTrinh IS NOT NULL')
+            .andWhere('kq.diemThanhPhan IS NOT NULL')
+            .andWhere('kq.diemThi IS NOT NULL')
+            .getMany();
 
         // 3b. Lấy tất cả lớp học phần trong học kỳ (bao gồm cả chưa khóa điểm) để tìm SV đang học lại
         const tatCaLopHocPhanTrongHocKy = await this.lopHocPhanRepo.find({

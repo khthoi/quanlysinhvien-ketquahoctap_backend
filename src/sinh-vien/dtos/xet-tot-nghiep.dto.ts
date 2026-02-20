@@ -1,19 +1,15 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsNumber } from 'class-validator';
+import {
+  IsEnum,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 
-// ==================== REQUEST DTOs ====================
-
-export class XetTotNghiepDto {
-  @ApiProperty({
-    description: 'ID của niên khóa cần xét tốt nghiệp',
-    example: 1,
-  })
-  @IsNotEmpty({ message: 'Niên khóa không được để trống' })
-  @IsNumber({}, { message: 'Niên khóa phải là số' })
-  nienKhoaId: number;
-}
-
-// ==================== RESPONSE DTOs ====================
 
 // Enum kết quả xét tốt nghiệp
 export enum KetQuaXetTotNghiepEnum {
@@ -31,6 +27,78 @@ export enum XepLoaiTotNghiepEnum {
   KHONG_DAT = 'Không đạt',
   KHONG_XET = 'Không xét',
 }
+
+
+// ==================== REQUEST DTOs ====================
+
+export class XetTotNghiepDto {
+  @ApiProperty({
+    description: 'ID của niên khóa cần xét tốt nghiệp',
+    example: 1,
+  })
+  @IsNotEmpty({ message: 'Niên khóa không được để trống' })
+  @IsNumber({}, { message: 'Niên khóa phải là số' })
+  nienKhoaId: number;
+
+  @ApiPropertyOptional({
+    enum: KetQuaXetTotNghiepEnum,
+    description: 'Lọc theo kết quả xét tốt nghiệp của sinh viên',
+  })
+  @IsOptional()
+  @IsEnum(KetQuaXetTotNghiepEnum, {
+    message: 'ketQua phải là một trong các giá trị hợp lệ của KetQuaXetTotNghiepEnum',
+  })
+  ketQua?: KetQuaXetTotNghiepEnum;
+
+  @ApiPropertyOptional({
+    enum: XepLoaiTotNghiepEnum,
+    description: 'Lọc theo xếp loại tốt nghiệp của sinh viên',
+  })
+  @IsOptional()
+  @IsEnum(XepLoaiTotNghiepEnum, {
+    message: 'xepLoai phải là một trong các giá trị hợp lệ của XepLoaiTotNghiepEnum',
+  })
+  xepLoai?: XepLoaiTotNghiepEnum;
+
+  @ApiPropertyOptional({
+    description: 'Lọc theo mã lớp của sinh viên (ví dụ: CNTT22A)',
+    example: 'CNTT22A',
+  })
+  @IsOptional()
+  @IsString({ message: 'maLop phải là chuỗi' })
+  maLop?: string;
+
+  @ApiPropertyOptional({
+    description: 'Lọc theo mã ngành của sinh viên (ví dụ: CNTT)',
+    example: 'CNTT',
+  })
+  @IsOptional()
+  @IsString({ message: 'maNganh phải là chuỗi' })
+  maNganh?: string;
+
+  @ApiPropertyOptional({
+    description: 'Trang hiện tại (bắt đầu từ 1)',
+    example: 1,
+    default: 1,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @Min(1, { message: 'page phải >= 1' })
+  page?: number = 1;
+
+  @ApiPropertyOptional({
+    description: 'Số bản ghi trên mỗi trang',
+    example: 10,
+    default: 10,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @Min(1, { message: 'limit phải >= 1' })
+  @Max(1000, { message: 'limit tối đa là 1000' })
+  limit?: number = 10;
+}
+
+// ==================== RESPONSE DTOs ====================
 
 // Thông tin chi tiết sinh viên trong kết quả xét tốt nghiệp
 export class SinhVienXetTotNghiepDto {
@@ -174,6 +242,30 @@ export class DuDoanXetTotNghiepResponseDto {
   @ApiProperty({ type: [ThongKeTheoNganhDto], description: 'Thống kê theo từng ngành' })
   thongKeTheoNganh: ThongKeTheoNganhDto[];
 
+  @ApiPropertyOptional({
+    example: 1,
+    description: 'Trang hiện tại (sau khi áp dụng bộ lọc). Chỉ có giá trị khi gọi qua API có phân trang',
+  })
+  page?: number;
+
+  @ApiPropertyOptional({
+    example: 20,
+    description: 'Số bản ghi trên mỗi trang. Chỉ có giá trị khi gọi qua API có phân trang',
+  })
+  limit?: number;
+
+  @ApiPropertyOptional({
+    example: 120,
+    description: 'Tổng số bản ghi sau khi áp dụng bộ lọc. Chỉ có giá trị khi gọi qua API có phân trang',
+  })
+  totalItems?: number;
+
+  @ApiPropertyOptional({
+    example: 6,
+    description: 'Tổng số trang sau khi áp dụng bộ lọc. Chỉ có giá trị khi gọi qua API có phân trang',
+  })
+  totalPages?: number;
+
   @ApiProperty({ type: [SinhVienXetTotNghiepDto], description: 'Danh sách sinh viên được xét' })
   danhSachSinhVien: SinhVienXetTotNghiepDto[];
 }
@@ -274,6 +366,30 @@ export class DanhSachTotNghiepResponseDto {
   @ApiProperty({ type: [ThongKeTheoNganhDto], description: 'Thống kê theo từng ngành' })
   thongKeTheoNganh: ThongKeTheoNganhDto[];
 
-  @ApiProperty({ type: [SinhVienTotNghiepDto], description: 'Danh sách sinh viên đã tốt nghiệp' })
+  @ApiPropertyOptional({
+    example: 1,
+    description: 'Trang hiện tại (sau khi áp dụng bộ lọc). Chỉ có giá trị khi gọi qua API có phân trang',
+  })
+  page?: number;
+
+  @ApiPropertyOptional({
+    example: 20,
+    description: 'Số bản ghi trên mỗi trang. Chỉ có giá trị khi gọi qua API có phân trang',
+  })
+  limit?: number;
+
+  @ApiPropertyOptional({
+    example: 120,
+    description: 'Tổng số bản ghi sau khi áp dụng bộ lọc. Chỉ có giá trị khi gọi qua API có phân trang',
+  })
+  totalItems?: number;
+
+  @ApiPropertyOptional({
+    example: 6,
+    description: 'Tổng số trang sau khi áp dụng bộ lọc. Chỉ có giá trị khi gọi qua API có phân trang',
+  })
+  totalPages?: number;
+
+  @ApiProperty({ type: [SinhVienTotNghiepDto], description: 'Danh sách sinh viên đã tốt nghiệp (sau phân trang nếu có)' })
   danhSachSinhVien: SinhVienTotNghiepDto[];
 }
