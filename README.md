@@ -20,7 +20,7 @@
 - [Giới thiệu](#giới-thiệu)
 - [Công nghệ sử dụng](#công-nghệ-sử-dụng)
 - [Các khối chức năng chính](#các-khối-chức-năng-chính)
-- [Các nhóm API](#các-nhóm-api)
+- [Sơ đồ Database](#sơ-đồ-database)
 - [Yêu cầu hệ thống](#yêu-cầu-hệ-thống)
 - [Hướng dẫn cài đặt](#hướng-dẫn-cài-đặt)
 - [Cấu hình môi trường](#cấu-hình-môi-trường)
@@ -29,7 +29,6 @@
 - [Tài liệu API](#tài-liệu-api)
 - [Cấu trúc dự án](#cấu-trúc-dự-án)
 
----
 
 ## 🎯 Giới thiệu
 
@@ -81,7 +80,6 @@ Hệ thống hỗ trợ nhiều vai trò người dùng khác nhau: **Quản tr�
 
 ### 4. **Quản lý Đào tạo** (`dao-tao`)
 - Quản lý chương trình đào tạo
-- Quản lý học phần
 - Quản lý lớp học phần
 - Đăng ký học phần cho sinh viên
 - Quản lý lịch học
@@ -90,7 +88,6 @@ Hệ thống hỗ trợ nhiều vai trò người dùng khác nhau: **Quản tr�
 - Quản lý lớp học phần
 - Phân công giảng viên
 - Quản lý yêu cầu học phần
-- Điểm danh sinh viên
 - Quản lý lịch giảng dạy
 
 ### 6. **Quản lý Kết quả** (`ket-qua`)
@@ -107,111 +104,11 @@ Hệ thống hỗ trợ nhiều vai trò người dùng khác nhau: **Quản tr�
 
 ---
 
-## 📡 Các nhóm API
+## 🗄️ Sơ đồ Database
 
-### 🔐 `/auth` - Xác thực & Quản lý người dùng
-- `POST /auth/login` - Đăng nhập
-- `POST /auth/create-user` - Tạo tài khoản mới
-- `GET /auth/users` - Lấy danh sách người dùng (có phân trang)
-- `GET /auth/users/:id` - Lấy thông tin chi tiết người dùng
-- `PUT /auth/users/:id` - Cập nhật thông tin người dùng
-- `DELETE /auth/users/:id` - Xóa người dùng
-- `POST /auth/request-change-password` - Yêu cầu đổi mật khẩu (gửi OTP)
-- `POST /auth/verify-change-password-otp` - Xác thực OTP đổi mật khẩu
-- `POST /auth/reset-password` - Đặt lại mật khẩu mới
-- `POST /auth/auto-create-accounts` - Tự động tạo tài khoản từ danh sách
-
-### 📚 `/danh-muc` - Quản lý Danh mục
-
-**Khoa:**
-- `GET /danh-muc/khoa` - Lấy danh sách khoa
-- `GET /danh-muc/khoa/:id` - Lấy thông tin chi tiết khoa
-- `POST /danh-muc/khoa` - Tạo khoa mới
-- `PUT /danh-muc/khoa/:id` - Cập nhật khoa
-- `DELETE /danh-muc/khoa/:id` - Xóa khoa
-
-**Ngành:**
-- `GET /danh-muc/nganh` - Lấy danh sách ngành
-- `GET /danh-muc/nganh/:id` - Lấy thông tin chi tiết ngành
-- `POST /danh-muc/nganh` - Tạo ngành mới
-- `PUT /danh-muc/nganh/:id` - Cập nhật ngành
-- `DELETE /danh-muc/nganh/:id` - Xóa ngành
-
-**Lớp:**
-- `GET /danh-muc/lop` - Lấy danh sách lớp
-- `GET /danh-muc/lop/:id` - Lấy thông tin chi tiết lớp
-- `POST /danh-muc/lop` - Tạo lớp mới
-- `PUT /danh-muc/lop/:id` - Cập nhật lớp
-- `DELETE /danh-muc/lop/:id` - Xóa lớp
-
-**Môn học:**
-- `GET /danh-muc/mon-hoc` - Lấy danh sách môn học
-- `GET /danh-muc/mon-hoc/:id` - Lấy thông tin chi tiết môn học
-- `POST /danh-muc/mon-hoc` - Tạo môn học mới
-- `PUT /danh-muc/mon-hoc/:id` - Cập nhật môn học
-- `DELETE /danh-muc/mon-hoc/:id` - Xóa môn học
-
-**Giảng viên:**
-- `GET /danh-muc/giang-vien` - Lấy danh sách giảng viên
-- `GET /danh-muc/giang-vien/:id` - Lấy thông tin chi tiết giảng viên
-- `POST /danh-muc/giang-vien` - Tạo giảng viên mới
-- `PUT /danh-muc/giang-vien/:id` - Cập nhật giảng viên
-- `PUT /danh-muc/giang-vien/:id/thong-tin-ca-nhan` - Cập nhật thông tin cá nhân
-- `DELETE /danh-muc/giang-vien/:id` - Xóa giảng viên
-- `POST /danh-muc/giang-vien/upload` - Upload danh sách giảng viên từ Excel
-
-**Phân công môn học:**
-- `GET /danh-muc/phan-cong-mon-hoc` - Lấy danh sách phân công
-- `POST /danh-muc/phan-cong-mon-hoc` - Tạo phân công mới
-- `PUT /danh-muc/phan-cong-mon-hoc/:id` - Cập nhật phân công
-- `DELETE /danh-muc/phan-cong-mon-hoc/:id` - Xóa phân công
-
-**Niên khóa:**
-- `GET /danh-muc/nien-khoa` - Lấy danh sách niên khóa
-- `GET /danh-muc/nien-khoa/:id` - Lấy thông tin chi tiết niên khóa
-- `POST /danh-muc/nien-khoa` - Tạo niên khóa mới
-- `PUT /danh-muc/nien-khoa/:id` - Cập nhật niên khóa
-- `DELETE /danh-muc/nien-khoa/:id` - Xóa niên khóa
-
-### 👥 `/sinh-vien` - Quản lý Sinh viên
-- `GET /sinh-vien` - Lấy danh sách sinh viên (có phân trang, tìm kiếm)
-- `GET /sinh-vien/:id` - Lấy thông tin chi tiết sinh viên
-- `POST /sinh-vien` - Tạo sinh viên mới
-- `PUT /sinh-vien/:id` - Cập nhật thông tin sinh viên
-- `DELETE /sinh-vien/:id` - Xóa sinh viên
-- `POST /sinh-vien/upload` - Upload danh sách sinh viên từ Excel
-- `GET /sinh-vien/:id/lop-hoc-phan` - Lấy danh sách lớp học phần của sinh viên
-
-### 🎓 `/dao-tao` - Quản lý Đào tạo
-- `GET /dao-tao/chuong-trinh-dao-tao` - Lấy danh sách chương trình đào tạo
-- `POST /dao-tao/chuong-trinh-dao-tao` - Tạo chương trình đào tạo mới
-- `GET /dao-tao/hoc-phan` - Lấy danh sách học phần
-- `POST /dao-tao/hoc-phan` - Tạo học phần mới
-- `GET /dao-tao/lop-hoc-phan` - Lấy danh sách lớp học phần
-- `POST /dao-tao/lop-hoc-phan` - Tạo lớp học phần mới
-- `POST /dao-tao/dang-ky-hoc-phan` - Đăng ký học phần cho sinh viên
-
-### 📖 `/giang-day` - Quản lý Giảng dạy
-- `GET /giang-day/lop-hoc-phan` - Lấy danh sách lớp học phần
-- `GET /giang-day/lop-hoc-phan/:id` - Lấy thông tin chi tiết lớp học phần
-- `POST /giang-day/lop-hoc-phan` - Tạo lớp học phần mới
-- `PUT /giang-day/lop-hoc-phan/:id` - Cập nhật lớp học phần
-- `GET /giang-day/yeu-cau-hoc-phan` - Lấy danh sách yêu cầu học phần
-- `POST /giang-day/yeu-cau-hoc-phan` - Tạo yêu cầu học phần mới
-
-### 📊 `/ket-qua` - Quản lý Kết quả
-- `GET /ket-qua` - Lấy danh sách kết quả học tập
-- `GET /ket-qua/:id` - Lấy thông tin chi tiết kết quả
-- `POST /ket-qua` - Tạo kết quả học tập mới
-- `PUT /ket-qua/:id` - Cập nhật điểm
-- `POST /ket-qua/upload` - Upload điểm từ file Excel
-- `GET /ket-qua/sinh-vien/:sinhVienId` - Lấy kết quả học tập của sinh viên
-
-### 📈 `/bao-cao` - Báo cáo
-- `GET /bao-cao/ket-qua-hoc-tap` - Xuất báo cáo kết quả học tập
-- `GET /bao-cao/thong-ke` - Thống kê tổng hợp
-- `GET /bao-cao/theo-khoa` - Báo cáo theo khoa
-- `GET /bao-cao/theo-nganh` - Báo cáo theo ngành
+<p align="center">
+  <img src="public/image/student_system.png" alt="Sơ đồ Database" />
+</p>
 
 ---
 
@@ -498,6 +395,10 @@ Nếu gặp vấn đề trong quá trình cài đặt hoặc sử dụng, vui l�
 2. Đảm bảo MySQL đã được cài đặt và đang chạy
 3. Kiểm tra port 3000 (hoặc port bạn đã cấu hình) có bị chiếm dụng không
 4. Xem log lỗi trong terminal để biết thêm chi tiết
+
+**Liên hệ hỗ trợ:**
+- **Facebook**: [https://www.facebook.com/khakham132](https://www.facebook.com/khakham132)
+- **Zalo**: [https://zalo.me/0346184217](https://zalo.me/0346184217)
 
 ---
 
