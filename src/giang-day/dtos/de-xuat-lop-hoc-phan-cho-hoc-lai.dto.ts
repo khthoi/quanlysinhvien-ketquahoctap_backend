@@ -73,6 +73,21 @@ export class LopHocPhanDeXuatCanTaoDto {
   @ApiProperty({ description: 'Tên niên khóa' })
   tenNienKhoa: string;
 
+  @ApiProperty({ description: 'ID năm học được gán cho lớp học phần' })
+  namHocId: number;
+
+  @ApiProperty({ description: 'Mã năm học được gán cho lớp học phần' })
+  maNamHoc: string;
+
+  @ApiProperty({ description: 'Tên năm học được gán cho lớp học phần' })
+  tenNamHoc: string;
+
+  @ApiProperty({ description: 'ID học kỳ được gán cho lớp học phần' })
+  hocKyId: number;
+
+  @ApiProperty({ description: 'Học kỳ được gán cho lớp học phần' })
+  hocKy: number;
+
   @ApiProperty({ description: 'ID giảng viên (nếu có)' })
   giangVienId?: number | null;
 
@@ -90,6 +105,24 @@ export class LopHocPhanDeXuatCanTaoDto {
 }
 
 export class GetDeXuatLopHocPhanChoHocLaiResponseDto {
+  @ApiProperty({ description: 'Mã năm học xét các lớp học phần cho sinh viên học lại' })
+  maNamHocXet: string;
+
+  @ApiProperty({ description: 'Tên năm học xét các lớp học phần cho sinh viên học lại' })
+  tenNamHocXet: string;
+
+  @ApiProperty({ description: 'Học kỳ xét các lớp học phần cho sinh viên học lại' })
+  hocKyXet: number;
+
+  @ApiProperty({ description: 'Mã năm học dự kiến của các lớp học phần' })
+  maNamHocDuKien: string;
+
+  @ApiProperty({ description: 'Tên năm học dự kiến của các lớp học phần' })
+  tenNamHocDuKien: string;
+
+  @ApiProperty({ description: 'Học kỳ dự kiến của các lớp học phần' })
+  hocKyDuKien: number;
+
   @ApiProperty({ description: 'Danh sách lớp học phần đề xuất cần tạo', type: [LopHocPhanDeXuatCanTaoDto] })
   danhSachLopHocPhanDeXuat: LopHocPhanDeXuatCanTaoDto[];
 

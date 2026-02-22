@@ -4362,21 +4362,37 @@ export class GiangDayService {
         maNamHoc: string,
         hocKy: number
     ): Promise<GetDeXuatLopHocPhanChoHocLaiResponseDto> {
-        // 1. Validate năm học
-        const namHoc = await this.namHocRepo.findOne({
-            where: { maNamHoc },
+        // 1. Tìm năm học có năm bắt đầu cao nhất (mới nhất)
+        const namHocMoiNhatList = await this.namHocRepo.find({
+            order: { namBatDau: 'DESC' },
+            take: 1,
         });
-        if (!namHoc) {
-            throw new NotFoundException(`Năm học với mã "${maNamHoc}" không tồn tại`);
+
+        if (!namHocMoiNhatList || namHocMoiNhatList.length === 0) {
+            throw new NotFoundException('Không tìm thấy năm học nào trong hệ thống');
         }
 
-        // 2. Validate học kỳ
-        const hocKyEntity = await this.hocKyRepo.findOne({
-            where: { namHoc: { id: namHoc.id }, hocKy },
+        const namHocMoiNhat = namHocMoiNhatList[0];
+
+        // 2. Tìm học kỳ cao nhất trong năm học mới nhất
+        const hocKyMoiNhat = await this.hocKyRepo.findOne({
+            where: { namHoc: { id: namHocMoiNhat.id } },
             relations: ['namHoc'],
+            order: { hocKy: 'DESC' },
         });
-        if (!hocKyEntity) {
-            throw new NotFoundException(`Học kỳ ${hocKy} của năm học "${maNamHoc}" không tồn tại`);
+
+        if (!hocKyMoiNhat) {
+            throw new NotFoundException(`Không tìm thấy học kỳ nào trong năm học "${namHocMoiNhat.maNamHoc}"`);
+        }
+
+        // Sử dụng năm học và học kỳ mới nhất cho các lớp học phần đề xuất
+        const namHocDeXuat = namHocMoiNhat;
+        const hocKyDeXuat = hocKyMoiNhat;
+
+        // Lấy thông tin năm học xét từ tham số đầu vào
+        const namHocXet = await this.namHocRepo.findOne({ where: { maNamHoc } });
+        if (!namHocXet) {
+            throw new NotFoundException(`Không tìm thấy năm học với mã "${maNamHoc}"`);
         }
 
         // 3. Gọi hàm getDeXuatHocLaiJson từ BaoCaoService để lấy danh sách sinh viên trượt môn
@@ -4389,6 +4405,12 @@ export class GiangDayService {
 
         if (sinhVienChuaCoLopHocPhanDeXuat.length === 0) {
             return {
+                maNamHocXet: namHocXet.maNamHoc,
+                tenNamHocXet: namHocXet.tenNamHoc,
+                hocKyXet: hocKy,
+                maNamHocDuKien: namHocDeXuat.maNamHoc,
+                tenNamHocDuKien: namHocDeXuat.tenNamHoc,
+                hocKyDuKien: hocKyDeXuat.hocKy,
                 danhSachLopHocPhanDeXuat: [],
                 tongSoLop: 0,
                 tongSoSinhVien: 0,
@@ -4474,6 +4496,28 @@ export class GiangDayService {
         // 7. Với mỗi môn học, nhóm sinh viên và tạo đề xuất lớp học phần
         const danhSachLopHocPhanDeXuat: LopHocPhanDeXuatCanTaoDto[] = [];
 
+        // Map theo dõi tín chỉ đã được phân bổ cho từng giảng viên trong quá trình đề xuất
+        // Key: `${giangVienId}_${hocKyId}`, Value: số tín chỉ đã phân bổ
+        const giangVienTinChiDaPhanBoMap = new Map<string, number>();
+
+        // Helper function để lấy tín chỉ hiện tại (từ DB) + tín chỉ đã phân bổ trong đề xuất
+        const getTinChiTongCuaGV = async (gvId: number, hocKyId: number): Promise<number> => {
+            const key = `${gvId}_${hocKyId}`;
+            // Lấy tín chỉ từ DB (chỉ load một lần cho mỗi giảng viên)
+            if (!giangVienTinChiDaPhanBoMap.has(key)) {
+                const tinChiTuDB = await this.tinhTinChiHienTaiCuaGV(gvId, hocKyId);
+                giangVienTinChiDaPhanBoMap.set(key, tinChiTuDB);
+            }
+            return giangVienTinChiDaPhanBoMap.get(key)!;
+        };
+
+        // Helper function để cập nhật tín chỉ đã phân bổ
+        const capNhatTinChiDaPhanBo = (gvId: number, hocKyId: number, soTinChiThem: number): void => {
+            const key = `${gvId}_${hocKyId}`;
+            const current = giangVienTinChiDaPhanBoMap.get(key) || 0;
+            giangVienTinChiDaPhanBoMap.set(key, current + soTinChiThem);
+        };
+
         for (const [monHocId, sinhVienCanHocLai] of sinhVienCanHocLaiByMonHoc.entries()) {
             // Lấy thông tin môn học
             const monHoc = await this.monHocRepo.findOne({ where: { id: monHocId } });
@@ -4553,18 +4597,46 @@ export class GiangDayService {
                     sttLop
                 );
 
-                // Phân công giảng viên (chọn giảng viên đầu tiên trong danh sách)
-                // Không tính tín chỉ vì chưa có học kỳ cụ thể, người dùng sẽ tự chọn học kỳ khi tạo lớp học phần
+                // Phân công giảng viên dựa trên tín chỉ giảng dạy và phân công môn học trong học kỳ mới nhất
+                // Lấy danh sách giảng viên được phân công giảng dạy môn này
                 const giangViens = await this.layGiangVienPhanCongChoMon(monHocId, this.lopHocPhanRepo.manager);
                 let giangVienId: number | null = null;
                 let maGiangVien: string | null = null;
                 let hoTenGiangVien: string | null = null;
 
                 if (giangViens.length > 0) {
-                    // Chọn giảng viên đầu tiên trong danh sách
-                    giangVienId = giangViens[0].id;
-                    maGiangVien = giangViens[0].maGiangVien;
-                    hoTenGiangVien = giangViens[0].hoTen;
+                    // Tính tín chỉ hiện tại của từng giảng viên (từ DB + đã phân bổ trong đề xuất)
+                    const giangVienWithLoad: {
+                        gv: typeof giangViens[0];
+                        tinChi: number;
+                    }[] = [];
+
+                    for (const gv of giangViens) {
+                        const tinChiTong = await getTinChiTongCuaGV(gv.id, hocKyDeXuat.id);
+                        giangVienWithLoad.push({
+                            gv,
+                            tinChi: tinChiTong
+                        });
+                    }
+
+                    // Sắp xếp theo số tín chỉ tăng dần (giảng viên có ít tín chỉ nhất trước)
+                    giangVienWithLoad.sort((a, b) => a.tinChi - b.tinChi);
+
+                    // Chọn giảng viên có ít tín chỉ nhất nhưng không vượt quá 12 tín chỉ/học kỳ
+                    for (const item of giangVienWithLoad) {
+                        if (item.tinChi + monHoc.soTinChi <= 12) {
+                            giangVienId = item.gv.id;
+                            maGiangVien = item.gv.maGiangVien;
+                            hoTenGiangVien = item.gv.hoTen;
+                            // Cập nhật tín chỉ đã phân bổ cho giảng viên này
+                            capNhatTinChiDaPhanBo(item.gv.id, hocKyDeXuat.id, monHoc.soTinChi);
+                            break;
+                        }
+                    }
+
+                    // Nếu không tìm thấy giảng viên nào phù hợp (tất cả đều vượt 12 tín chỉ),
+                    // để trống giảng viên (giangVienId, maGiangVien, hoTenGiangVien sẽ là null)
+                    // Không cập nhật tín chỉ đã phân bổ vì không có giảng viên được gán
                 }
 
                 // Tạo DTO cho lớp học phần đề xuất
@@ -4580,6 +4652,11 @@ export class GiangDayService {
                     nienKhoaId: nienKhoa.id,
                     maNienKhoa: nienKhoa.maNienKhoa,
                     tenNienKhoa: nienKhoa.tenNienKhoa,
+                    namHocId: namHocDeXuat.id,
+                    maNamHoc: namHocDeXuat.maNamHoc,
+                    tenNamHoc: namHocDeXuat.tenNamHoc,
+                    hocKyId: hocKyDeXuat.id,
+                    hocKy: hocKyDeXuat.hocKy,
                     giangVienId: giangVienId || null,
                     maGiangVien: maGiangVien || null,
                     hoTenGiangVien: hoTenGiangVien || null,
@@ -4604,6 +4681,12 @@ export class GiangDayService {
         }
 
         return {
+            maNamHocXet: namHocXet.maNamHoc,
+            tenNamHocXet: namHocXet.tenNamHoc,
+            hocKyXet: hocKy,
+            maNamHocDuKien: namHocDeXuat.maNamHoc,
+            tenNamHocDuKien: namHocDeXuat.tenNamHoc,
+            hocKyDuKien: hocKyDeXuat.hocKy,
             danhSachLopHocPhanDeXuat,
             tongSoLop: danhSachLopHocPhanDeXuat.length,
             tongSoSinhVien: danhSachLopHocPhanDeXuat.reduce((sum, lhp) => sum + lhp.soSinhVienCanHocLai, 0),
@@ -4730,6 +4813,20 @@ export class GiangDayService {
      * trong trường hợp không có lớp học phần nào phù hợp để học ghép
      */
     async getDeXuatLopHocPhanChoHocBoSungCaiThien(): Promise<GetDeXuatLopHocPhanChoHocBoSungCaiThienResponseDto> {
+        // 0. Lấy học kỳ mới nhất (học kỳ cao nhất của năm học có năm bắt đầu lớn nhất)
+        const hocKyMoiNhat = await this.timHocKyMoiNhat();
+        
+        if (!hocKyMoiNhat || !hocKyMoiNhat.namHoc) {
+            return {
+                danhSachLopHocPhanDeXuat: [],
+                tongSoLop: 0,
+                tongSoSinhVien: 0,
+                maNamHoc: null,
+                tenNamHoc: null,
+                hocKy: null,
+            };
+        }
+
         // 1. Gọi service để lấy danh sách yêu cầu học phần với trạng thái DANG_XU_LY
         const queryDto: GetDanhSachYeuCauHocPhanQueryDto = {
             page: 1,
@@ -4756,6 +4853,9 @@ export class GiangDayService {
                 danhSachLopHocPhanDeXuat: [],
                 tongSoLop: 0,
                 tongSoSinhVien: 0,
+                maNamHoc: hocKyMoiNhat.namHoc.maNamHoc,
+                tenNamHoc: hocKyMoiNhat.namHoc.tenNamHoc,
+                hocKy: hocKyMoiNhat.hocKy,
             };
         }
 
@@ -4892,6 +4992,19 @@ export class GiangDayService {
                     hoTenGiangVien: hoTenGiangVien || null,
                     soSinhVienCanHoc: danhSachSinhVien.length,
                     danhSachSinhVien,
+                    hocKyId: hocKyMoiNhat.id,
+                    hocKy: hocKyMoiNhat.hocKy,
+                    namHocId: hocKyMoiNhat.namHoc.id,
+                    maNamHoc: hocKyMoiNhat.namHoc.maNamHoc,
+                    tenNamHoc: hocKyMoiNhat.namHoc.tenNamHoc,
+                    namBatDau: hocKyMoiNhat.namHoc.namBatDau,
+                    namKetThuc: hocKyMoiNhat.namHoc.namKetThuc,
+                    ngayBatDau: hocKyMoiNhat.ngayBatDau != null
+                        ? new Date(hocKyMoiNhat.ngayBatDau).toISOString().split('T')[0]
+                        : null,
+                    ngayKetThuc: hocKyMoiNhat.ngayKetThuc != null
+                        ? new Date(hocKyMoiNhat.ngayKetThuc).toISOString().split('T')[0]
+                        : null,
                 });
 
                 }
@@ -4907,6 +5020,9 @@ export class GiangDayService {
             danhSachLopHocPhanDeXuat,
             tongSoLop: danhSachLopHocPhanDeXuat.length,
             tongSoSinhVien: danhSachLopHocPhanDeXuat.reduce((sum, lhp) => sum + lhp.soSinhVienCanHoc, 0),
+            maNamHoc: hocKyMoiNhat.namHoc.maNamHoc,
+            tenNamHoc: hocKyMoiNhat.namHoc.tenNamHoc,
+            hocKy: hocKyMoiNhat.hocKy,
         };
     }
 

@@ -87,6 +87,33 @@ export class LopHocPhanDeXuatCanTaoChoHocBoSungCaiThienDto {
 
   @ApiProperty({ description: 'Danh sách sinh viên cần học bổ sung/cải thiện', type: [SinhVienCanHocBoSungCaiThienDto] })
   danhSachSinhVien: SinhVienCanHocBoSungCaiThienDto[];
+
+  @ApiProperty({ description: 'ID học kỳ dự kiến' })
+  hocKyId?: number | null;
+
+  @ApiProperty({ description: 'Học kỳ dự kiến' })
+  hocKy?: number | null;
+
+  @ApiProperty({ description: 'ID năm học dự kiến' })
+  namHocId?: number | null;
+
+  @ApiProperty({ description: 'Mã năm học dự kiến' })
+  maNamHoc?: string | null;
+
+  @ApiProperty({ description: 'Tên năm học dự kiến' })
+  tenNamHoc?: string | null;
+
+  @ApiProperty({ description: 'Năm bắt đầu dự kiến' })
+  namBatDau?: number | null;
+
+  @ApiProperty({ description: 'Năm kết thúc dự kiến' })
+  namKetThuc?: number | null;
+
+  @ApiProperty({ description: 'Ngày bắt đầu học kỳ dự kiến' })
+  ngayBatDau?: string | null;
+
+  @ApiProperty({ description: 'Ngày kết thúc học kỳ dự kiến' })
+  ngayKetThuc?: string | null;
 }
 
 export class GetDeXuatLopHocPhanChoHocBoSungCaiThienResponseDto {
@@ -98,6 +125,15 @@ export class GetDeXuatLopHocPhanChoHocBoSungCaiThienResponseDto {
 
   @ApiProperty({ description: 'Tổng số sinh viên cần học bổ sung/cải thiện' })
   tongSoSinhVien: number;
+
+  @ApiProperty({ description: 'Mã năm học dự kiến' })
+  maNamHoc?: string | null;
+
+  @ApiProperty({ description: 'Tên năm học dự kiến' })
+  tenNamHoc?: string | null;
+
+  @ApiProperty({ description: 'Học kỳ dự kiến' })
+  hocKy?: number | null;
 }
 
 export class TaoLopHocPhanChoHocBoSungCaiThienDto {
