@@ -19,8 +19,7 @@ async function bootstrap() {
   // ===== CORS =====
   const allowedOrigins = [
     process.env.FRONTEND_ADMIN_URL || 'http://localhost:3001',
-    process.env.FRONTEND_CL_SIDE_URL || 'http://localhost:3002',
-    'http://localhost:3003', // Giữ lại cho tương thích
+    process.env.FRONTEND_CL_SIDE_URL || 'http://localhost:3002'
   ].filter(Boolean); // Loại bỏ giá trị undefined/null
 
   app.enableCors({

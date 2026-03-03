@@ -12,6 +12,7 @@ import { DaoTaoModule } from './dao-tao/dao-tao.module';
 import { GiangDayModule } from './giang-day/giang-day.module';
 import { KetQuaModule } from './ket-qua/ket-qua.module';
 import { BaoCaoModule } from './bao-cao/bao-cao.module';
+import { ContactModule } from './contact/contact.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { BaoCaoModule } from './bao-cao/bao-cao.module';
     GiangDayModule,
     KetQuaModule,
     BaoCaoModule,
+    ContactModule,
   ],
   controllers: [AppController],
   providers: [AppService],
